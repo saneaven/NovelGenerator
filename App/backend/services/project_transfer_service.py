@@ -29,6 +29,10 @@ from ..models.db_models import (
     StoryEntity,
     StoryEntityFolder,
     ObjectAssetLink,
+    Timeline,
+    TimelineEvent,
+    TimelineEventLink,
+    TimelineTrack,
     User,
 )
 from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
@@ -44,7 +48,9 @@ from ..services.storage_usage_service import (
     recalculate_project_usage_and_enforce_quota,
 )
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
+from ..utils.timeline_calendar import default_calendar, normalize_calendar
 from .outline_service import require_outline_kind
+from .timeline_service import ALLOWED_LINK_TYPES, TIMELINE_EVENT_TYPE, TIMELINE_TRACK_TYPE
 
 
 FORMAT_VERSION = "1.0"
@@ -321,6 +327,19 @@ class ProjectTransferService:
             .filter(Outline.project_id == project_id, Outline.kind == "chapter")
             .count()
         )
+        counts += (
+            db.query(TimelineTrack)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(Timeline.project_id == project_id)
+            .count()
+        )
+        counts += (
+            db.query(TimelineEvent)
+            .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+            .filter(Timeline.project_id == project_id)
+            .count()
+        )
         return int(counts)
 
     @staticmethod
@@ -388,6 +407,12 @@ class ProjectTransferService:
 
         objects_payload = ProjectTransferService._build_objects_payload(db=db, project_id=project_id)
 
+        timeline_items, timeline_calendar, timeline_links = ProjectTransferService._build_timeline_payload(
+            db=db, project_id=project_id
+        )
+        if timeline_items:
+            objects_payload["objects"].extend(timeline_items)
+
         assets_payload: Optional[Dict[str, Any]] = None
         if options.include_images:
             assets_payload = {"assets": [ProjectTransferService._asset_to_export_dict(a) for a in selected_assets]}
@@ -441,6 +466,11 @@ class ProjectTransferService:
             zf.writestr("data/project.json", _json_dumps(project_payload))
             zf.writestr("data/objects.json", _json_dumps(objects_payload))
             zf.writestr("data/links_object_assets.json", _json_dumps(links_payload))
+
+            if timeline_calendar is not None:
+                zf.writestr("data/timeline.json", _json_dumps({"calendar": timeline_calendar}))
+            if timeline_links:
+                zf.writestr("data/links_timeline_events.json", _json_dumps({"links": timeline_links}))
 
             if options.include_images and assets_payload is not None:
                 zf.writestr("data/assets.json", _json_dumps(assets_payload))
@@ -588,6 +618,118 @@ class ProjectTransferService:
         return {"objects": payload_objects}
 
     @staticmethod
+    def _build_timeline_payload(
+        db: Session, project_id: UUID
+    ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Serialize a project's timeline.
+
+        Tracks/events are emitted as regular object items (types ``timeline_track`` and
+        ``timeline_event``) so the shared version + rich-text loops cover them. Structural
+        fields live in ``metadata``. Returns ``(object_items, calendar, event_links)``.
+        """
+        timeline: Optional[Timeline] = (
+            db.query(Timeline).filter(Timeline.project_id == project_id).first()
+        )
+        if timeline is None:
+            return [], None, []
+
+        tracks: List[TimelineTrack] = (
+            db.query(TimelineTrack)
+            .filter(TimelineTrack.timeline_id == timeline.id)
+            .order_by(
+                TimelineTrack.parent_id.asc().nullsfirst(),
+                TimelineTrack.position.asc(),
+                TimelineTrack.created_at.asc(),
+            )
+            .all()
+        )
+        events: List[TimelineEvent] = (
+            db.query(TimelineEvent)
+            .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .filter(TimelineTrack.timeline_id == timeline.id)
+            .order_by(TimelineEvent.created_at.asc())
+            .all()
+        )
+        links: List[TimelineEventLink] = (
+            db.query(TimelineEventLink)
+            .join(TimelineEvent, TimelineEvent.id == TimelineEventLink.event_id)
+            .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+            .filter(TimelineTrack.timeline_id == timeline.id)
+            .order_by(TimelineEventLink.created_at.asc())
+            .all()
+        )
+
+        track_versions = _latest_versions_by_object_id(
+            db, TIMELINE_TRACK_TYPE, [t.id for t in tracks]
+        )
+        event_versions = _latest_versions_by_object_id(
+            db, TIMELINE_EVENT_TYPE, [e.id for e in events]
+        )
+
+        def to_item(obj_type: str, obj: Any, version: Optional[ObjectVersion], meta: Dict[str, Any]) -> Dict[str, Any]:
+            data = payload_map_from_rows(version.languages) if version is not None else {}
+            version_info = None
+            if version is not None:
+                provenance = earliest_provenance_from_rows(version.languages, fallback_created_at=version.created_at)
+                version_info = {
+                    "number": int(version.version_number),
+                    "created_at": _dt_to_iso(provenance.created_at),
+                }
+            return {
+                "type": obj_type,
+                "kind": None,
+                "id": str(obj.id),
+                "metadata": meta,
+                "version": version_info,
+                "data": data,
+            }
+
+        object_items: List[Dict[str, Any]] = []
+        for track in tracks:
+            object_items.append(
+                to_item(
+                    TIMELINE_TRACK_TYPE,
+                    track,
+                    track_versions.get(track.id),
+                    {
+                        "created_at": _dt_to_iso(track.created_at),
+                        "updated_at": _dt_to_iso(track.updated_at),
+                        "parent_id": str(track.parent_id) if track.parent_id is not None else None,
+                        "position": int(track.position or 0),
+                        "color": track.color,
+                    },
+                )
+            )
+        for event in events:
+            object_items.append(
+                to_item(
+                    TIMELINE_EVENT_TYPE,
+                    event,
+                    event_versions.get(event.id),
+                    {
+                        "created_at": _dt_to_iso(event.created_at),
+                        "updated_at": _dt_to_iso(event.updated_at),
+                        "track_id": str(event.track_id),
+                        "start_date": event.start_date,
+                        "end_date": event.end_date,
+                        "tags": event.tags if isinstance(event.tags, list) else [],
+                    },
+                )
+            )
+
+        event_links = [
+            {
+                "event_id": str(link.event_id),
+                "object_type": str(link.object_type),
+                "object_id": str(link.object_id),
+            }
+            for link in links
+        ]
+
+        calendar = timeline.calendar if isinstance(timeline.calendar, dict) else None
+        return object_items, calendar, event_links
+
+    @staticmethod
     def import_nbproj(
         db: Session,
         user_id: UUID,
@@ -624,6 +766,18 @@ class ProjectTransferService:
                 if options.include_images:
                     assets_data = json.loads(zf.read("data/assets.json").decode("utf-8"))
 
+                # Timeline sections are optional (added in a later "1.0" revision); old
+                # archives won't contain them.
+                archive_names = set(zf.namelist())
+                timeline_data: Optional[dict] = None
+                if "data/timeline.json" in archive_names:
+                    timeline_data = json.loads(zf.read("data/timeline.json").decode("utf-8"))
+                timeline_links_data: Optional[dict] = None
+                if "data/links_timeline_events.json" in archive_names:
+                    timeline_links_data = json.loads(
+                        zf.read("data/links_timeline_events.json").decode("utf-8")
+                    )
+
                 new_project_id = ProjectTransferService._import_archive_into_db(
                     db=db,
                     user_id=user_id,
@@ -633,6 +787,8 @@ class ProjectTransferService:
                     objects_data=objects_data,
                     links_data=links_data,
                     assets_data=assets_data,
+                    timeline_data=timeline_data,
+                    timeline_links_data=timeline_links_data,
                     created_files=created_files,
                 )
                 recalculate_project_usage_and_enforce_quota(
@@ -660,6 +816,8 @@ class ProjectTransferService:
         links_data: dict,
         assets_data: Optional[dict],
         created_files: List[str],
+        timeline_data: Optional[dict] = None,
+        timeline_links_data: Optional[dict] = None,
     ) -> UUID:
         now = datetime.utcnow()
 
@@ -707,7 +865,10 @@ class ProjectTransferService:
                 STORY_ENTITY_TYPE: items_of_type(STORY_ENTITY_TYPE),
                 "outline": items_of_type("outline"),
                 "manuscript": items_of_type("manuscript"),
+                TIMELINE_TRACK_TYPE: items_of_type(TIMELINE_TRACK_TYPE),
+                TIMELINE_EVENT_TYPE: items_of_type(TIMELINE_EVENT_TYPE),
             },
+            timeline_calendar=(timeline_data or {}).get("calendar"),
         )
 
         # Assets and files
@@ -867,6 +1028,40 @@ class ProjectTransferService:
                     )
                 )
 
+        # Timeline event links (remap event + target; drop unresolved, dedupe on unique key)
+        timeline_link_items = (
+            timeline_links_data.get("links") if isinstance(timeline_links_data, dict) else []
+        )
+        if isinstance(timeline_link_items, list):
+            seen_links: Set[Tuple[UUID, str, UUID]] = set()
+            for link in timeline_link_items:
+                if not isinstance(link, dict):
+                    continue
+                export_object_type = str(link.get("object_type") or "")
+                if export_object_type not in ALLOWED_LINK_TYPES:
+                    continue
+                export_event_id = str(link.get("event_id") or "")
+                export_object_id = str(link.get("object_id") or "")
+                if not export_event_id or not export_object_id:
+                    continue
+                new_event_id = object_id_map.get((TIMELINE_EVENT_TYPE, export_event_id))
+                new_object_id = object_id_map.get((export_object_type, export_object_id))
+                if not new_event_id or not new_object_id:
+                    continue
+                dedupe_key = (new_event_id, export_object_type, new_object_id)
+                if dedupe_key in seen_links:
+                    continue
+                seen_links.add(dedupe_key)
+                db.add(
+                    TimelineEventLink(
+                        id=uuid4(),
+                        event_id=new_event_id,
+                        object_type=export_object_type,
+                        object_id=new_object_id,
+                        created_at=now,
+                    )
+                )
+
         # ObjectVersions (latest snapshot only; version_number resets to 1)
         for item in object_items:
             if not isinstance(item, dict):
@@ -963,6 +1158,7 @@ class ProjectTransferService:
         object_id_map: Dict[Tuple[str, str], UUID],
         folder_id_map: Dict[str, UUID],
         objects_by_type: Dict[str, List[dict]],
+        timeline_calendar: Optional[Any] = None,
     ) -> None:
         now = datetime.utcnow()
 
@@ -1086,3 +1282,81 @@ class ProjectTransferService:
                     updated_at=meta_dt(meta, "updated_at"),
                 )
             )
+
+        # timeline (one Timeline per project; create only when the archive carried timeline data)
+        track_items = objects_by_type.get(TIMELINE_TRACK_TYPE, [])
+        event_items = objects_by_type.get(TIMELINE_EVENT_TYPE, [])
+        if timeline_calendar is not None or track_items or event_items:
+            if isinstance(timeline_calendar, dict):
+                try:
+                    calendar = normalize_calendar(timeline_calendar)
+                except ValueError:
+                    calendar = timeline_calendar
+            else:
+                calendar = default_calendar()
+
+            new_timeline_id = uuid4()
+            db.add(
+                Timeline(
+                    id=new_timeline_id,
+                    project_id=project_id,
+                    calendar=calendar,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+            # Tracks first (parents remap within timeline_track ids; self-refs resolve at flush).
+            for item in track_items:
+                export_id = str(item.get("id") or "")
+                new_id = object_id_map.get((TIMELINE_TRACK_TYPE, export_id))
+                meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+                if not export_id or not new_id:
+                    continue
+                parent_export_id = meta.get("parent_id")
+                parent_id = (
+                    object_id_map.get((TIMELINE_TRACK_TYPE, str(parent_export_id)))
+                    if parent_export_id
+                    else None
+                )
+                db.add(
+                    TimelineTrack(
+                        id=new_id,
+                        timeline_id=new_timeline_id,
+                        parent_id=parent_id,
+                        position=int(meta.get("position") or 0),
+                        color=meta.get("color"),
+                        created_at=meta_dt(meta, "created_at"),
+                        updated_at=meta_dt(meta, "updated_at"),
+                    )
+                )
+
+            # Events after tracks (track_id remap; start_date is NOT NULL).
+            for item in event_items:
+                export_id = str(item.get("id") or "")
+                new_id = object_id_map.get((TIMELINE_EVENT_TYPE, export_id))
+                meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+                if not export_id or not new_id:
+                    continue
+                track_export_id = meta.get("track_id")
+                new_track_id = (
+                    object_id_map.get((TIMELINE_TRACK_TYPE, str(track_export_id)))
+                    if track_export_id
+                    else None
+                )
+                start_date = meta.get("start_date")
+                if not new_track_id or not isinstance(start_date, dict):
+                    continue
+                end_date = meta.get("end_date")
+                tags = meta.get("tags")
+                db.add(
+                    TimelineEvent(
+                        id=new_id,
+                        track_id=new_track_id,
+                        start_date=start_date,
+                        end_date=end_date if isinstance(end_date, dict) else None,
+                        tags=tags if isinstance(tags, list) else [],
+                        created_at=meta_dt(meta, "created_at"),
+                        updated_at=meta_dt(meta, "updated_at"),
+                    )
+                )

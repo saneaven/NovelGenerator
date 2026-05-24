@@ -429,9 +429,21 @@ def test_replace_outline_group_uses_markdown_content_field(monkeypatch) -> None:
     assert captured["replace_fields"] == {"content": "## New outline content"}
 
 
-def test_timeline_patch_schemas_use_old_new_only(monkeypatch) -> None:
+def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypatch) -> None:
     monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
     specs = {binding.spec.name: binding.spec for binding in TimelineFeatureModule().list_bindings(_module_context())}
+
+    assert specs["replace_timeline_track"].parameters["required"] == ["id"]
+    assert specs["replace_timeline_event"].parameters["required"] == ["id"]
+
+    replace_track_props = specs["replace_timeline_track"].parameters["properties"]
+    assert replace_track_props["parentId"]["type"] == ["string", "null"]
+    assert replace_track_props["position"]["type"] == "integer"
+    assert replace_track_props["color"]["type"] == ["string", "null"]
+
+    replace_event_props = specs["replace_timeline_event"].parameters["properties"]
+    for key in ("trackId", "startDate", "endDate", "tags"):
+        assert key in replace_event_props
 
     for tool_name in ("patch_timeline_track", "patch_timeline_event"):
         params = specs[tool_name].parameters
@@ -440,12 +452,12 @@ def test_timeline_patch_schemas_use_old_new_only(monkeypatch) -> None:
         assert props["field"]["enum"] == ["name", "description", "content"]
 
     track_props = specs["patch_timeline_track"].parameters["properties"]
-    for removed in ("name", "description", "content", "color"):
-        assert removed not in track_props
+    for key in ("parentId", "position", "color"):
+        assert key in track_props
 
     event_props = specs["patch_timeline_event"].parameters["properties"]
-    for removed in ("trackId", "name", "description", "content", "startDate", "endDate", "tags"):
-        assert removed not in event_props
+    for key in ("trackId", "startDate", "endDate", "tags"):
+        assert key in event_props
 
 
 def test_validate_patch_timeline_event_reads_markdown_projection(monkeypatch) -> None:
@@ -520,30 +532,149 @@ def test_timeline_patch_group_uses_object_patch_batch(monkeypatch) -> None:
     monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
     feature = TimelineFeatureModule()
 
-    for tool_name, object_type in (
-        ("patch_timeline_track", "timeline_track"),
-        ("patch_timeline_event", "timeline_event"),
-    ):
-        args = {
-            "id": str(uuid4()),
-            "field": "content",
-            "old": "old text",
-            "new": "new text",
-        }
-        binding = _binding_by_name(feature, _module_context(), tool_name)
-        captured = _capture_object_group(
-            monkeypatch=monkeypatch,
-            module_under_test=timeline_module,
-            feature=feature,
-            binding=binding,
-            args=args,
-        )
+    track_args = {
+        "id": str(uuid4()),
+        "field": "content",
+        "old": "old text",
+        "new": "new text",
+        "parentId": "track-parent",
+        "position": 2,
+        "color": "#ffcc00",
+    }
+    track_binding = _binding_by_name(feature, _module_context(), "patch_timeline_track")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=timeline_module,
+        feature=feature,
+        binding=track_binding,
+        args=track_args,
+    )
 
-        assert captured["object_type"] == object_type
-        assert captured["replace_fields"] == {}
-        assert captured["metadata"] is None
-        assert captured["args"] == args
-        assert captured["result"]["objectType"] == object_type
+    assert captured["object_type"] == "timeline_track"
+    assert captured["replace_fields"] == {}
+    assert captured["metadata"] == {"parent_id": "track-parent", "position": 2, "color": "#ffcc00"}
+    assert captured["args"] == track_args
+    assert captured["result"]["objectType"] == "timeline_track"
+
+    event_args = {
+        "id": str(uuid4()),
+        "field": "description",
+        "old": "old text",
+        "new": "new text",
+        "trackId": str(uuid4()),
+        "startDate": {"year": 1},
+        "endDate": None,
+        "tags": ["war"],
+    }
+    event_binding = _binding_by_name(feature, _module_context(), "patch_timeline_event")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=timeline_module,
+        feature=feature,
+        binding=event_binding,
+        args=event_args,
+    )
+
+    assert captured["object_type"] == "timeline_event"
+    assert captured["replace_fields"] == {}
+    assert captured["metadata"] == {
+        "track_id": event_args["trackId"],
+        "start_date": {"year": 1},
+        "end_date": None,
+        "tags": ["war"],
+    }
+    assert captured["args"] == event_args
+    assert captured["result"]["objectType"] == "timeline_event"
+
+
+def test_timeline_replace_group_uses_object_patch_batch(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    feature = TimelineFeatureModule()
+
+    track_args = {
+        "id": str(uuid4()),
+        "name": "Era",
+        "parentId": None,
+        "position": 0,
+        "color": None,
+    }
+    track_binding = _binding_by_name(feature, _module_context(), "replace_timeline_track")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=timeline_module,
+        feature=feature,
+        binding=track_binding,
+        args=track_args,
+    )
+
+    assert captured["object_type"] == "timeline_track"
+    assert captured["replace_fields"] == {"name": "Era"}
+    assert captured["metadata"] == {"parent_id": None, "position": 0, "color": None}
+
+    event_args = {
+        "id": str(uuid4()),
+        "trackId": str(uuid4()),
+        "tags": ["politics", "court"],
+    }
+    event_binding = _binding_by_name(feature, _module_context(), "replace_timeline_event")
+    captured = _capture_object_group(
+        monkeypatch=monkeypatch,
+        module_under_test=timeline_module,
+        feature=feature,
+        binding=event_binding,
+        args=event_args,
+    )
+
+    assert captured["object_type"] == "timeline_event"
+    assert captured["replace_fields"] == {}
+    assert captured["metadata"] == {"track_id": event_args["trackId"], "tags": ["politics", "court"]}
+
+
+def test_validate_replace_timeline_track_allows_metadata_only(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        timeline_module,
+        "read_runtime_object",
+        lambda *_args, **_kwargs: {"data": {"English": {"name": "Era", "description": "", "content": ""}}},
+    )
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "replace_timeline_track")
+
+    result = asyncio.run(
+        binding.validate(
+            {
+                "id": str(uuid4()),
+                "parentId": None,
+                "position": 0,
+                "color": None,
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is True
+
+
+def test_validate_replace_timeline_event_allows_metadata_only(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        timeline_module,
+        "read_runtime_object",
+        lambda *_args, **_kwargs: {"data": {"English": {"name": "Event", "description": "", "content": ""}}},
+    )
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "replace_timeline_event")
+
+    result = asyncio.run(
+        binding.validate(
+            {
+                "id": str(uuid4()),
+                "trackId": str(uuid4()),
+                "tags": ["ritual"],
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is True
 
 
 def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> None:

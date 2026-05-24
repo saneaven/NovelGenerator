@@ -18,7 +18,7 @@ from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
 from .object_access import extract_lang_data, patch_object_field, read_object, read_runtime_object, to_uuid
 from .shared import filter_allowed_specs, is_non_journey, is_translation_journey, obj_schema
-from ....models.db_models import TimelineEventLink
+from ....models.db_models import Timeline, TimelineEventLink, TimelineTrack
 from ....services.object_service import object_service
 from ....services.timeline_service import ALLOWED_LINK_TYPES, _UNSET, timeline_service
 from ....utils.timeline_calendar import default_calendar
@@ -27,8 +27,8 @@ from ....utils.timeline_calendar import default_calendar
 _ID = {"type": "string", "description": "Object ID"}
 _TRACK_ID = {"type": "string", "description": "Timeline track ID"}
 _POSITION = {"type": "integer", "description": "Zero-based sibling position"}
-_PARENT_ID = {"type": "string", "description": "Parent track ID or null", "nullable": True}
-_COLOR = {"type": "string", "description": "Optional track color", "nullable": True}
+_PARENT_ID = {"type": ["string", "null"], "description": "Parent track ID or null"}
+_COLOR = {"type": ["string", "null"], "description": "Optional track color"}
 _TAGS = {"type": "array", "items": {"type": "string"}}
 _PATCH_FIELD = {"type": "string", "enum": ["name", "description", "content"]}
 
@@ -127,6 +127,113 @@ async def _grouped_execute(_args, _ctx):
     raise RuntimeError("Grouped timeline tools must execute via apply_group")
 
 
+def _clean_optional_id(value) -> str | None:
+    """Normalise null-like strings that LLMs sometimes emit."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if s in ("", "null", "none", ":null"):
+        return None
+    return str(value).strip()
+
+
+def _non_negative_position(value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, int) and value >= 0:
+        return
+    raise ValueError("position must be a non-negative integer")
+
+
+def _has_any_track_replace_field(args: dict[str, Any]) -> bool:
+    return any(key in args for key in ("name", "description", "content", "parentId", "position", "color"))
+
+
+def _has_any_event_replace_field(args: dict[str, Any]) -> bool:
+    return any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags"))
+
+
+def _metadata(item) -> dict[str, Any] | None:
+    args = item.args
+    meta: dict[str, Any] = {}
+    if item.meta.target_kind == "timeline_track":
+        if "parentId" in args:
+            meta["parent_id"] = args.get("parentId")
+        if isinstance(args.get("position"), int):
+            meta["position"] = int(args["position"])
+        if "color" in args:
+            meta["color"] = args.get("color")
+    elif item.meta.target_kind == "timeline_event":
+        if "trackId" in args:
+            meta["track_id"] = args.get("trackId")
+        if "startDate" in args:
+            meta["start_date"] = args.get("startDate")
+        if "endDate" in args:
+            meta["end_date"] = args.get("endDate")
+        if "tags" in args:
+            meta["tags"] = args.get("tags")
+    return meta or None
+
+
+def _replace_fields(item) -> dict[str, Any]:
+    return {key: item.args[key] for key in ("name", "description", "content") if key in item.args}
+
+
+def _validate_track_parent(
+    db,
+    *,
+    project_id: UUID,
+    track_id: UUID,
+    parent_id: UUID | None,
+) -> None:
+    if parent_id is None:
+        return
+    if parent_id == track_id:
+        raise ValueError("Track cannot be moved under itself")
+
+    track = (
+        db.query(TimelineTrack)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(TimelineTrack.id == track_id, Timeline.project_id == project_id)
+        .first()
+    )
+    if track is None:
+        raise ValueError("timeline_track not found")
+
+    parent = (
+        db.query(TimelineTrack)
+        .filter(TimelineTrack.id == parent_id, TimelineTrack.timeline_id == track.timeline_id)
+        .first()
+    )
+    if parent is None:
+        raise ValueError("Parent track not found")
+
+    rows = db.query(TimelineTrack).filter(TimelineTrack.timeline_id == track.timeline_id).all()
+    children_by_parent: dict[UUID | None, list[UUID]] = {}
+    for row in rows:
+        children_by_parent.setdefault(row.parent_id, []).append(row.id)
+
+    pending = list(children_by_parent.get(track_id, []))
+    while pending:
+        current = pending.pop(0)
+        if current == parent_id:
+            raise ValueError("Track cannot be moved under its descendant")
+        pending.extend(children_by_parent.get(current, []))
+
+
+def _validate_event_metadata_args(args: dict[str, Any]) -> None:
+    if "trackId" in args:
+        if _clean_optional_id(args.get("trackId")) is None:
+            raise ValueError("trackId is required")
+        to_uuid(args.get("trackId"), "trackId")
+    if "startDate" in args and not isinstance(args.get("startDate"), dict):
+        raise ValueError("startDate must be an object")
+    if "endDate" in args and args.get("endDate") is not None and not isinstance(args.get("endDate"), dict):
+        raise ValueError("endDate must be an object or null")
+    if "tags" in args and not isinstance(args.get("tags"), list):
+        raise ValueError("tags must be an array")
+
+
 def _normal_specs(ctx) -> list[ToolSpec]:
     date = _date_schema(ctx.db, ctx.project_id)
     return filter_allowed_specs(
@@ -178,12 +285,32 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 auto_approve_category="write",
             ),
             ToolSpec(
+                name="replace_timeline_track",
+                description="Replace timeline track fields and metadata.",
+                parameters=obj_schema(
+                    {
+                        "id": _ID,
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
+                        "parentId": _PARENT_ID,
+                        "position": _POSITION,
+                        "color": _COLOR,
+                    },
+                    ["id"],
+                ),
+                auto_approve_category="write",
+            ),
+            ToolSpec(
                 name="patch_timeline_track",
-                description="Patch timeline track text fields by single replacement.",
+                description="Patch timeline track text fields by single replacement and optionally update metadata.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
                         "field": _PATCH_FIELD,
+                        "parentId": _PARENT_ID,
+                        "position": _POSITION,
+                        "color": _COLOR,
                         "old": {"type": "string"},
                         "new": {"type": "string"},
                     },
@@ -192,12 +319,34 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 auto_approve_category="write",
             ),
             ToolSpec(
+                name="replace_timeline_event",
+                description="Replace timeline event fields and metadata.",
+                parameters=obj_schema(
+                    {
+                        "id": _ID,
+                        "trackId": _TRACK_ID,
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "content": {"type": "string", "description": "Rich text content (markdown)"},
+                        "startDate": date,
+                        "endDate": {**date, "nullable": True},
+                        "tags": _TAGS,
+                    },
+                    ["id"],
+                ),
+                auto_approve_category="write",
+            ),
+            ToolSpec(
                 name="patch_timeline_event",
-                description="Patch timeline event text fields by single replacement.",
+                description="Patch timeline event text fields by single replacement and optionally update metadata.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
                         "field": _PATCH_FIELD,
+                        "trackId": _TRACK_ID,
+                        "startDate": date,
+                        "endDate": {**date, "nullable": True},
+                        "tags": _TAGS,
                         "old": {"type": "string"},
                         "new": {"type": "string"},
                     },
@@ -365,11 +514,27 @@ class TimelineFeatureModule(ToolFeatureModule):
             )
             add_binding(
                 spec_map=normal_specs_by_name,
+                name="replace_timeline_track",
+                meta=ToolBindingMeta(feature_key="timeline", category="write", op="replace", target_kind="timeline_track"),
+                validate=self._validate_replace_timeline_track,
+                execute=_grouped_execute,
+                build_persisted_meta=_persisted_meta(category="write", op="replace", target_kind="timeline_track", grouped=True),
+            )
+            add_binding(
+                spec_map=normal_specs_by_name,
                 name="patch_timeline_track",
                 meta=ToolBindingMeta(feature_key="timeline", category="write", op="patch", target_kind="timeline_track"),
                 validate=self._validate_patch_timeline_track,
                 execute=_grouped_execute,
                 build_persisted_meta=_persisted_meta(category="write", op="patch", target_kind="timeline_track", grouped=True),
+            )
+            add_binding(
+                spec_map=normal_specs_by_name,
+                name="replace_timeline_event",
+                meta=ToolBindingMeta(feature_key="timeline", category="write", op="replace", target_kind="timeline_event"),
+                validate=self._validate_replace_timeline_event,
+                execute=_grouped_execute,
+                build_persisted_meta=_persisted_meta(category="write", op="replace", target_kind="timeline_event", grouped=True),
             )
             add_binding(
                 spec_map=normal_specs_by_name,
@@ -456,7 +621,7 @@ class TimelineFeatureModule(ToolFeatureModule):
         patch_items = tuple(
             item
             for item in group.items
-            if item.meta.op == "patch" and item.meta.target_kind in {"timeline_track", "timeline_event"}
+            if item.meta.op in {"replace", "patch"} and item.meta.target_kind in {"timeline_track", "timeline_event"}
         )
         patch_item_ids = {item.tool_call_id for item in patch_items}
         other_items = tuple(item for item in group.items if item.tool_call_id not in patch_item_ids)
@@ -472,8 +637,8 @@ class TimelineFeatureModule(ToolFeatureModule):
                     ),
                     ctx=ctx,
                     object_type_for_item=lambda item: item.meta.target_kind,
-                    replace_fields_for_item=lambda _item: {},
-                    metadata_for_item=lambda _item: None,
+                    replace_fields_for_item=_replace_fields,
+                    metadata_for_item=_metadata,
                     result_for_item=lambda item: make_result(
                         f"Applied {item.binding.spec.name}",
                         object_id=item.meta.target_id,
@@ -548,13 +713,7 @@ class TimelineFeatureModule(ToolFeatureModule):
 
     @staticmethod
     def _clean_optional_id(value) -> str | None:
-        """Normalise null-like strings that LLMs sometimes emit."""
-        if value is None:
-            return None
-        s = str(value).strip().lower()
-        if s in ("", "null", "none", ":null"):
-            return None
-        return str(value).strip()
+        return _clean_optional_id(value)
 
     async def _validate_create_timeline_track(self, args, ctx):
         _ = ctx
@@ -622,16 +781,56 @@ class TimelineFeatureModule(ToolFeatureModule):
             result=make_result("Created timeline event", object_id=result["id"], object_type="timeline_event"),
         )
 
+    async def _validate_replace_timeline_track(self, args, ctx):
+        try:
+            track_id = to_uuid(args.get("id"), "id")
+            if not _has_any_track_replace_field(args):
+                raise ValueError("replace_timeline_track requires at least one of name, description, content, parentId, position, or color")
+            _non_negative_position(args.get("position"))
+            parent_id = None
+            if "parentId" in args:
+                pid = self._clean_optional_id(args.get("parentId"))
+                parent_id = to_uuid(pid, "parentId") if pid else None
+                if hasattr(ctx.db, "query"):
+                    _validate_track_parent(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        track_id=track_id,
+                        parent_id=parent_id,
+                    )
+            read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_track",
+                object_id=track_id,
+                language=ctx.language,
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_replace_timeline_track", str(exc))
+
     async def _validate_patch_timeline_track(self, args, ctx):
         try:
             field = args.get("field")
             if field not in {"name", "description", "content"}:
                 raise ValueError("field must be one of name|description|content")
+            track_id = to_uuid(args.get("id"), "id")
+            _non_negative_position(args.get("position"))
+            if "parentId" in args:
+                pid = self._clean_optional_id(args.get("parentId"))
+                parent_id = to_uuid(pid, "parentId") if pid else None
+                if hasattr(ctx.db, "query"):
+                    _validate_track_parent(
+                        ctx.db,
+                        project_id=ctx.project_id,
+                        track_id=track_id,
+                        parent_id=parent_id,
+                    )
             current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type="timeline_track",
-                object_id=to_uuid(args.get("id"), "id"),
+                object_id=track_id,
                 language=ctx.language,
             )
             patch_object_field(
@@ -644,11 +843,29 @@ class TimelineFeatureModule(ToolFeatureModule):
         except ValueError as exc:
             return invalid_result("validate_patch_timeline_track", str(exc))
 
+    async def _validate_replace_timeline_event(self, args, ctx):
+        try:
+            event_id = to_uuid(args.get("id"), "id")
+            if not _has_any_event_replace_field(args):
+                raise ValueError("replace_timeline_event requires at least one of trackId, name, description, content, startDate, endDate, or tags")
+            _validate_event_metadata_args(args)
+            read_runtime_object(
+                ctx.db,
+                project_id=ctx.project_id,
+                object_type="timeline_event",
+                object_id=event_id,
+                language=ctx.language,
+            )
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_replace_timeline_event", str(exc))
+
     async def _validate_patch_timeline_event(self, args, ctx):
         try:
             field = args.get("field")
             if field not in {"name", "description", "content"}:
                 raise ValueError("field must be one of name|description|content")
+            _validate_event_metadata_args(args)
             current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,

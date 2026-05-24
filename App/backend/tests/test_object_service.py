@@ -454,3 +454,126 @@ def test_update_outline_structure_queues_updated_events_for_affected_siblings(mo
             "action": "updated",
         },
     ]
+
+
+def test_timeline_track_metadata_update_moves_and_recolors(monkeypatch) -> None:
+    db = FakeSession()
+    track_id = uuid4()
+    parent_id = uuid4()
+    track = SimpleNamespace(
+        id=track_id,
+        timeline_id=uuid4(),
+        parent_id=None,
+        position=0,
+        color=None,
+    )
+    move_calls: list[dict[str, object]] = []
+    flush_calls: list[bool] = []
+
+    monkeypatch.setattr(
+        object_service_module,
+        "_move_track",
+        lambda _db, **kwargs: move_calls.append(kwargs),
+    )
+    db.flush = lambda: flush_calls.append(True)
+
+    object_service_module._handle_metadata_update(
+        db,
+        "timeline_track",
+        track_id,
+        track,
+        {"parent_id": str(parent_id), "position": 3, "color": "#ffcc00"},
+    )
+
+    assert move_calls == [
+        {
+            "track": track,
+            "new_parent_id": parent_id,
+            "new_position": 3,
+        }
+    ]
+    assert track.color == "#ffcc00"
+    assert flush_calls == [True]
+
+
+def test_timeline_event_metadata_update_changes_track_dates_and_tags(monkeypatch) -> None:
+    project_id = uuid4()
+    current_track_id = uuid4()
+    target_track_id = uuid4()
+    current_timeline_id = uuid4()
+    target_timeline_id = uuid4()
+    event_id = uuid4()
+    event = SimpleNamespace(
+        id=event_id,
+        track_id=current_track_id,
+        start_date={"year": 1},
+        end_date=None,
+        tags=[],
+    )
+    current_track = SimpleNamespace(id=current_track_id, timeline_id=current_timeline_id)
+    target_track = SimpleNamespace(id=target_track_id, timeline_id=target_timeline_id)
+    timeline = SimpleNamespace(id=target_timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    validation_calls: list[dict[str, object]] = []
+    flush_calls: list[bool] = []
+
+    class TargetTrackQuery:
+        def join(self, *_args: object, **_kwargs: object) -> "TargetTrackQuery":
+            return self
+
+        def filter(self, *_args: object, **_kwargs: object) -> "TargetTrackQuery":
+            return self
+
+        def first(self) -> object:
+            return target_track
+
+    db = FakeSession()
+    query_count = {"count": 0}
+
+    def fake_query(model: object):
+        db.queried_models.append(model)
+        query_count["count"] += 1
+        if query_count["count"] == 1:
+            return FakeFirstQuery(current_track)
+        if query_count["count"] == 2:
+            return SimpleNamespace(
+                filter=lambda *_args, **_kwargs: SimpleNamespace(scalar=lambda: project_id)
+            )
+        if query_count["count"] == 3:
+            return TargetTrackQuery()
+        if query_count["count"] == 4:
+            return FakeFirstQuery(timeline)
+        return FakeFirstQuery(None)
+
+    db.query = fake_query
+    db.flush = lambda: flush_calls.append(True)
+    monkeypatch.setattr(
+        object_service_module,
+        "_validate_event_dates",
+        lambda **kwargs: validation_calls.append(kwargs),
+    )
+
+    object_service_module._handle_metadata_update(
+        db,
+        "timeline_event",
+        event_id,
+        event,
+        {
+            "track_id": str(target_track_id),
+            "start_date": {"year": 2},
+            "end_date": {"year": 3},
+            "tags": ["court", "court", ""],
+        },
+    )
+
+    assert event.track_id == target_track_id
+    assert event.start_date == {"year": 2}
+    assert event.end_date == {"year": 3}
+    assert event.tags == ["court"]
+    assert validation_calls == [
+        {
+            "start_date": {"year": 2},
+            "end_date": {"year": 3},
+            "calendar": timeline.calendar,
+        }
+    ]
+    assert flush_calls == [True]

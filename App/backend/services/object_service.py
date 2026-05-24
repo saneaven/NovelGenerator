@@ -38,6 +38,7 @@ from ..services.deletion_service import (
     delete_semantic_sources_bulk,
 )
 from ..services.semantic_index_service import index_object, invalidate_object_index
+from ..utils.timeline_calendar import default_calendar
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .rich_text import (
@@ -72,7 +73,7 @@ from .story_entity_tree_service import (
     next_story_entity_sibling_order,
     normalize_story_entity_parent,
 )
-from .timeline_service import timeline_service
+from .timeline_service import _move_track, _sanitize_tags, _validate_event_dates, timeline_service
 from .credential_service import CredentialServiceError, credential_service
 from .settings_service import settings_service
 from .storage_usage_service import (
@@ -546,6 +547,15 @@ def _parse_optional_uuid(value: Any, field_name: str) -> UUID | None:
         raise HTTPException(status_code=400, detail=f"Invalid {field_name} format") from exc
 
 
+def _parse_required_uuid(value: Any, field_name: str) -> UUID:
+    if value in (None, "", "null"):
+        raise HTTPException(status_code=400, detail=f"{field_name} is required")
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name} format") from exc
+
+
 def _create_or_update_version(
     db: Session,
     *,
@@ -653,6 +663,81 @@ def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj:
                 new_parent_id=requested_parent_id,
                 new_position=requested_position if isinstance(requested_position, int) else None,
             )
+        return
+
+    if object_type == "timeline_track":
+        requested_parent_id = obj.parent_id
+        if "parent_id" in metadata:
+            requested_parent_id = _parse_optional_uuid(metadata.get("parent_id"), "parent_id")
+        requested_position = metadata.get("position")
+        if requested_position is not None and (not isinstance(requested_position, int) or requested_position < 0):
+            raise HTTPException(status_code=400, detail="Invalid position value")
+
+        if requested_parent_id != obj.parent_id or requested_position is not None:
+            _move_track(
+                db,
+                track=obj,
+                new_parent_id=requested_parent_id,
+                new_position=requested_position if isinstance(requested_position, int) else None,
+            )
+
+        if "color" in metadata:
+            color = metadata.get("color")
+            obj.color = (str(color).strip() or None) if color is not None else None
+            db.flush()
+        return
+
+    if object_type == "timeline_event":
+        current_track = db.query(TimelineTrack).filter(TimelineTrack.id == obj.track_id).first()
+        if current_track is None:
+            raise HTTPException(status_code=404, detail="Timeline track not found")
+
+        target_track = current_track
+        if "track_id" in metadata:
+            target_track_id = _parse_required_uuid(metadata.get("track_id"), "track_id")
+            if target_track_id != obj.track_id:
+                project_id = (
+                    db.query(Timeline.project_id)
+                    .filter(Timeline.id == current_track.timeline_id)
+                    .scalar()
+                )
+                target_track = (
+                    db.query(TimelineTrack)
+                    .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+                    .filter(TimelineTrack.id == target_track_id, Timeline.project_id == project_id)
+                    .first()
+                )
+                if target_track is None:
+                    raise HTTPException(status_code=404, detail="Target timeline track not found")
+                obj.track_id = target_track.id
+
+        timeline = db.query(Timeline).filter(Timeline.id == target_track.timeline_id).first()
+        if timeline is None:
+            raise HTTPException(status_code=404, detail="Timeline not found")
+
+        if "start_date" in metadata:
+            start_date = metadata.get("start_date")
+            if not isinstance(start_date, dict):
+                raise HTTPException(status_code=400, detail="Invalid start_date for calendar")
+            obj.start_date = deepcopy(start_date)
+        if "end_date" in metadata:
+            end_date = metadata.get("end_date")
+            if end_date is not None and not isinstance(end_date, dict):
+                raise HTTPException(status_code=400, detail="Invalid end_date for calendar")
+            obj.end_date = deepcopy(end_date) if isinstance(end_date, dict) else None
+        if "tags" in metadata:
+            tags = metadata.get("tags")
+            if tags is not None and not isinstance(tags, list):
+                raise HTTPException(status_code=400, detail="Invalid tags value")
+            obj.tags = _sanitize_tags(tags)
+
+        _validate_event_dates(
+            start_date=obj.start_date if isinstance(obj.start_date, dict) else {},
+            end_date=obj.end_date if isinstance(obj.end_date, dict) else None,
+            calendar=timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar(),
+        )
+        db.flush()
+        return
 
 
 def _is_outline_structure_metadata(metadata: dict[str, Any] | None) -> bool:
