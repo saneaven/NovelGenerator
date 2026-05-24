@@ -345,6 +345,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
               emptyState="No messages yet."
               topOverlayHeight={headerHeight}
               bottomOverlayHeight={listFooterHeight}
+              stickyLatestUser={false}
             />
 
             <div className="sub-agent-peek-dock__header-overlay" ref={headerRef}>

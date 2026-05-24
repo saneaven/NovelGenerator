@@ -43,6 +43,7 @@ interface ThreadMessageListProps {
   className?: string;
   topOverlayHeight?: number;
   bottomOverlayHeight?: number;
+  stickyLatestUser?: boolean;
 }
 
 function isPendingToolCallStatus(status: string | undefined): boolean {
@@ -75,6 +76,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   className,
   topOverlayHeight = 0,
   bottomOverlayHeight = 0,
+  stickyLatestUser = true,
 }) => {
   const { t } = useTranslation();
   const settings = useSettings();
@@ -381,7 +383,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
               'thread-message-row',
               `thread-message-row--${row.role}`,
               'thread-message-row--body',
-              isStickyLatestUser && contentBlock ? 'thread-message-row--sticky-latest-user' : '',
+              stickyLatestUser && isStickyLatestUser && contentBlock ? 'thread-message-row--sticky-latest-user' : '',
             ].filter(Boolean).join(' ');
 
             return (
