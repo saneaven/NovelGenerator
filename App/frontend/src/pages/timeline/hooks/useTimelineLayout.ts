@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { CalendarConfig } from '../../../types/timeline';
 import { toBaseUnits } from '../../../utils/timelineCalendar';
 import type { TimelineTrack } from '../../../types/timeline';
@@ -10,6 +10,11 @@ export interface TimelineViewport {
   scrollOffset: number;
   /** Container width in pixels. */
   viewportWidth: number;
+  /**
+   * Increments whenever a zoom action wants the DOM scrollLeft re-anchored.
+   * TimelineBody applies scrollOffset/scale to the canvas when this changes.
+   */
+  zoomVersion: number;
 }
 
 /** Discrete zoom levels: each represents approx base-units per pixel at that step. */
@@ -37,8 +42,15 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
     scale: ZOOM_STEPS[DEFAULT_ZOOM_INDEX],
     scrollOffset: 0,
     viewportWidth: 800,
+    zoomVersion: 0,
   });
   const zoomIndexRef = useRef(DEFAULT_ZOOM_INDEX);
+
+  /** Largest base-unit position across all events; drives content width. */
+  const contentMaxBase = useMemo(() => {
+    const positions = collectAllPositions(tracks, calendar);
+    return positions.length > 0 ? Math.max(0, ...positions) : 0;
+  }, [tracks, calendar]);
 
   const setViewportWidth = useCallback((width: number) => {
     setViewport((prev) => (prev.viewportWidth === width ? prev : { ...prev, viewportWidth: width }));
@@ -57,7 +69,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       // Keep center of viewport stable
       const center = prev.scrollOffset + (prev.viewportWidth * prev.scale) / 2;
       const newOffset = center - (prev.viewportWidth * newScale) / 2;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset) };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
   }, []);
 
@@ -69,7 +81,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       const newScale = ZOOM_STEPS[nextIndex];
       const center = prev.scrollOffset + (prev.viewportWidth * prev.scale) / 2;
       const newOffset = center - (prev.viewportWidth * newScale) / 2;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset) };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
   }, []);
 
@@ -84,7 +96,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       // Keep the point under the cursor stable
       const pointInBaseUnits = prev.scrollOffset + pixelX * prev.scale;
       const newOffset = pointInBaseUnits - pixelX * newScale;
-      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset) };
+      return { ...prev, scale: newScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
   }, []);
 
@@ -112,7 +124,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
       zoomIndexRef.current = closest;
       const finalScale = ZOOM_STEPS[closest];
       const newOffset = minPos - padding * finalScale;
-      return { ...prev, scale: finalScale, scrollOffset: Math.max(0, newOffset) };
+      return { ...prev, scale: finalScale, scrollOffset: Math.max(0, newOffset), zoomVersion: prev.zoomVersion + 1 };
     });
   }, [tracks, calendar]);
 
@@ -128,6 +140,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
 
   return {
     viewport,
+    contentMaxBase,
     zoomLabel,
     zoomIn,
     zoomOut,

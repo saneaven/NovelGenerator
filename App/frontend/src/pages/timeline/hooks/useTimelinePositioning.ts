@@ -53,22 +53,30 @@ function pickTickUnit(units: CalendarUnit[], scale: number): { majorIdx: number;
   return { majorIdx: 0, minorIdx: 0, minorStep: 1 };
 }
 
-export function useTimelinePositioning(calendar: CalendarConfig, viewport: TimelineViewport) {
+export function useTimelinePositioning(
+  calendar: CalendarConfig,
+  viewport: TimelineViewport,
+  contentMaxBase: number,
+) {
   const units = calendar.units;
 
+  // Positions are absolute within the (natively scrolled) canvas: base / scale.
+  // scrollOffset is NOT subtracted here — the browser handles horizontal scroll.
   const dateToPixel = useCallback(
     (date: TimelineDate): number => {
       const base = toBaseUnits(date, units);
-      return (base - viewport.scrollOffset) / viewport.scale;
+      return base / viewport.scale;
     },
-    [units, viewport.scrollOffset, viewport.scale],
+    [units, viewport.scale],
   );
 
   const pixelToBaseUnits = useCallback(
     (px: number): number => {
-      return px * viewport.scale + viewport.scrollOffset;
+      // px is absolute within the canvas content (getBoundingClientRect already
+      // accounts for native scroll), so no scrollOffset is added.
+      return px * viewport.scale;
     },
-    [viewport.scrollOffset, viewport.scale],
+    [viewport.scale],
   );
 
   const pixelToDate = useCallback(
@@ -96,11 +104,12 @@ export function useTimelinePositioning(calendar: CalendarConfig, viewport: Timel
     [dateToPixel],
   );
 
-  /** Total width of the canvas in pixels, based on all possible content. */
+  /** Total width of the canvas in pixels, sized to fit all content plus padding. */
   const canvasWidth = useMemo(() => {
-    // Provide a generous default width; the actual content determines scroll range
-    return Math.max(viewport.viewportWidth * 3, 2000);
-  }, [viewport.viewportWidth]);
+    const contentWidth = contentMaxBase / viewport.scale;
+    const padding = viewport.viewportWidth * 0.5;
+    return Math.max(contentWidth + padding, viewport.viewportWidth);
+  }, [contentMaxBase, viewport.scale, viewport.viewportWidth]);
 
   const rulerTicks = useMemo((): RulerTick[] => {
     if (units.length === 0) return [];
@@ -135,11 +144,15 @@ export function useTimelinePositioning(calendar: CalendarConfig, viewport: Timel
     const majorStepBase = majorMultiplier;
     const seenMajor = new Set<number>();
 
+    // Absolute visible pixel window (positions are absolute = base / scale).
+    const visStartPx = visibleStartBase / viewport.scale;
+    const visEndPx = visibleEndBase / viewport.scale;
+
     for (let i = startTick; i <= endTick; i++) {
       const basePos = i * stepBase;
-      const px = (basePos - viewport.scrollOffset) / viewport.scale;
+      const px = basePos / viewport.scale;
 
-      if (px < -100 || px > viewport.viewportWidth + 100) continue;
+      if (px < visStartPx - 100 || px > visEndPx + 100) continue;
 
       // Check if this is also a major tick
       const majorValue = Math.floor(basePos / majorStepBase);

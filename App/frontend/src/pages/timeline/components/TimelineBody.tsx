@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { TimelineTrack, TimelineEvent } from '../../../types/timeline';
 import type { RulerTick } from '../hooks/useTimelinePositioning';
 import TimelineRuler from './TimelineRuler';
@@ -11,6 +11,9 @@ interface TimelineBodyProps {
   displayLanguage: string;
   canvasWidth: number;
   rulerTicks: RulerTick[];
+  scrollOffset: number;
+  scale: number;
+  zoomVersion: number;
   onToggleExpand: (trackId: string) => void;
   onEditTrack: (track: TimelineTrack) => void;
   onAddSubTrack: (parentTrack: TimelineTrack) => void;
@@ -32,6 +35,9 @@ const TimelineBody: React.FC<TimelineBodyProps> = ({
   displayLanguage,
   canvasWidth,
   rulerTicks,
+  scrollOffset,
+  scale,
+  zoomVersion,
   onToggleExpand,
   onEditTrack,
   onAddSubTrack,
@@ -61,6 +67,19 @@ const TimelineBody: React.FC<TimelineBodyProps> = ({
     observer.observe(el);
     return () => observer.disconnect();
   }, [onSetViewportWidth]);
+
+  // Re-anchor native scroll position after a zoom action. scrollOffset is the
+  // desired left-edge base position; convert to pixels for the current scale.
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const targetLeft = scrollOffset / scale;
+    el.scrollLeft = targetLeft;
+    if (rulerRef.current) {
+      rulerRef.current.scrollLeft = targetLeft;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomVersion]);
 
   // Sync scroll
   const handleScroll = useCallback(() => {
