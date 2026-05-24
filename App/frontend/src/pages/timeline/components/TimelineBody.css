@@ -79,6 +79,10 @@
 
 .timeline-body__lane-row:hover {
   filter: brightness(0.98);
+  /* Raise the hovered row (and its hover popup) above adjacent rows. The filter
+     above creates a stacking context, so without z-index the popup gets trapped
+     and painted behind the next track row. */
+  z-index: var(--z-card-animating);
 }
 
 .timeline-body__lane-row--parent {
