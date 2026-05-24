@@ -21,7 +21,7 @@ export const ReadOnlyManuscriptDisplay: React.FC<ReadOnlyManuscriptDisplayProps>
           {title && <span className="function-call-manuscript-readonly__title">{title}</span>}
           {offset && (
             <span className="function-call-manuscript-readonly__range">
-              Range {offset.from ?? 0} - {offset.to ?? 0}
+              Paragraphs {offset.from ?? 0} - {offset.to ?? 0}
             </span>
           )}
         </div>

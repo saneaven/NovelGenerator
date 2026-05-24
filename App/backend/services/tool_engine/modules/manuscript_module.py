@@ -16,6 +16,7 @@ from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_manuscript_batch_group, filter_allowed_bindings, merge_key_for
 from .manuscript_access import ensure_manuscript_exists, read_manuscript_markdown, validate_patch_args
+from .manuscript_paragraphs import parse_markdown_paragraph_offset, slice_markdown_by_paragraph_offset
 from .object_access import to_uuid
 from .shared import filter_allowed_specs, is_agent_write_context, is_manuscript_journey, is_non_journey, is_translation_journey, obj_schema
 
@@ -30,13 +31,18 @@ def _manuscript_specs(ctx) -> list[ToolSpec]:
         specs.append(
             ToolSpec(
                 name="read_manuscript",
-                description="Read manuscript text.",
+                description="Read manuscript text. Optional offset selects Markdown paragraphs by 0-based index: from inclusive, to exclusive.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
                         "offset": {
                             "type": "object",
-                            "properties": {"from": {"type": "integer"}, "to": {"type": "integer"}},
+                            "description": "Optional Markdown paragraph range. from is inclusive, to is exclusive.",
+                            "additionalProperties": False,
+                            "properties": {
+                                "from": {"type": "integer", "description": "0-based Markdown paragraph start index, inclusive."},
+                                "to": {"type": "integer", "description": "0-based Markdown paragraph end index, exclusive."},
+                            },
                             "required": ["from", "to"],
                         },
                     },
@@ -197,6 +203,7 @@ class ManuscriptFeatureModule(ToolFeatureModule):
 
     async def _validate_read_manuscript(self, args, ctx):
         try:
+            parse_markdown_paragraph_offset(args.get("offset"))
             ensure_manuscript_exists(
                 db=ctx.db,
                 project_id=ctx.project_id,
@@ -215,6 +222,7 @@ class ManuscriptFeatureModule(ToolFeatureModule):
             object_id=object_id,
             language=ctx.language,
         )
+        content = slice_markdown_by_paragraph_offset(content, args.get("offset"))
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result(

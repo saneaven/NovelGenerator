@@ -16,6 +16,15 @@ function isOffset(value: unknown): value is { from?: number; to?: number } {
   return 'from' in value || 'to' in value;
 }
 
+function getResultObjectContent(result: ObjectCardProps['operation']['result']): string | undefined {
+  const data = result?.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const object = (data as Record<string, unknown>).object;
+  if (!object || typeof object !== 'object' || Array.isArray(object)) return undefined;
+  const content = (object as Record<string, unknown>).content;
+  return typeof content === 'string' ? content : undefined;
+}
+
 export const ReadCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
   projectId,
@@ -67,13 +76,16 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
 
     if (operation.objectType === 'manuscript') {
       const offset = isOffset(operation.args.offset) ? operation.args.offset : null;
+      const resultContent = getResultObjectContent(operation.result);
+      const storedContent = (typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined)
+        ?? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined);
       const resultText = typeof operation.result?.message === 'string' ? operation.result.message : undefined;
       return (
         <ReadOnlyManuscriptDisplay
           title={snapshot.displayName || 'Manuscript'}
           contentMarkdown={
-            (typeof snapshot.data.content === 'string' ? snapshot.data.content : undefined)
-            ?? (snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined)
+            (offset ? resultContent : storedContent)
+            ?? (offset ? storedContent : resultContent)
             ?? resultText
           }
           offset={offset}
