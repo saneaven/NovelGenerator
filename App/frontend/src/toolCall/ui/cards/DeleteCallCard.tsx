@@ -9,6 +9,8 @@ import { OutlineItemCard, toOutlineItemVariant } from '../../../components/Outli
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot, resolveObjectTitle } from './helpers';
+import { useTimelineLookup } from './timelineCardData';
+import { isTimelineEventLink, isTimelineObjectType, renderTimelineBody, renderTimelineLink } from './timelineCardRender';
 
 export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
@@ -22,6 +24,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
   const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
+  const timelineLookup = useTimelineLookup(projectId);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
@@ -48,6 +51,13 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   const title = name || type;
 
   const renderBody = () => {
+    if (isTimelineObjectType(operation.objectType)) {
+      if (isTimelineEventLink(operation.toolName)) {
+        return renderTimelineLink({ operation, mode: 'delete', lookup: timelineLookup, language });
+      }
+      return renderTimelineBody({ operation, mode: 'delete', lookup: timelineLookup, language });
+    }
+
     if (operation.objectType === 'outline') {
       const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
       const body =

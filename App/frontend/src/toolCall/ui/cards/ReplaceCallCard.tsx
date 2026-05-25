@@ -9,6 +9,8 @@ import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot, resolveObjectTitle } from './helpers';
+import { useTimelineLookup } from './timelineCardData';
+import { isTimelineObjectType, renderTimelineBody } from './timelineCardRender';
 
 function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
@@ -24,6 +26,9 @@ function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['obje
       return ['name', 'description', 'content', 'parentId', 'position'];
     case 'manuscript':
       return ['content'];
+    case 'timeline_track':
+    case 'timeline_event':
+      return ['name', 'description', 'content'];
     default:
       return [];
   }
@@ -89,6 +94,8 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
     [isFinalized, operation.args, changedFields, replaceKeys]
   );
 
+  const timelineLookup = useTimelineLookup(projectId);
+
   const { name: resolvedName, type: resolvedType } = useMemo(
     () => resolveObjectTitle({ operation, objects, projectId, language }),
     [operation, objects, projectId, language]
@@ -97,6 +104,18 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
   const title = `${resolvedType}${changedFields.length > 0 ? ` (${changedFields.length})` : ''}`;
 
   const renderBody = () => {
+    if (isTimelineObjectType(operation.objectType)) {
+      return renderTimelineBody({
+        operation,
+        mode: 'replace',
+        lookup: timelineLookup,
+        language,
+        values: changedValues,
+        changedFields,
+        fallbackName: targetLabel || undefined,
+      });
+    }
+
     if (operation.objectType === 'outline') {
       const newName = typeof changedValues.name === 'string' && changedValues.name.trim()
         ? changedValues.name

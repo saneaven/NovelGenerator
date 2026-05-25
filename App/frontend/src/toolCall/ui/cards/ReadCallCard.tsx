@@ -10,6 +10,8 @@ import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
+import { useTimelineLookup } from './timelineCardData';
+import { isTimelineObjectType, renderTimelineBody, renderTimelineSummary } from './timelineCardRender';
 
 function isOffset(value: unknown): value is { from?: number; to?: number } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -37,6 +39,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
   const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
+  const timelineLookup = useTimelineLookup(projectId);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const getMainAsset = useAssetStore((state) => state.getMainAsset);
@@ -60,6 +63,13 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const title = snapshot.displayName || operation.title;
 
   const renderBody = () => {
+    if (isTimelineObjectType(operation.objectType)) {
+      if (operation.toolName === 'read_timeline') {
+        return renderTimelineSummary(timelineLookup);
+      }
+      return renderTimelineBody({ operation, mode: 'read', lookup: timelineLookup, language });
+    }
+
     if (operation.objectType === 'outline') {
       const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
       const body = snapshot.id ? getRichTextMarkdown(snapshot.id, language, 'content') : undefined;

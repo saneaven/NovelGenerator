@@ -23,6 +23,11 @@ export type SearchCardProps = CommonCardProps<SearchOperationVM>;
 export type CallAgentCardProps = CommonCardProps<CallOperationVM>;
 export type ImageCardProps = CommonCardProps<GenerateOperationVM>;
 
+export interface PatchMetaChange {
+  label: string;
+  value: string;
+}
+
 export interface PatchGroupCardProps {
   scopeKey: string;
   projectId: string;
@@ -33,4 +38,8 @@ export interface PatchGroupCardProps {
   decisionDisabled?: boolean;
   onConfirm: (decisions: ToolCallDecisionMap) => Promise<void>;
   onConfirmAndPause?: (decisions: ToolCallDecisionMap) => Promise<void>;
+  /** Optional CSS color for a left accent (e.g. timeline track color). */
+  accentColor?: string;
+  /** Optional metadata-change chips shown above the text diffs. */
+  metaChanges?: PatchMetaChange[];
 }

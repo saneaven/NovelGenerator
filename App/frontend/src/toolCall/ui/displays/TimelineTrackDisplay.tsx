@@ -1,0 +1,78 @@
+import React from 'react';
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
+import { getTrackColors, presetSwatch } from '../../../pages/timeline/timelineColors';
+import './TimelineDisplays.css';
+
+export type TimelineDisplayMode = 'read' | 'create' | 'replace' | 'delete';
+
+export interface TimelineTrackDisplayProps {
+  name: string;
+  color?: string | null;
+  /** Resolved parent track name; omit / empty => root track. */
+  parentLabel?: string;
+  position?: number;
+  description?: string;
+  contentMarkdown?: string;
+  mode: TimelineDisplayMode;
+  changedFields?: string[];
+}
+
+export const TimelineTrackDisplay: React.FC<TimelineTrackDisplayProps> = ({
+  name,
+  color,
+  parentLabel,
+  position,
+  description,
+  contentMarkdown,
+  mode,
+  changedFields,
+}) => {
+  const colors = getTrackColors(color);
+  const isChanged = (field: string) => mode === 'replace' && Boolean(changedFields?.includes(field));
+  const show = (field: string) => mode !== 'replace' || !changedFields || changedFields.includes(field);
+
+  const hasContent = Boolean(contentMarkdown && contentMarkdown.trim());
+  const hasDescription = Boolean(description && description.trim());
+
+  return (
+    <div className="tl-card tl-card--track" style={{ ['--tl-accent' as string]: colors.labelBar }}>
+      <span className="tl-card__accent" aria-hidden />
+      <div className="tl-card__body">
+        {show('name') && (
+          <div className={`tl-card__title-row${isChanged('name') ? ' tl-card--changed' : ''}`}>
+            <span className="tl-card__title">{name || 'Untitled track'}</span>
+          </div>
+        )}
+
+        <div className="tl-card__meta-row">
+          {show('color') && (
+            <span className={`tl-chip tl-chip--color${isChanged('color') ? ' tl-card--changed' : ''}`}>
+              <span className="tl-chip__swatch" style={{ background: presetSwatch(color ?? 'neutral') }} aria-hidden />
+              {color ?? 'default'}
+            </span>
+          )}
+          {show('position') && typeof position === 'number' && (
+            <span className="tl-card__meta-item">position {position}</span>
+          )}
+          {show('parentId') && (
+            <span className={`tl-card__meta-item${isChanged('parentId') ? ' tl-card--changed' : ''}`}>
+              {parentLabel ? `↳ parent: ${parentLabel}` : 'root track'}
+            </span>
+          )}
+        </div>
+
+        {show('description') && hasDescription && (
+          <p className={`tl-card__description${isChanged('description') ? ' tl-card--changed' : ''}`}>{description}</p>
+        )}
+
+        {show('content') && hasContent && (
+          <div className={`tl-card__content${isChanged('content') ? ' tl-card--changed' : ''}`}>
+            <MarkdownRenderer>{contentMarkdown as string}</MarkdownRenderer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default TimelineTrackDisplay;

@@ -1,8 +1,9 @@
-import { defineToolCallUiModule } from '../registry/contracts';
+import { defineToolCallUiModule, type RenderContext, type RenderItem } from '../registry/contracts';
 import type { ObjectOperationVM } from '../ui/vmTypes';
+import { groupPatchOperations } from '../ui/patchGrouping';
+import { TimelinePatchGroupCard } from '../ui/cards/TimelinePatchGroupCard';
 import {
   buildObjectOperationVM,
-  buildPatchGroupRenderItems,
   buildSingleObjectRenderItems,
   getObjectEditMeta,
 } from './objectModuleShared';
@@ -24,6 +25,41 @@ const TOOL_NAMES = [
   'patch_translation_timeline_event',
 ] as const;
 
+/** Like the shared patch builder, but renders the timeline-aware patch card. */
+function buildTimelinePatchRenderItems(
+  operations: ObjectOperationVM[],
+  ctx: RenderContext,
+  category: 'patch' | 'patch_translation',
+): RenderItem[] {
+  return groupPatchOperations(operations).map((group) => {
+    const anyDecisionEnabled = group.operations.some((operation) => {
+      const decisionProps = ctx.getDecisionProps(operation);
+      return decisionProps.showDecisionButtons && !decisionProps.decisionDisabled;
+    });
+    const objectType = group.objectType === 'timeline_event' ? 'timeline_event' : 'timeline_track';
+
+    return {
+      id: `${category}:${group.id}`,
+      operationIds: group.operations.map((operation) => operation.id),
+      element: (
+        <TimelinePatchGroupCard
+          key={`${category}:${group.id}`}
+          scopeKey={ctx.scopeKey}
+          projectId={ctx.projectId}
+          groupId={`${category}:${group.id}`}
+          targetLabel={group.label}
+          operations={group.operations}
+          category={category}
+          objectType={objectType}
+          decisionDisabled={!anyDecisionEnabled}
+          onConfirm={ctx.onCommitDecisions}
+          onConfirmAndPause={ctx.onCommitDecisionsAndPause}
+        />
+      ),
+    };
+  });
+}
+
 const timelineModule = defineToolCallUiModule({
   key: 'timeline',
   toolNames: TOOL_NAMES,
@@ -37,8 +73,8 @@ const timelineModule = defineToolCallUiModule({
     const translationPatches = objectOps.filter((operation) => operation.category === 'patch_translation');
     return [
       ...buildSingleObjectRenderItems(singles, ctx),
-      ...buildPatchGroupRenderItems(patches, ctx, 'patch'),
-      ...buildPatchGroupRenderItems(translationPatches, ctx, 'patch_translation'),
+      ...buildTimelinePatchRenderItems(patches, ctx, 'patch'),
+      ...buildTimelinePatchRenderItems(translationPatches, ctx, 'patch_translation'),
     ];
   },
   getEditMeta(toolName, args) {

@@ -50,6 +50,8 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   decisionDisabled,
   onConfirm,
   onConfirmAndPause,
+  accentColor,
+  metaChanges,
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
@@ -187,6 +189,23 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
       rightActions={headerActions}
       defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'processing' || operation.status === 'streaming')}
       islands={[
+        ...(metaChanges && metaChanges.length > 0 ? [
+          <div
+            className="function-call-patch-meta"
+            key="meta"
+            style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}
+          >
+            <span className="function-call-patch-meta__label">Metadata</span>
+            <div className="function-call-patch-meta__chips">
+              {metaChanges.map((change) => (
+                <span className="function-call-patch-meta__chip" key={`${change.label}:${change.value}`}>
+                  <span className="function-call-patch-meta__chip-label">{change.label}</span>
+                  {change.value}
+                </span>
+              ))}
+            </div>
+          </div>,
+        ] : []),
         ...operations.map((operation) => {
           const field = typeof operation.args.field === 'string' ? operation.args.field : 'content';
           const oldText = patchValue(operation.args.old);

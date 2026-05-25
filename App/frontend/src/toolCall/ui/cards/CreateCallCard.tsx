@@ -8,6 +8,8 @@ import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { pickExistingKeys, pickValues, resolveObjectTitle } from './helpers';
+import { useTimelineLookup } from './timelineCardData';
+import { isTimelineEventLink, isTimelineObjectType, renderTimelineBody, renderTimelineLink } from './timelineCardRender';
 
 function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
@@ -30,71 +32,6 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function formatRecord(value: Record<string, unknown>): string {
-  return Object.entries(value)
-    .map(([key, entry]) => `${key}: ${String(entry ?? '')}`)
-    .join(', ');
-}
-
-function formatStringList(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const items = value.map((item) => String(item ?? '').trim()).filter(Boolean);
-  return items.length > 0 ? items.join(', ') : undefined;
-}
-
-function buildTimelineContentMarkdown(
-  objectType: ObjectCardProps['operation']['objectType'],
-  fields: Record<string, unknown>
-): string | undefined {
-  if (objectType !== 'timeline_track' && objectType !== 'timeline_event') {
-    return typeof fields.content === 'string' ? fields.content : undefined;
-  }
-
-  const content = typeof fields.content === 'string' ? fields.content.trim() : '';
-  const details: string[] = [];
-
-  if (objectType === 'timeline_track') {
-    if ('parentId' in fields) {
-      details.push(`Parent: ${typeof fields.parentId === 'string' && fields.parentId.trim() ? fields.parentId : 'Root'}`);
-    }
-    if (typeof fields.position === 'number') {
-      details.push(`Position: ${fields.position}`);
-    }
-    if (typeof fields.color === 'string' && fields.color.trim()) {
-      details.push(`Color: ${fields.color}`);
-    }
-  }
-
-  if (objectType === 'timeline_event') {
-    if (typeof fields.trackId === 'string' && fields.trackId.trim()) {
-      details.push(`Track: ${fields.trackId}`);
-    }
-    if (isRecord(fields.startDate)) {
-      details.push(`Start: ${formatRecord(fields.startDate)}`);
-    }
-    if ('endDate' in fields) {
-      details.push(isRecord(fields.endDate) ? `End: ${formatRecord(fields.endDate)}` : 'End: none');
-    }
-    const tags = formatStringList(fields.tags);
-    if (tags) {
-      details.push(`Tags: ${tags}`);
-    }
-  }
-
-  if (details.length === 0) {
-    return content || undefined;
-  }
-
-  return [
-    content,
-    ['**Details**', ...details.map((detail) => `- ${detail}`)].join('\n'),
-  ].filter(Boolean).join('\n\n');
-}
-
 export const CreateCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
   projectId,
@@ -106,6 +43,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const timelineLookup = useTimelineLookup(projectId);
 
   const fields = useMemo(() => {
     const keys = createFieldKeysForObjectType(operation.objectType).filter((key) => key in operation.args);
@@ -119,6 +57,20 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
   const titleValue = name || type;
 
   const renderBody = () => {
+    if (isTimelineObjectType(operation.objectType)) {
+      if (isTimelineEventLink(operation.toolName)) {
+        return renderTimelineLink({ operation, mode: 'create', lookup: timelineLookup, language });
+      }
+      return renderTimelineBody({
+        operation,
+        mode: 'create',
+        lookup: timelineLookup,
+        language,
+        values: fields,
+        fallbackName: name || undefined,
+      });
+    }
+
     if (operation.objectType === 'outline') {
       const desc = typeof fields.description === 'string' && fields.description.trim() ? fields.description : undefined;
       const body = typeof fields.content === 'string' && fields.content.trim() ? fields.content : undefined;
@@ -155,7 +107,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
         values={fields}
         mode="create"
         objectType={operation.objectType}
-        contentMarkdown={buildTimelineContentMarkdown(operation.objectType, fields)}
+        contentMarkdown={typeof fields.content === 'string' ? fields.content : undefined}
       />
     );
   };
