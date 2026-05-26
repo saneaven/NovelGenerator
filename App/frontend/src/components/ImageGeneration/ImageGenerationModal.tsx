@@ -1158,6 +1158,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     onStreamingStart={handleStreamingStart}
                     onStreamingError={handleStreamingError}
                     contextType="scene"
+                    manuscriptId={manuscriptId}
                     sceneContext={sceneContext}
                     promptMode={isTagBased ? activePromptTab : 'natural'}
                 />

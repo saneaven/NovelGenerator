@@ -43,6 +43,9 @@ const IMAGE_PROMPT_FIELDS: PromptTypeField[] = [
     type: 'dropdown',
     options: ['storyEntity', 'basicInfo'],
   },
+  { path: 'imagePrompt.sceneChapter.actNumber', label: 'Scene Act Number', type: 'text', placeholder: '1' },
+  { path: 'imagePrompt.sceneChapter.chapterNumber', label: 'Scene Chapter Number', type: 'text', placeholder: '1' },
+  { path: 'imagePrompt.sceneChapter.chapterName', label: 'Scene Chapter Title', type: 'text', placeholder: 'The Raid' },
   { path: 'imagePrompt.scenePreContext', label: 'Scene Pre-Context', type: 'textarea', placeholder: 'The hero enters the cave...' },
   { path: 'imagePrompt.scenePostContext', label: 'Scene Post-Context', type: 'textarea', placeholder: 'He finds the treasure...' },
 ];

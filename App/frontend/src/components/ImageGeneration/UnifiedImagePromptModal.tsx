@@ -47,6 +47,7 @@ interface UnifiedImagePromptModalProps {
   objectId?: string;
 
   // For 'scene' context
+  manuscriptId?: string;
   sceneContext?: SceneContext;
 
   // Optional default values
@@ -65,6 +66,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   objectType,
   objectKind,
   objectId,
+  manuscriptId,
   sceneContext,
   defaultUserRequest,
   defaultSelectedEntityIds,
@@ -242,6 +244,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       objectType,
       objectKind,
       objectId,
+      manuscriptId,
       sceneContext,
       selectedEntityIds,
       rawMode: true,
@@ -285,6 +288,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     objectType,
     objectKind,
     objectId,
+    manuscriptId,
     sceneContext,
     selectedEntityIds,
     onStreamingStart,

@@ -387,6 +387,13 @@ export function buildModeSpecificData(
                 }
               : null,
           },
+          sceneChapter: {
+            manuscriptId: '[ placeholder-manuscript-id ]',
+            chapterId: '[ placeholder-chapter-id ]',
+            chapterName: '[ Placeholder for chapter title ]',
+            actNumber: 1,
+            chapterNumber: 1,
+          },
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
           selectedEntityIds: filteredIds.selectedEntityIds,

@@ -47,6 +47,7 @@ export interface ImagePromptInput {
   objectType?: 'basic_info' | 'story_entity';
   objectKind?: 'character' | 'location' | 'organization' | 'lorebook';
   objectId?: string;
+  manuscriptId?: string;
   sceneContext?: { preContext: string; postContext: string };
   selectedEntityIds?: string[];
 }
@@ -200,6 +201,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
       objectType: input.objectType,
       objectKind: input.objectKind,
       objectId: input.objectId,
+      manuscriptId: input.manuscriptId,
       sceneContext: input.sceneContext,
       selectedEntityIds: input.selectedEntityIds,
     }) as EditingTargets,

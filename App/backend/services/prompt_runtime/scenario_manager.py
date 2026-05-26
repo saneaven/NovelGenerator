@@ -79,6 +79,19 @@ def _find_manuscript_by_chapter(project_data: dict[str, Any], chapter_id: str | 
     return {}
 
 
+def _find_manuscript_by_id(project_data: dict[str, Any], manuscript_id: str | None) -> dict[str, Any]:
+    if not manuscript_id:
+        return {}
+    rows = project_data.get("manuscripts")
+    if not isinstance(rows, list):
+        return {}
+    sid = str(manuscript_id)
+    for row in rows:
+        if isinstance(row, dict) and str(row.get("id")) == sid:
+            return row
+    return {}
+
+
 def _find_outline_target(
     project_data: dict[str, Any],
     object_id: str | None,
@@ -280,11 +293,13 @@ class ScenarioManager:
     ) -> dict[str, Any]:
         selected_entity_ids = _as_str_list(payload.get("selectedEntityIds"))
         object_id = str(payload.get("objectId") or "").strip()
+        manuscript_id = str(payload.get("manuscriptId") or "").strip()
         scene_context = _as_dict(payload.get("sceneContext"))
         target_type = str(payload.get("objectType") or "").strip()
 
         basic_info = _find_basic_info(project_data, object_id) if target_type in {"", "basic_info"} else {}
         story_entity = _find_story_entity(project_data, object_id) if target_type in {"", "story_entity"} else {}
+        scene_manuscript = _find_manuscript_by_id(project_data, manuscript_id)
 
         return {
             "promptMode": str(payload.get("promptMode") or "natural"),
@@ -311,6 +326,13 @@ class ScenarioManager:
                 }
                 if story_entity
                 else None,
+            },
+            "sceneChapter": {
+                "manuscriptId": str(scene_manuscript.get("id") or ""),
+                "chapterId": str(scene_manuscript.get("chapterId") or ""),
+                "chapterName": str(scene_manuscript.get("chapterName") or ""),
+                "actNumber": scene_manuscript.get("actNumber") if scene_manuscript else None,
+                "chapterNumber": scene_manuscript.get("chapterNumber") if scene_manuscript else None,
             },
             "scenePreContext": str(scene_context.get("preContext") or ""),
             "scenePostContext": str(scene_context.get("postContext") or ""),
@@ -398,4 +420,3 @@ class ScenarioManager:
         }
 
         return template_data
-

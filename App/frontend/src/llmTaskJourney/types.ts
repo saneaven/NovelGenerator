@@ -22,6 +22,7 @@ export type EditingTargets =
       promptMode: string;
       objectType?: string;
       objectId?: string;
+      manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
       selectedEntityIds?: string[];
     }
@@ -30,6 +31,7 @@ export type EditingTargets =
       projectId: string;
       contextType: 'scene';
       promptMode: string;
+      manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
       selectedEntityIds?: string[];
     }

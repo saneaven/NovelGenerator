@@ -104,6 +104,18 @@ def test_default_prompt_story_entity_tool_docs_include_folder_id() -> None:
     assert '"folderId": null' in project_data_native
 
 
+def test_default_scene_image_prompt_includes_story_position_context() -> None:
+    document = _load_default_prompt_document()
+
+    scene_prompt = document["prompts"]["imagePrompt"]["scene"]["blocks"][-1]["rangeMapping"]["user_template"]
+
+    assert "### Current Story Position" in scene_prompt
+    assert "**Act:** {{ imagePrompt.sceneChapter.actNumber }}" in scene_prompt
+    assert "**Chapter:** {{ imagePrompt.sceneChapter.chapterNumber }}" in scene_prompt
+    assert "**Chapter Title:** {{ imagePrompt.sceneChapter.chapterName }}" in scene_prompt
+    assert "do not include act/chapter labels in the generated image prompt" in scene_prompt
+
+
 def test_default_prompt_outline_and_manuscript_fragments_include_number_attributes() -> None:
     document = _load_default_prompt_document()
 

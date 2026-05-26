@@ -267,6 +267,22 @@ export const UNIFIED_SCHEMA = {
         } | null;
       }
     },
+    sceneChapter: {
+      desc: "Current scene chapter metadata (for scene mode)",
+      example: {
+        manuscriptId: "manuscript-1",
+        chapterId: "chapter-1",
+        chapterName: "The Raid",
+        actNumber: 1,
+        chapterNumber: 1,
+      } as {
+        manuscriptId: string;
+        chapterId: string;
+        chapterName: string;
+        actNumber: number | null;
+        chapterNumber: number | null;
+      }
+    },
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedEntityIds: { desc: "IDs of selected story entities", example: ["story-entity-1", "story-entity-2"] as string[] },
