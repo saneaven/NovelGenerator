@@ -351,7 +351,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
               Uncheck objects you don&apos;t want to include
             </span>
             <ObjectPicker
-              mode="story-entities"
+              mode="all"
               projectId={currentProjectId || ''}
               language={settings.mainLanguage}
               selectedIds={selectedEntityIds}
@@ -359,7 +359,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
               selectionMode="multi"
               loading={pickerLoading}
               maxHeight="200px"
-              showSearch={false}
               selectAllOnLoad={!defaultSelectedEntityIds?.length}
             />
             <div className="selection-summary">

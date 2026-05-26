@@ -65,7 +65,7 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): An
       types = ['story_entity', 'outline', 'manuscript', 'timeline_event'];
       break;
     case 'translation':
-      types = ['basic_info', 'guidelines', 'story_entity', 'outline', 'manuscript'];
+      types = ['basic_info', 'guidelines', 'story_entity', 'outline', 'manuscript', 'timeline_event'];
       break;
     default:
       types = ['story_entity'];
@@ -633,7 +633,7 @@ function buildGroups(
     availableTypes.push(...manuscriptGroups.availableTypes);
   }
 
-  if (mode === 'all') {
+  if (mode === 'all' || mode === 'translation') {
     const timelineGroups = buildTimelineEventGroups(timelineTracks, timelineCalendar, language, mode, t);
     if (timelineGroups.length > 0) {
       groups.push(...timelineGroups);
