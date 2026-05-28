@@ -118,7 +118,7 @@ const TimelinePanel: React.FC<TimelinePanelProps> = ({ globalDisplayLanguage }) 
     // Default date: a reasonable start point
     const defaultDate: TimelineDate = {};
     for (const unit of calendar.units) {
-      defaultDate[unit.name] = 0;
+      defaultDate[unit.name] = 1;
     }
     setCreatingEventTrack({ track, date: defaultDate });
     setEditingEvent(null);

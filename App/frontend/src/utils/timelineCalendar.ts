@@ -45,11 +45,13 @@ export function validateDate(dateValue: unknown, unitsOrCalendar: CalendarConfig
   if (!dateValue || typeof dateValue !== 'object') return false;
   const units = coerceUnits(unitsOrCalendar);
   return units.every((unit, i) => {
-    const raw = (dateValue as Record<string, unknown>)[unit.name] ?? 0;
-    if (!Number.isInteger(raw) || Number(raw) < 0) return false;
+    const raw = Object.prototype.hasOwnProperty.call(dateValue, unit.name)
+      ? (dateValue as Record<string, unknown>)[unit.name]
+      : 1;
+    if (!Number.isInteger(raw) || Number(raw) < 1) return false;
     if (i > 0) {
       const parentCount = units[i - 1].count;
-      if (Number.isInteger(parentCount) && Number(raw) >= Number(parentCount)) return false;
+      if (Number.isInteger(parentCount) && Number(raw) > Number(parentCount)) return false;
     }
     return true;
   });
@@ -61,7 +63,7 @@ export function toBaseUnits(dateValue: TimelineDate, unitsOrCalendar: CalendarCo
     throw new Error('Invalid timeline date');
   }
   return units.reduce(
-    (sum, unit, index) => sum + (Number(dateValue[unit.name] ?? 0) * unitMultiplier(units, index)),
+    (sum, unit, index) => sum + ((Number(dateValue[unit.name] ?? 1) - 1) * unitMultiplier(units, index)),
     0,
   );
 }
@@ -73,11 +75,11 @@ export function fromBaseUnits(position: number, unitsOrCalendar: CalendarConfig 
   units.forEach((unit, index) => {
     const multiplier = unitMultiplier(units, index);
     if (!Number.isInteger(unit.count)) {
-      result[unit.name] = remaining;
+      result[unit.name] = remaining + 1;
       remaining = 0;
       return;
     }
-    result[unit.name] = Math.floor(remaining / multiplier);
+    result[unit.name] = Math.floor(remaining / multiplier) + 1;
     remaining %= multiplier;
   });
   return result;
@@ -85,7 +87,7 @@ export function fromBaseUnits(position: number, unitsOrCalendar: CalendarConfig 
 
 export function formatDate(dateValue: TimelineDate, unitsOrCalendar: CalendarConfig | CalendarUnit[]): string {
   const units = coerceUnits(unitsOrCalendar);
-  return units.map((unit) => `${unit.label} ${Number(dateValue[unit.name] ?? 0)}`).join(' / ');
+  return units.map((unit) => `${unit.label} ${Number(dateValue[unit.name] ?? 1)}`).join(' / ');
 }
 
 export function migrateDates(
@@ -109,25 +111,25 @@ export function migrateDates(
     if (!dateValue) return null;
     const nextValue: TimelineDate = {};
     oldUnits.forEach((unit) => {
-      nextValue[unit.name] = Number(dateValue[unit.name] ?? 0);
+      nextValue[unit.name] = Number(dateValue[unit.name] ?? 1);
     });
     renamedPairs.forEach(([oldName, newName]) => {
-      nextValue[newName] = Number(nextValue[oldName] ?? 0);
+      nextValue[newName] = Number(nextValue[oldName] ?? 1);
       delete nextValue[oldName];
     });
     removedUnits.forEach((unitName) => {
-      if (Number(nextValue[unitName] ?? 0) !== 0) {
-        warnings.add(`Removed calendar unit '${unitName}' discarded non-zero values`);
+      if (Number(nextValue[unitName] ?? 1) !== 1) {
+        warnings.add(`Removed calendar unit '${unitName}' discarded non-default values`);
       }
       delete nextValue[unitName];
     });
     addedUnits.forEach((unitName) => {
       if (!(unitName in nextValue)) {
-        nextValue[unitName] = 0;
+        nextValue[unitName] = 1;
       }
     });
     const ordered = newUnits.reduce<TimelineDate>((acc, unit) => {
-      acc[unit.name] = Number(nextValue[unit.name] ?? 0);
+      acc[unit.name] = Number(nextValue[unit.name] ?? 1);
       return acc;
     }, {});
 
@@ -136,12 +138,12 @@ export function migrateDates(
       const parentCount = newUnits[i - 1].count;
       if (!Number.isInteger(parentCount)) continue;
       const unitName = newUnits[i].name;
-      const value = Number(ordered[unitName] ?? 0);
-      if (value >= Number(parentCount)) {
-        const carry = Math.floor(value / Number(parentCount));
-        ordered[unitName] = value % Number(parentCount);
+      const value = Number(ordered[unitName] ?? 1);
+      if (value > Number(parentCount)) {
+        const carry = Math.floor((value - 1) / Number(parentCount));
+        ordered[unitName] = ((value - 1) % Number(parentCount)) + 1;
         const parentName = newUnits[i - 1].name;
-        ordered[parentName] = Number(ordered[parentName] ?? 0) + carry;
+        ordered[parentName] = Number(ordered[parentName] ?? 1) + carry;
       }
     }
 

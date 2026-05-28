@@ -94,12 +94,12 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
 
   const updateDateUnit = useCallback((target: 'start' | 'end', unitName: string, value: number | undefined) => {
     if (target === 'start') {
-      setStartDate((prev) => ({ ...prev, [unitName]: value ?? 0 }));
+      setStartDate((prev) => ({ ...prev, [unitName]: value ?? 1 }));
       return;
     }
     setEndDate((prev) => {
       if (!prev) return prev;
-      return { ...prev, [unitName]: value ?? 0 };
+      return { ...prev, [unitName]: value ?? 1 };
     });
   }, []);
 
@@ -211,10 +211,10 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
                 <span className="timeline-event-sidebar__date-unit-label">{unit.label}</span>
                 <NumberInput
                   className="timeline-event-sidebar__date-input"
-                  value={startDate[unit.name] ?? 0}
+                  value={startDate[unit.name] ?? 1}
                   onValueChange={(v) => updateDateUnit('start', unit.name, v)}
-                  min={0}
-                  max={unit.count ? unit.count - 1 : undefined}
+                  min={1}
+                  max={unit.count}
                 />
               </div>
             ))}
@@ -238,10 +238,10 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
                   <span className="timeline-event-sidebar__date-unit-label">{unit.label}</span>
                   <NumberInput
                     className="timeline-event-sidebar__date-input"
-                    value={endDate[unit.name] ?? 0}
+                    value={endDate[unit.name] ?? 1}
                     onValueChange={(v) => updateDateUnit('end', unit.name, v)}
-                    min={0}
-                    max={unit.count ? unit.count - 1 : undefined}
+                    min={1}
+                    max={unit.count}
                   />
                 </div>
               ))}

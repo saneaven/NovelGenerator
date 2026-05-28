@@ -163,8 +163,8 @@ export function useTimelinePositioning(
 
       const date = fromBaseUnits(Math.max(0, basePos), units);
       const label = isMajor
-        ? `${units[majorIdx].label} ${date[units[majorIdx].name] ?? 0}`
-        : `${units[minorIdx].label.charAt(0)}${date[units[minorIdx].name] ?? 0}`;
+        ? `${units[majorIdx].label} ${date[units[majorIdx].name] ?? 1}`
+        : `${units[minorIdx].label.charAt(0)}${date[units[minorIdx].name] ?? 1}`;
 
       ticks.push({
         position: px,

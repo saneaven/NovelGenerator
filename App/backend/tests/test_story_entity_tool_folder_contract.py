@@ -444,6 +444,12 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     replace_event_props = specs["replace_timeline_event"].parameters["properties"]
     for key in ("trackId", "startDate", "endDate", "tags"):
         assert key in replace_event_props
+    date_props = replace_event_props["startDate"]["properties"]
+    assert date_props["year"]["minimum"] == 1
+    assert "maximum" not in date_props["year"]
+    assert date_props["month"] == {"type": "integer", "minimum": 1, "maximum": 12}
+    assert date_props["day"] == {"type": "integer", "minimum": 1, "maximum": 30}
+    assert date_props["hour"] == {"type": "integer", "minimum": 1, "maximum": 24}
 
     for tool_name in ("patch_timeline_track", "patch_timeline_event"):
         params = specs[tool_name].parameters
@@ -458,6 +464,38 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     event_props = specs["patch_timeline_event"].parameters["properties"]
     for key in ("trackId", "startDate", "endDate", "tags"):
         assert key in event_props
+
+
+def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    feature = TimelineFeatureModule()
+    binding = _binding_by_name(feature, _module_context(), "create_timeline_event")
+    track_id = uuid4()
+    captured: dict[str, object] = {}
+
+    def _fake_create_event(_db, **kwargs):
+        captured.update(kwargs)
+        return {"id": str(uuid4())}
+
+    monkeypatch.setattr(timeline_module.timeline_service, "create_event", _fake_create_event)
+
+    asyncio.run(
+        binding.execute(
+            {
+                "trackId": str(track_id),
+                "name": "Coronation",
+                "description": "",
+                "content": "",
+                "startDate": {"year": 1, "month": 1},
+                "endDate": {"year": 1, "month": 2},
+                "tags": [],
+            },
+            _execution_context(),
+        )
+    )
+
+    assert captured["start_date"] == {"year": 1, "month": 1}
+    assert captured["end_date"] == {"year": 1, "month": 2}
 
 
 def test_validate_patch_timeline_event_reads_markdown_projection(monkeypatch) -> None:

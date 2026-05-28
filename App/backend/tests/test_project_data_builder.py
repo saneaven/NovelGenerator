@@ -268,7 +268,7 @@ def test_build_timeline_payload_uses_track_tree_order_and_flat_time_order() -> N
     late_event = TimelineEvent(
         id=uuid4(),
         track_id=earlier_root.id,
-        start_date={"year": 1, "month": 0},
+        start_date={"year": 2, "month": 1},
         end_date=None,
         tags=["late"],
         created_at=created_at,
@@ -277,7 +277,7 @@ def test_build_timeline_payload_uses_track_tree_order_and_flat_time_order() -> N
     early_event = TimelineEvent(
         id=uuid4(),
         track_id=later_root.id,
-        start_date={"year": 0, "month": 3},
+        start_date={"year": 1, "month": 4},
         end_date=None,
         tags=["early", "anchor"],
         created_at=created_at + timedelta(minutes=3),
@@ -304,6 +304,8 @@ def test_build_timeline_payload_uses_track_tree_order_and_flat_time_order() -> N
     assert payload["tracks"][0]["content"] == "Track body"
     assert payload["tracks"][0]["children"][0]["id"] == str(child.id)
     assert [event["id"] for event in payload["events"]] == [str(early_event.id), str(late_event.id)]
+    assert payload["events"][0]["startDate"] == {"year": 1, "month": 4}
+    assert payload["events"][0]["formattedDate"] == "Year 1 / Month 4"
     assert payload["events"][0]["content"] == "Early body"
     assert payload["events"][0]["tags"] == ["early", "anchor"]
 

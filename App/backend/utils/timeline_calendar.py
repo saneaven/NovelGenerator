@@ -82,14 +82,14 @@ def validate_date(date_value: Any, units_or_calendar: dict[str, Any] | Iterable[
         return False
 
     for i, unit in enumerate(units):
-        raw = date_value.get(unit["name"], 0)
+        raw = date_value.get(unit["name"], 1)
         if not isinstance(raw, int):
             return False
-        if raw < 0:
+        if raw < 1:
             return False
         if i > 0:
             parent_count = units[i - 1].get("count")
-            if parent_count is not None and raw >= int(parent_count):
+            if parent_count is not None and raw > int(parent_count):
                 return False
     return True
 
@@ -101,7 +101,7 @@ def to_base_units(date_value: dict[str, Any], units_or_calendar: dict[str, Any] 
 
     total = 0
     for index, unit in enumerate(units):
-        total += int(date_value.get(unit["name"], 0) or 0) * _unit_multiplier(units, index)
+        total += (int(date_value.get(unit["name"], 1)) - 1) * _unit_multiplier(units, index)
     return total
 
 
@@ -112,14 +112,14 @@ def from_base_units(position: int, units_or_calendar: dict[str, Any] | Iterable[
     for index, unit in enumerate(units):
         multiplier = _unit_multiplier(units, index)
         if multiplier <= 0:
-            date_value[unit["name"]] = 0
+            date_value[unit["name"]] = 1
             continue
         count = unit.get("count")
         if count is None:
-            date_value[unit["name"]] = remaining
+            date_value[unit["name"]] = remaining + 1
             remaining = 0
             continue
-        date_value[unit["name"]] = remaining // multiplier
+        date_value[unit["name"]] = (remaining // multiplier) + 1
         remaining = remaining % multiplier
     return date_value
 
@@ -128,7 +128,7 @@ def format_date(date_value: dict[str, Any], units_or_calendar: dict[str, Any] | 
     units = _coerce_units(units_or_calendar)
     parts: list[str] = []
     for unit in units:
-        parts.append(f"{unit['label']} {int(date_value.get(unit['name'], 0) or 0)}")
+        parts.append(f"{unit['label']} {int(date_value.get(unit['name'], 1))}")
     return " / ".join(parts)
 
 
@@ -158,20 +158,20 @@ def migrate_dates(
         if not isinstance(date_value, dict):
             raise ValueError("Timeline date payload must be an object")
 
-        next_value = {unit["name"]: int(date_value.get(unit["name"], 0) or 0) for unit in old_units}
+        next_value = {unit["name"]: int(date_value.get(unit["name"], 1)) for unit in old_units}
 
         for old_name, new_name in renamed_pairs:
-            next_value[new_name] = int(next_value.pop(old_name, 0) or 0)
+            next_value[new_name] = int(next_value.pop(old_name, 1))
 
         for unit_name in removed_units:
-            removed_value = int(next_value.pop(unit_name, 0) or 0)
-            if removed_value != 0:
-                warnings.append(f"Removed calendar unit '{unit_name}' discarded non-zero values")
+            removed_value = int(next_value.pop(unit_name, 1))
+            if removed_value != 1:
+                warnings.append(f"Removed calendar unit '{unit_name}' discarded non-default values")
 
         for unit_name in added_units:
-            next_value.setdefault(unit_name, 0)
+            next_value.setdefault(unit_name, 1)
 
-        ordered = {unit["name"]: int(next_value.get(unit["name"], 0) or 0) for unit in new_units}
+        ordered = {unit["name"]: int(next_value.get(unit["name"], 1)) for unit in new_units}
 
         # Carry propagation: redistribute values that exceed the parent's count
         for i in range(len(new_units) - 1, 0, -1):
@@ -180,12 +180,12 @@ def migrate_dates(
                 continue
             parent_count = int(parent_count)
             unit_name = new_units[i]["name"]
-            value = int(ordered.get(unit_name, 0) or 0)
-            if value >= parent_count:
-                carry = value // parent_count
-                ordered[unit_name] = value % parent_count
+            value = int(ordered.get(unit_name, 1))
+            if value > parent_count:
+                carry = (value - 1) // parent_count
+                ordered[unit_name] = ((value - 1) % parent_count) + 1
                 parent_name = new_units[i - 1]["name"]
-                ordered[parent_name] = int(ordered.get(parent_name, 0) or 0) + carry
+                ordered[parent_name] = int(ordered.get(parent_name, 1)) + carry
 
         migrated.append(ordered)
 
