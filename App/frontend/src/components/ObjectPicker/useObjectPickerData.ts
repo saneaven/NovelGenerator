@@ -26,6 +26,7 @@ import {
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
 import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
+import { docToPlainText } from '../../editor/manuscript/doc';
 
 const EMPTY_OBJECT_TYPES: ObjectType[] = [];
 
@@ -221,6 +222,35 @@ function getTimelineDataForLanguage(data: Record<string, Record<string, unknown>
   return firstLanguage ? data[firstLanguage] : {};
 }
 
+function toNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function timelineContentToText(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return toNonEmptyString(value);
+  }
+  if (value && typeof value === 'object') {
+    const text = docToPlainText(value);
+    return text.length > 0 ? text : undefined;
+  }
+  return undefined;
+}
+
+function formatTimelineEventDate(
+  startDate: Record<string, number>,
+  endDate: Record<string, number> | null | undefined,
+  calendar: CalendarConfig | null,
+): string | undefined {
+  if (!calendar) return undefined;
+  const start = formatDate(startDate, calendar);
+  if (!endDate) return start;
+  const end = formatDate(endDate, calendar);
+  return end === start ? start : `${start} - ${end}`;
+}
+
 function buildTimelineEventGroups(
   tracks: TimelineTrack[],
   calendar: CalendarConfig | null,
@@ -235,24 +265,30 @@ function buildTimelineEventGroups(
 
   const buildTrackGroup = (track: TimelineTrack): ObjectPickerGroup => {
     const trackData = getTimelineDataForLanguage(track.data, language);
+    const trackName = toNonEmptyString(trackData.name) || untitledTrack;
     return {
       id: `timeline-track-${track.id}`,
-      label: (trackData.name as string) || untitledTrack,
-      description: (trackData.description as string) || undefined,
+      label: trackName,
+      description: toNonEmptyString(trackData.description),
       type: 'timeline_event',
       order: track.position,
       items: [
         ...track.events.map((event) => {
           const eventData = getTimelineDataForLanguage(event.data, language);
+          const eventDescription = toNonEmptyString(eventData.description);
+          const formattedDate = formatTimelineEventDate(event.startDate, event.endDate, calendar);
           return {
             id: event.id,
-            name: (eventData.name as string) || untitledEvent,
-            description: (eventData.description as string) || (calendar ? formatDate(event.startDate, calendar) : undefined),
-            content: event.tags.length > 0 ? `Tags: ${event.tags.join(', ')}` : undefined,
+            name: toNonEmptyString(eventData.name) || untitledEvent,
+            description: eventDescription || formattedDate,
+            content: timelineContentToText(eventData.content),
             type: 'timeline_event' as const,
             parentId: track.id,
             metadata: {
               trackId: track.id,
+              trackName,
+              formattedDate,
+              description: eventDescription,
               startDate: event.startDate,
               endDate: event.endDate,
               tags: event.tags,

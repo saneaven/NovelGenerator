@@ -102,6 +102,53 @@ function isSameSet<T>(a: Set<T>, b: Set<T>): boolean {
   return isSubset(a, b);
 }
 
+function getMetadataString(item: PickerItem, key: string): string | undefined {
+  const value = item.metadata?.[key];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getMetadataStringList(item: PickerItem, key: string): string[] {
+  const value = item.metadata?.[key];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(entry ?? '').trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function buildTokenTextForItem(item: PickerItem): string {
+  const parts: string[] = [];
+  const add = (label: string, value: string | undefined) => {
+    const text = value?.trim();
+    if (text) {
+      parts.push(`${label}: ${text}`);
+    }
+  };
+
+  if (item.type === 'timeline_event') {
+    const formattedDate = getMetadataString(item, 'formattedDate');
+    const eventDescription = getMetadataString(item, 'description')
+      ?? (formattedDate ? undefined : item.description);
+    const tags = getMetadataStringList(item, 'tags');
+
+    add('Timeline event', item.name);
+    add('Track', getMetadataString(item, 'trackName'));
+    add('Date', formattedDate);
+    add('Description', eventDescription);
+    add('Content', item.content);
+    if (tags.length > 0) {
+      add('Tags', tags.join(', '));
+    }
+    return parts.join('\n');
+  }
+
+  add('Name', item.name);
+  add('Description', item.description);
+  add('Content', item.content);
+  return parts.join('\n');
+}
+
 /**
  * Find a group by ID (recursively searching all nested levels)
  */
@@ -332,7 +379,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
 
     const relevantItems = allItems.filter(item => relevantIds.has(item.id));
     return relevantItems
-      .map(item => item.content || item.description || '')
+      .map(buildTokenTextForItem)
       .filter(content => content.length > 0)
       .join('\n\n');
   }, [groups, selectedIdSet, showTokenCount, mode]);

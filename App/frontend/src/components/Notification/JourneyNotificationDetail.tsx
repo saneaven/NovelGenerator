@@ -45,14 +45,12 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     storedThreadStatus,
     runtimeUnresolvedToolCallCount,
     pendingToolCallCount,
-    messageCount,
     latestRunContext,
   } = useThreadStore(
     useShallow((state) => ({
       storedThreadStatus: state.threadsById[threadId]?.status,
       runtimeUnresolvedToolCallCount: state.threadsById[threadId]?.unresolvedToolCallCount ?? 0,
       pendingToolCallCount: state.pendingToolCallIdsByThread[threadId]?.length ?? 0,
-      messageCount: state.messagesByThreadId[threadId]?.length ?? 0,
       latestRunContext: state.threadsById[threadId]?.latestRunContext ?? null,
     })),
   );
@@ -66,15 +64,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   const journeyStatus = (storedThreadStatus ?? status) as ThreadStatus;
   const statusText = formatNotificationStatusLabelFor('journey', journeyStatus as NotificationStatus);
   const isRunning = journeyStatus === 'running' || journeyStatus === 'processing';
-  const isWaiting = journeyStatus === 'waiting';
   const canResume = canResumeThreadStatus(journeyStatus);
   const unresolvedToolCallCount = runtimeUnresolvedToolCallCount > 0
     ? runtimeUnresolvedToolCallCount
     : pendingToolCallCount;
   const hasDecisionControls = unresolvedToolCallCount > 0;
-  const isFeedbackDisabled = isRunning || isWaiting || hasDecisionControls || latestRunContext === null;
+  const isSendBlocked = isRunning || hasDecisionControls;
   const headerMessage = journeyStatus === 'error' ? '' : message;
-  const showFeedback = !isRunning && messageCount > 0;
 
   const handleCancel = useCallback(() => {
     if (footerActionInFlight) return;
@@ -169,8 +165,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     unresolvedToolCallCount,
   ]);
 
-  const showFooter = Boolean(footerActions) || showFeedback;
-
   return (
     <BaseModal
       isOpen
@@ -208,65 +202,60 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
           />
         </div>
 
-        {showFooter && (
-          <div className="journey-detail-floating-footer">
-            {footerActions && (
-              <div className="journey-detail-footer-actions">
-                {footerActions}
-              </div>
-            )}
+        <div className="journey-detail-floating-footer">
+          {footerActions && (
+            <div className="journey-detail-footer-actions">
+              {footerActions}
+            </div>
+          )}
 
-            {showFeedback && (
-              <div className={`journey-detail-feedback ${feedbackOpen ? 'journey-detail-feedback--open' : ''}`}>
-                <button
-                  type="button"
-                  className="journey-detail-feedback-toggle"
-                  onClick={() => setFeedbackOpen(!feedbackOpen)}
-                  disabled={isFeedbackDisabled}
+          <div className={`journey-detail-feedback ${feedbackOpen ? 'journey-detail-feedback--open' : ''}`}>
+            <button
+              type="button"
+              className="journey-detail-feedback-toggle"
+              onClick={() => setFeedbackOpen(!feedbackOpen)}
+            >
+              {feedbackOpen ? 'Feedback' : '+ Feedback'}
+            </button>
+
+            <AnimatePresence>
+              {feedbackOpen && (
+                <motion.div
+                  className="journey-detail-feedback-body"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
                 >
-                  {feedbackOpen ? 'Feedback' : '+ Feedback'}
-                </button>
-
-                <AnimatePresence>
-                  {feedbackOpen && (
-                    <motion.div
-                      className="journey-detail-feedback-body"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: 'easeInOut' }}
-                    >
-                      <div className="journey-detail-feedback-inner">
-                        <textarea
-                          className="journey-detail-feedback-textarea"
-                          value={feedbackText}
-                          onChange={(e) => setFeedbackText(e.target.value)}
-                          onKeyDown={handleFeedbackKeyDown}
-                          placeholder="Tell the AI what to change..."
-                          rows={3}
-                          autoFocus
-                        />
-                        <div className="journey-detail-feedback-actions">
-                          <TextButton variant="secondary" onClick={() => setFeedbackOpen(false)}>
-                            Cancel
-                          </TextButton>
-                          <TextButton
-                            variant="primary"
-                            onClick={handleSendFeedback}
-                            disabled={!feedbackText.trim() || isFeedbackDisabled}
-                            loading={footerActionInFlight === 'feedback'}
-                          >
-                            Send
-                          </TextButton>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
+                  <div className="journey-detail-feedback-inner">
+                    <textarea
+                      className="journey-detail-feedback-textarea"
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      onKeyDown={handleFeedbackKeyDown}
+                      placeholder="Tell the AI what to change..."
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="journey-detail-feedback-actions">
+                      <TextButton variant="secondary" onClick={() => setFeedbackOpen(false)}>
+                        Cancel
+                      </TextButton>
+                      <TextButton
+                        variant="primary"
+                        onClick={handleSendFeedback}
+                        disabled={!feedbackText.trim() || isSendBlocked}
+                        loading={footerActionInFlight === 'feedback'}
+                      >
+                        Send
+                      </TextButton>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        )}
+        </div>
       </div>
     </BaseModal>
   );
