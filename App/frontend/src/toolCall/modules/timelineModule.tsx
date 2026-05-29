@@ -10,6 +10,7 @@ import {
 
 const TOOL_NAMES = [
   'read_timeline',
+  'read_timeline_track',
   'read_timeline_event',
   'create_timeline_track',
   'create_timeline_event',

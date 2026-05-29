@@ -21,6 +21,8 @@ export interface TimelineLookup {
   calendar: CalendarConfig;
   findTrack: (id: string | undefined | null) => TimelineTrack | undefined;
   findEvent: (id: string | undefined | null) => TimelineEvent | undefined;
+  /** Root tracks (timeline.tracks), each retaining its `.children`/`.events` subtree. */
+  rootTracks: TimelineTrack[];
   trackCount: number;
   eventCount: number;
 }
@@ -47,6 +49,7 @@ function buildLookup(timeline: FullTimeline | null): TimelineLookup {
     calendar,
     findTrack: (id) => (id ? trackById.get(id) : undefined),
     findEvent: (id) => (id ? eventById.get(id) : undefined),
+    rootTracks: timeline?.tracks ?? [],
     trackCount: allTracks.length,
     eventCount: eventById.size,
   };

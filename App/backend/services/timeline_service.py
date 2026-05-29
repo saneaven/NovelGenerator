@@ -613,6 +613,34 @@ class TimelineService:
         )
         return list(timeline["tracks"])
 
+    def get_track_subtree(
+        self,
+        db: Session,
+        *,
+        project_id: UUID,
+        track_id: UUID,
+        language: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return a single track serialized with its full descendant subtree.
+
+        Shape matches one element of ``get_full_timeline``'s ``tracks`` array
+        (id/timeline_id/parent_id/position/color/data/version/events/children).
+        Returns ``None`` if the track is absent from this project's timeline.
+        """
+        timeline = self.get_full_timeline(db, project_id=project_id, language=language)
+        target = str(track_id)
+
+        def find(nodes: list[dict[str, Any]]) -> dict[str, Any] | None:
+            for node in nodes:
+                if node.get("id") == target:
+                    return node
+                hit = find(node.get("children", []))
+                if hit is not None:
+                    return hit
+            return None
+
+        return find(timeline.get("tracks", []))
+
     def list_events(
         self,
         db: Session,

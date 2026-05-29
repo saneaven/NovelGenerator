@@ -10,6 +10,7 @@ import {
   timelineName,
   type TimelineLookup,
 } from './timelineCardData';
+import type { TimelineEvent, TimelineTrack } from '../../../types/timeline';
 
 const EVENT_LINK_TOOLS = new Set(['create_timeline_event_link', 'delete_timeline_event_link']);
 
@@ -109,6 +110,85 @@ function renderEvent(params: RenderParams): React.ReactElement {
 /** Render the timeline-native body for a track/event tool call. */
 export function renderTimelineBody(params: RenderParams): React.ReactElement {
   return params.operation.objectType === 'timeline_track' ? renderTrack(params) : renderEvent(params);
+}
+
+/** Render one stored timeline event (read mode) from its store object. */
+function renderEventNode(
+  event: TimelineEvent,
+  track: TimelineTrack | undefined,
+  lookup: TimelineLookup,
+  language: string,
+): React.ReactElement {
+  const data = dataForLanguage(event.data, language);
+  return (
+    <TimelineEventDisplay
+      key={event.id}
+      name={timelineName(event.data, language) ?? 'Event'}
+      trackColor={track?.color ?? null}
+      trackLabel={track ? timelineName(track.data, language) ?? 'Track' : undefined}
+      startLabel={safeFormatDate(event.startDate, lookup.calendar)}
+      endLabel={safeFormatDate(event.endDate, lookup.calendar)}
+      tags={asTagList(event.tags)}
+      linkCount={event.links?.length ?? 0}
+      description={asString(data.description)}
+      contentMarkdown={asMarkdown(data.content)}
+      mode="read"
+    />
+  );
+}
+
+/** Recursively render a stored track (read mode) with its events and child tracks. */
+function renderTrackNode(
+  track: TimelineTrack,
+  lookup: TimelineLookup,
+  language: string,
+): React.ReactElement {
+  const data = dataForLanguage(track.data, language);
+  const parentLabel = track.parentId
+    ? timelineName(lookup.findTrack(track.parentId)?.data, language) ?? undefined
+    : undefined;
+  return (
+    <div className="tl-tree__node" key={track.id}>
+      <TimelineTrackDisplay
+        name={timelineName(track.data, language) ?? 'Track'}
+        color={track.color ?? null}
+        parentLabel={parentLabel}
+        position={track.position}
+        description={asString(data.description)}
+        contentMarkdown={asMarkdown(data.content)}
+        mode="read"
+      />
+      {(track.events ?? []).map((event) => (
+        <div className="tl-tree__leaf" key={event.id}>
+          {renderEventNode(event, track, lookup, language)}
+        </div>
+      ))}
+      {(track.children ?? []).map((child) => renderTrackNode(child, lookup, language))}
+    </div>
+  );
+}
+
+/** Render the whole timeline as a track/event tree (`read_timeline`). */
+export function renderTimelineTree(lookup: TimelineLookup, language: string): React.ReactElement {
+  if (!lookup.rootTracks.length) {
+    return renderTimelineSummary(lookup);
+  }
+  return <div className="tl-tree">{lookup.rootTracks.map((track) => renderTrackNode(track, lookup, language))}</div>;
+}
+
+/** Render a single track plus its descendant subtree (`read_timeline_track`). */
+export function renderTimelineTrackSubtree(params: {
+  operation: ObjectOperationVM;
+  lookup: TimelineLookup;
+  language: string;
+}): React.ReactElement {
+  const { operation, lookup, language } = params;
+  const root = lookup.findTrack(operation.targetId);
+  if (!root) {
+    // Store not loaded for this project / stale lookup: fall back to a single card.
+    return renderTrack({ operation, mode: 'read', lookup, language });
+  }
+  return <div className="tl-tree">{renderTrackNode(root, lookup, language)}</div>;
 }
 
 /** Render a compact summary for a whole-timeline read (`read_timeline`). */

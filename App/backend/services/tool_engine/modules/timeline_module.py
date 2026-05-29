@@ -252,6 +252,12 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 auto_approve_category="read",
             ),
             ToolSpec(
+                name="read_timeline_track",
+                description="Read a single timeline track with its full descendant subtree (child tracks and events).",
+                parameters=obj_schema({"id": _ID}, ["id"]),
+                auto_approve_category="read",
+            ),
+            ToolSpec(
                 name="create_timeline_track",
                 description="Create a timeline track.",
                 parameters=obj_schema(
@@ -498,6 +504,14 @@ class TimelineFeatureModule(ToolFeatureModule):
             )
             add_binding(
                 spec_map=normal_specs_by_name,
+                name="read_timeline_track",
+                meta=ToolBindingMeta(feature_key="timeline", category="read", op="read", target_kind="timeline_track"),
+                validate=self._validate_read_timeline_track,
+                execute=self._execute_read_timeline_track,
+                build_persisted_meta=_persisted_meta(category="read", op="read", target_kind="timeline_track"),
+            )
+            add_binding(
+                spec_map=normal_specs_by_name,
                 name="create_timeline_track",
                 meta=ToolBindingMeta(feature_key="timeline", category="write", op="create", target_kind="timeline_track"),
                 validate=self._validate_create_timeline_track,
@@ -709,6 +723,40 @@ class TimelineFeatureModule(ToolFeatureModule):
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result("Timeline event retrieved", object_id=str(event_id), object_type="timeline_event", data={"event": event}),
+        )
+
+    async def _validate_read_timeline_track(self, args, ctx):
+        try:
+            track_id = to_uuid(args.get("id"), "id")
+            track = object_service.get_object(
+                ctx.db,
+                object_type="timeline_track",
+                object_id=track_id,
+                project_id=ctx.project_id,
+                language=ctx.language,
+            )
+            if track is None:
+                raise ValueError("timeline_track not found")
+            return valid_result()
+        except ValueError as exc:
+            return invalid_result("validate_read_timeline_track", str(exc))
+
+    async def _execute_read_timeline_track(self, args, ctx):
+        track_id = to_uuid(args.get("id"), "id")
+        track = timeline_service.get_track_subtree(
+            ctx.db,
+            project_id=ctx.project_id,
+            track_id=track_id,
+            language=ctx.language,
+        )
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result=make_result(
+                "Timeline track retrieved",
+                object_id=str(track_id),
+                object_type="timeline_track",
+                data={"track": track},
+            ),
         )
 
     @staticmethod

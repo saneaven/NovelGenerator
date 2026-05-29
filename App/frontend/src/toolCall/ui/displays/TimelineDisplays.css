@@ -209,3 +209,19 @@
   border-radius: var(--border-radius-full);
   background: var(--color-surface-subtle);
 }
+
+/* --- Tree (read_timeline / read_timeline_track): nested tracks + events --- */
+.tl-tree,
+.tl-tree__node {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Indent descendant tracks and leaf events with a guide rail. */
+.tl-tree__node .tl-tree__node,
+.tl-tree__leaf {
+  margin-left: var(--spacing-lg);
+  padding-left: var(--spacing-md);
+  border-left: 1px solid var(--color-border-subtle);
+}

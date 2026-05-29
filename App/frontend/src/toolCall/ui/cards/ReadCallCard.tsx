@@ -11,7 +11,7 @@ import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
 import { useTimelineLookup } from './timelineCardData';
-import { isTimelineObjectType, renderTimelineBody, renderTimelineSummary } from './timelineCardRender';
+import { isTimelineObjectType, renderTimelineBody, renderTimelineTree, renderTimelineTrackSubtree } from './timelineCardRender';
 
 function isOffset(value: unknown): value is { from?: number; to?: number } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -65,7 +65,10 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   const renderBody = () => {
     if (isTimelineObjectType(operation.objectType)) {
       if (operation.toolName === 'read_timeline') {
-        return renderTimelineSummary(timelineLookup);
+        return renderTimelineTree(timelineLookup, language);
+      }
+      if (operation.toolName === 'read_timeline_track') {
+        return renderTimelineTrackSubtree({ operation, lookup: timelineLookup, language });
       }
       return renderTimelineBody({ operation, mode: 'read', lookup: timelineLookup, language });
     }
