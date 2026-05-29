@@ -111,6 +111,72 @@ def test_read_result_xml_renders_nested_genres_and_tags() -> None:
     assert "<logline>A fallen prince returns.</logline>" in xml
 
 
+def test_timeline_track_read_result_xml_renders_reference_ids_only() -> None:
+    xml = _format_read_result_xml(
+        {
+            "objectType": "timeline_track",
+            "objectId": "track-1",
+            "data": {
+                "object": {
+                    "name": "Main Plot",
+                    "description": "Primary track.",
+                    "content": "Track markdown.",
+                    "parentId": None,
+                    "position": 0,
+                    "color": "#336699",
+                    "childTrackIds": ["track-2"],
+                    "eventIds": ["event-1", "event-2"],
+                    "version": {"id": "version-1"},
+                    "created_at": "2026-01-01T00:00:00",
+                }
+            },
+        }
+    )
+
+    assert '<read_result type="timeline_track" id="track-1">' in xml
+    assert "<name>Main Plot</name>" in xml
+    assert "<childTrackIds>" in xml
+    assert "<id>track-2</id>" in xml
+    assert "<eventIds>" in xml
+    assert "<id>event-1</id>" in xml
+    assert "<id>event-2</id>" in xml
+    assert "<version>" not in xml
+    assert "created_at" not in xml
+
+
+def test_timeline_event_read_result_xml_renders_dates_tags_and_link_refs_only() -> None:
+    xml = _format_read_result_xml(
+        {
+            "objectType": "timeline_event",
+            "objectId": "event-1",
+            "data": {
+                "object": {
+                    "name": "Coronation",
+                    "description": "A court ritual.",
+                    "content": "Event markdown.",
+                    "trackId": "track-1",
+                    "startDate": {"year": 1, "month": 3},
+                    "endDate": None,
+                    "tags": ["court"],
+                    "links": [{"linkId": "link-1", "objectType": "outline", "objectId": "outline-1", "created_at": "ignored"}],
+                    "calendar": {"units": []},
+                    "updated_at": "2026-01-01T00:00:00",
+                }
+            },
+        }
+    )
+
+    assert '<read_result type="timeline_event" id="event-1">' in xml
+    assert "<trackId>track-1</trackId>" in xml
+    assert '<startDate>{"year":1,"month":3}</startDate>' in xml
+    assert "<endDate />" in xml
+    assert "<tag>court</tag>" in xml
+    assert '<link linkId="link-1" objectType="outline" objectId="outline-1" />' in xml
+    assert "calendar" not in xml
+    assert "updated_at" not in xml
+    assert "ignored" not in xml
+
+
 def test_project_creation_seed_uses_array_based_basic_info() -> None:
     source = (BACKEND_ROOT / "routes" / "project_routes.py").read_text(encoding="utf-8")
 

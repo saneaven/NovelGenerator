@@ -72,9 +72,66 @@ def _format_search_result_xml(result: dict[str, Any]) -> str:
     return _to_xml_string(root)
 
 
+def _append_timeline_scalar_fields(root: ET.Element, obj: dict[str, Any], keys: tuple[str, ...]) -> None:
+    for key in keys:
+        if key not in obj:
+            continue
+        child = ET.SubElement(root, key)
+        value = obj.get(key)
+        if value is not None:
+            child.text = str(value)
+
+
+def _append_timeline_id_list(root: ET.Element, obj: dict[str, Any], key: str) -> None:
+    if key not in obj:
+        return
+    container = ET.SubElement(root, key)
+    values = obj.get(key)
+    if not isinstance(values, list):
+        return
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        child = ET.SubElement(container, "id")
+        child.text = text
+
+
+def _append_timeline_date(root: ET.Element, obj: dict[str, Any], key: str) -> None:
+    if key not in obj:
+        return
+    child = ET.SubElement(root, key)
+    value = obj.get(key)
+    if isinstance(value, dict):
+        child.text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _append_timeline_links(root: ET.Element, obj: dict[str, Any]) -> None:
+    if "links" not in obj:
+        return
+    links_el = ET.SubElement(root, "links")
+    links = obj.get("links")
+    if not isinstance(links, list):
+        return
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        attrs = {
+            key: str(value)
+            for key, value in (
+                ("linkId", link.get("linkId")),
+                ("objectType", link.get("objectType")),
+                ("objectId", link.get("objectId")),
+            )
+            if value is not None and str(value)
+        }
+        ET.SubElement(links_el, "link", **attrs)
+
+
 def _format_read_result_xml(result: dict[str, Any]) -> str:
+    object_type = str(result.get("objectType", ""))
     root = ET.Element("read_result",
-        type=str(result.get("objectType", "")),
+        type=object_type,
         id=str(result.get("objectId", "")),
     )
     data = result.get("data") or {}
@@ -106,6 +163,15 @@ def _format_read_result_xml(result: dict[str, Any]) -> str:
             child.text = text
         if len(tags_el) == 0:
             root.remove(tags_el)
+    if object_type == "timeline_track":
+        _append_timeline_scalar_fields(root, obj, ("parentId", "position", "color"))
+        _append_timeline_id_list(root, obj, "childTrackIds")
+        _append_timeline_id_list(root, obj, "eventIds")
+    elif object_type == "timeline_event":
+        _append_timeline_scalar_fields(root, obj, ("trackId",))
+        _append_timeline_date(root, obj, "startDate")
+        _append_timeline_date(root, obj, "endDate")
+        _append_timeline_links(root, obj)
     return _to_xml_string(root)
 
 

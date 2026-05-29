@@ -18,7 +18,7 @@ from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
 from .object_access import extract_lang_data, patch_object_field, read_object, read_runtime_object, to_uuid
 from .shared import filter_allowed_specs, is_non_journey, is_translation_journey, obj_schema
-from ....models.db_models import Timeline, TimelineEventLink, TimelineTrack
+from ....models.db_models import Timeline, TimelineEvent, TimelineEventLink, TimelineTrack
 from ....services.object_service import object_service
 from ....services.timeline_service import ALLOWED_LINK_TYPES, _UNSET, timeline_service
 from ....utils.timeline_calendar import default_calendar
@@ -234,26 +234,97 @@ def _validate_event_metadata_args(args: dict[str, Any]) -> None:
         raise ValueError("tags must be an array")
 
 
+def _projection_text(data: dict[str, Any], key: str) -> str:
+    value = data.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _timeline_track_projection(db, *, project_id: UUID, track_id: UUID, language: str) -> dict[str, Any]:
+    obj = read_runtime_object(
+        db,
+        project_id=project_id,
+        object_type="timeline_track",
+        object_id=track_id,
+        language=language,
+    )
+    data = extract_lang_data(obj, language)
+    metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+
+    child_rows = (
+        db.query(TimelineTrack)
+        .filter(TimelineTrack.parent_id == track_id)
+        .order_by(TimelineTrack.position.asc(), TimelineTrack.created_at.asc(), TimelineTrack.id.asc())
+        .all()
+    )
+    event_rows = (
+        db.query(TimelineEvent)
+        .filter(TimelineEvent.track_id == track_id)
+        .order_by(TimelineEvent.created_at.asc(), TimelineEvent.id.asc())
+        .all()
+    )
+
+    return {
+        "name": _projection_text(data, "name"),
+        "description": _projection_text(data, "description"),
+        "content": _projection_text(data, "content"),
+        "parentId": metadata.get("parent_id"),
+        "position": metadata.get("position"),
+        "color": metadata.get("color"),
+        "childTrackIds": [str(row.id) for row in child_rows],
+        "eventIds": [str(row.id) for row in event_rows],
+    }
+
+
+def _timeline_event_projection(db, *, project_id: UUID, event_id: UUID, language: str) -> dict[str, Any]:
+    obj = read_runtime_object(
+        db,
+        project_id=project_id,
+        object_type="timeline_event",
+        object_id=event_id,
+        language=language,
+    )
+    data = extract_lang_data(obj, language)
+    metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+    link_rows = (
+        db.query(TimelineEventLink)
+        .filter(TimelineEventLink.event_id == event_id)
+        .order_by(TimelineEventLink.created_at.asc(), TimelineEventLink.id.asc())
+        .all()
+    )
+
+    return {
+        "name": _projection_text(data, "name"),
+        "description": _projection_text(data, "description"),
+        "content": _projection_text(data, "content"),
+        "trackId": metadata.get("track_id"),
+        "startDate": metadata.get("start_date") if isinstance(metadata.get("start_date"), dict) else {},
+        "endDate": metadata.get("end_date") if isinstance(metadata.get("end_date"), dict) else None,
+        "tags": metadata.get("tags") if isinstance(metadata.get("tags"), list) else [],
+        "links": [
+            {
+                "linkId": str(row.id),
+                "objectType": str(row.object_type),
+                "objectId": str(row.object_id),
+            }
+            for row in link_rows
+        ],
+    }
+
+
 def _normal_specs(ctx) -> list[ToolSpec]:
     date = _date_schema(ctx.db, ctx.project_id)
     return filter_allowed_specs(
         ctx,
         [
             ToolSpec(
-                name="read_timeline",
-                description="Read the project timeline with tracks, events, dates, and links.",
-                parameters=obj_schema({}, []),
-                auto_approve_category="read",
-            ),
-            ToolSpec(
                 name="read_timeline_event",
-                description="Read a single timeline event.",
+                description="Read a single timeline event with fields, dates, tags, and link IDs.",
                 parameters=obj_schema({"id": _ID}, ["id"]),
                 auto_approve_category="read",
             ),
             ToolSpec(
                 name="read_timeline_track",
-                description="Read a single timeline track with its full descendant subtree (child tracks and events).",
+                description="Read a single timeline track with fields plus child track and event IDs.",
                 parameters=obj_schema({"id": _ID}, ["id"]),
                 auto_approve_category="read",
             ),
@@ -488,14 +559,6 @@ class TimelineFeatureModule(ToolFeatureModule):
         if is_non_journey(ctx):
             add_binding(
                 spec_map=normal_specs_by_name,
-                name="read_timeline",
-                meta=ToolBindingMeta(feature_key="timeline", category="read", op="read", target_kind="timeline_track"),
-                validate=self._validate_read_timeline,
-                execute=self._execute_read_timeline,
-                build_persisted_meta=_persisted_meta(category="read", op="read", target_kind="timeline_track"),
-            )
-            add_binding(
-                spec_map=normal_specs_by_name,
                 name="read_timeline_event",
                 meta=ToolBindingMeta(feature_key="timeline", category="read", op="read", target_kind="timeline_event"),
                 validate=self._validate_read_timeline_event,
@@ -676,74 +739,50 @@ class TimelineFeatureModule(ToolFeatureModule):
         results_by_id = {result.tool_call_id: result for result in results}
         return [results_by_id[item.tool_call_id] for item in group.items if item.tool_call_id in results_by_id]
 
-    async def _validate_read_timeline(self, args, ctx):
-        _ = args
-        _ = ctx
-        return valid_result()
-
-    async def _execute_read_timeline(self, args, ctx):
-        _ = args
-        timeline = timeline_service.get_full_timeline(
-            ctx.db,
-            project_id=ctx.project_id,
-            language=ctx.language,
-            ensure_exists=True,
-            user_id=ctx.user_id,
-        )
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=make_result("Timeline retrieved", data={"timeline": timeline}),
-        )
-
     async def _validate_read_timeline_event(self, args, ctx):
         try:
             event_id = to_uuid(args.get("id"), "id")
-            event = object_service.get_object(
+            read_runtime_object(
                 ctx.db,
+                project_id=ctx.project_id,
                 object_type="timeline_event",
                 object_id=event_id,
-                project_id=ctx.project_id,
                 language=ctx.language,
             )
-            if event is None:
-                raise ValueError("timeline_event not found")
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_read_timeline_event", str(exc))
 
     async def _execute_read_timeline_event(self, args, ctx):
         event_id = to_uuid(args.get("id"), "id")
-        event = object_service.get_object(
+        event = _timeline_event_projection(
             ctx.db,
-            object_type="timeline_event",
-            object_id=event_id,
             project_id=ctx.project_id,
+            event_id=event_id,
             language=ctx.language,
         )
         return ToolExecutionOutcome(
             lifecycle="applied",
-            result=make_result("Timeline event retrieved", object_id=str(event_id), object_type="timeline_event", data={"event": event}),
+            result=make_result("Read successful", object_id=str(event_id), object_type="timeline_event", data={"object": event}),
         )
 
     async def _validate_read_timeline_track(self, args, ctx):
         try:
             track_id = to_uuid(args.get("id"), "id")
-            track = object_service.get_object(
+            read_runtime_object(
                 ctx.db,
+                project_id=ctx.project_id,
                 object_type="timeline_track",
                 object_id=track_id,
-                project_id=ctx.project_id,
                 language=ctx.language,
             )
-            if track is None:
-                raise ValueError("timeline_track not found")
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_read_timeline_track", str(exc))
 
     async def _execute_read_timeline_track(self, args, ctx):
         track_id = to_uuid(args.get("id"), "id")
-        track = timeline_service.get_track_subtree(
+        track = _timeline_track_projection(
             ctx.db,
             project_id=ctx.project_id,
             track_id=track_id,
@@ -752,10 +791,10 @@ class TimelineFeatureModule(ToolFeatureModule):
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result(
-                "Timeline track retrieved",
+                "Read successful",
                 object_id=str(track_id),
                 object_type="timeline_track",
-                data={"track": track},
+                data={"object": track},
             ),
         )
 

@@ -4,6 +4,12 @@ import { getTrackColors, presetSwatch } from '../../../pages/timeline/timelineCo
 import type { TimelineDisplayMode } from './TimelineTrackDisplay';
 import './TimelineDisplays.css';
 
+export interface TimelineLinkReference {
+  linkId: string;
+  objectType?: string;
+  objectId?: string;
+}
+
 export interface TimelineEventDisplayProps {
   name: string;
   trackColor?: string | null;
@@ -12,7 +18,7 @@ export interface TimelineEventDisplayProps {
   /** Omit => single point in time (no range). */
   endLabel?: string;
   tags?: string[];
-  linkCount?: number;
+  links?: TimelineLinkReference[];
   description?: string;
   contentMarkdown?: string;
   mode: TimelineDisplayMode;
@@ -26,7 +32,7 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
   startLabel,
   endLabel,
   tags,
-  linkCount,
+  links,
   description,
   contentMarkdown,
   mode,
@@ -37,6 +43,7 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
   const show = (field: string) => mode !== 'replace' || !changedFields || changedFields.includes(field);
 
   const tagList = (tags ?? []).map((tag) => tag.trim()).filter(Boolean);
+  const linkRefs = (links ?? []).filter((link) => link.linkId.trim());
   const hasContent = Boolean(contentMarkdown && contentMarkdown.trim());
   const hasDescription = Boolean(description && description.trim());
   const showDates = show('startDate') || show('endDate');
@@ -78,20 +85,35 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
       {trackLabel && (
         <div className="tl-card__meta-row">
           <span className="tl-chip tl-chip--color">
-            <span className="tl-chip__swatch" style={{ background: presetSwatch(trackColor ?? 'neutral') }} aria-hidden />
+            {trackColor && (
+              <span className="tl-chip__swatch" style={{ background: presetSwatch(trackColor) }} aria-hidden />
+            )}
             {trackLabel}
           </span>
         </div>
       )}
 
-      {(show('tags') || (linkCount ?? 0) > 0) && (tagList.length > 0 || (linkCount ?? 0) > 0) && (
+      {show('tags') && tagList.length > 0 && (
         <div className={`tl-card__tag-row${isChanged('tags') ? ' tl-card--changed' : ''}`}>
-          {show('tags') && tagList.map((tag) => (
+          {tagList.map((tag) => (
             <span key={tag} className="tl-chip tl-chip--tag">{tag}</span>
           ))}
-          {(linkCount ?? 0) > 0 && (
-            <span className="tl-card__links">⛓ {linkCount} link{linkCount === 1 ? '' : 's'}</span>
-          )}
+        </div>
+      )}
+
+      {show('links') && linkRefs.length > 0 && (
+        <div className="tl-card__refs">
+          <div className="tl-card__ref-group">
+            <span className="tl-card__refs-label">links</span>
+            {linkRefs.map((link) => {
+              const target = link.objectType && link.objectId ? ` -> ${link.objectType}:${link.objectId}` : '';
+              return (
+                <span key={`${link.linkId}:${link.objectType ?? ''}:${link.objectId ?? ''}`} className="tl-card__ref-id">
+                  {link.linkId}{target}
+                </span>
+              );
+            })}
+          </div>
         </div>
       )}
 

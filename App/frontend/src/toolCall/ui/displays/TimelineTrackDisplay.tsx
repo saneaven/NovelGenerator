@@ -8,11 +8,14 @@ export type TimelineDisplayMode = 'read' | 'create' | 'replace' | 'delete';
 export interface TimelineTrackDisplayProps {
   name: string;
   color?: string | null;
+  parentId?: string | null;
   /** Resolved parent track name; omit / empty => root track. */
   parentLabel?: string;
   position?: number;
   description?: string;
   contentMarkdown?: string;
+  childTrackIds?: string[];
+  eventIds?: string[];
   mode: TimelineDisplayMode;
   changedFields?: string[];
 }
@@ -20,10 +23,13 @@ export interface TimelineTrackDisplayProps {
 export const TimelineTrackDisplay: React.FC<TimelineTrackDisplayProps> = ({
   name,
   color,
+  parentId,
   parentLabel,
   position,
   description,
   contentMarkdown,
+  childTrackIds,
+  eventIds,
   mode,
   changedFields,
 }) => {
@@ -33,6 +39,10 @@ export const TimelineTrackDisplay: React.FC<TimelineTrackDisplayProps> = ({
 
   const hasContent = Boolean(contentMarkdown && contentMarkdown.trim());
   const hasDescription = Boolean(description && description.trim());
+  const childIds = (childTrackIds ?? []).map((id) => id.trim()).filter(Boolean);
+  const eventIdList = (eventIds ?? []).map((id) => id.trim()).filter(Boolean);
+  const showChildRefs = show('childTrackIds') && childIds.length > 0;
+  const showEventRefs = show('eventIds') && eventIdList.length > 0;
 
   return (
     <div className="tl-card tl-card--track" style={{ ['--tl-accent' as string]: colors.labelBar }}>
@@ -56,10 +66,31 @@ export const TimelineTrackDisplay: React.FC<TimelineTrackDisplayProps> = ({
           )}
           {show('parentId') && (
             <span className={`tl-card__meta-item${isChanged('parentId') ? ' tl-card--changed' : ''}`}>
-              {parentLabel ? `↳ parent: ${parentLabel}` : 'root track'}
+              {parentLabel ? `parent: ${parentLabel}` : parentId ? `parent: ${parentId}` : 'root track'}
             </span>
           )}
         </div>
+
+        {(showChildRefs || showEventRefs) && (
+          <div className="tl-card__refs">
+            {showChildRefs && (
+              <div className="tl-card__ref-group">
+                <span className="tl-card__refs-label">childTrackIds</span>
+                {childIds.map((id) => (
+                  <span key={id} className="tl-card__ref-id">{id}</span>
+                ))}
+              </div>
+            )}
+            {showEventRefs && (
+              <div className="tl-card__ref-group">
+                <span className="tl-card__refs-label">eventIds</span>
+                {eventIdList.map((id) => (
+                  <span key={id} className="tl-card__ref-id">{id}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {show('description') && hasDescription && (
           <p className={`tl-card__description${isChanged('description') ? ' tl-card--changed' : ''}`}>{description}</p>

@@ -433,6 +433,10 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
     specs = {binding.spec.name: binding.spec for binding in TimelineFeatureModule().list_bindings(_module_context())}
 
+    assert "read_timeline" not in specs
+    assert specs["read_timeline_track"].description == "Read a single timeline track with fields plus child track and event IDs."
+    assert specs["read_timeline_event"].description == "Read a single timeline event with fields, dates, tags, and link IDs."
+
     assert specs["replace_timeline_track"].parameters["required"] == ["id"]
     assert specs["replace_timeline_event"].parameters["required"] == ["id"]
 
@@ -464,6 +468,137 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     event_props = specs["patch_timeline_event"].parameters["properties"]
     for key in ("trackId", "startDate", "endDate", "tags"):
         assert key in event_props
+
+
+class _TimelineProjectionQuery:
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return list(self._rows)
+
+
+class _TimelineProjectionDb:
+    def __init__(self, rows_by_model: dict[object, list[object]]) -> None:
+        self._rows_by_model = rows_by_model
+
+    def query(self, model):
+        return _TimelineProjectionQuery(self._rows_by_model.get(model, []))
+
+
+def test_read_timeline_track_returns_object_projection(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    track_id = uuid4()
+    child_id = uuid4()
+    event_id = uuid4()
+    ctx = _execution_context()
+    ctx.db = _TimelineProjectionDb(
+        {
+            timeline_module.TimelineTrack: [SimpleNamespace(id=child_id)],
+            timeline_module.TimelineEvent: [SimpleNamespace(id=event_id)],
+        }
+    )
+
+    def _fake_read_runtime_object(*_args, **kwargs):
+        assert kwargs["object_type"] == "timeline_track"
+        assert kwargs["object_id"] == track_id
+        return {
+            "metadata": {"parent_id": "parent-1", "position": 2, "color": "#336699"},
+            "data": {
+                "English": {
+                    "name": "Era",
+                    "description": "Only this track.",
+                    "content": "Track markdown.",
+                }
+            },
+        }
+
+    monkeypatch.setattr(timeline_module, "read_runtime_object", _fake_read_runtime_object)
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "read_timeline_track")
+
+    outcome = asyncio.run(binding.execute({"id": str(track_id)}, ctx))
+
+    result = outcome.result
+    assert result["objectType"] == "timeline_track"
+    obj = result["data"]["object"]
+    assert obj == {
+        "name": "Era",
+        "description": "Only this track.",
+        "content": "Track markdown.",
+        "parentId": "parent-1",
+        "position": 2,
+        "color": "#336699",
+        "childTrackIds": [str(child_id)],
+        "eventIds": [str(event_id)],
+    }
+    assert "children" not in obj
+    assert "events" not in obj
+    assert "version" not in obj
+    assert "metadata" not in obj
+
+
+def test_read_timeline_event_returns_object_projection(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    event_id = uuid4()
+    track_id = uuid4()
+    link_id = uuid4()
+    object_id = uuid4()
+    ctx = _execution_context()
+    ctx.db = _TimelineProjectionDb(
+        {
+            timeline_module.TimelineEventLink: [
+                SimpleNamespace(id=link_id, object_type="outline", object_id=object_id),
+            ],
+        }
+    )
+
+    def _fake_read_runtime_object(*_args, **kwargs):
+        assert kwargs["object_type"] == "timeline_event"
+        assert kwargs["object_id"] == event_id
+        return {
+            "metadata": {
+                "track_id": str(track_id),
+                "start_date": {"year": 1, "month": 3},
+                "end_date": None,
+                "tags": ["court"],
+            },
+            "data": {
+                "English": {
+                    "name": "Coronation",
+                    "description": "Single event.",
+                    "content": "Event markdown.",
+                }
+            },
+        }
+
+    monkeypatch.setattr(timeline_module, "read_runtime_object", _fake_read_runtime_object)
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "read_timeline_event")
+
+    outcome = asyncio.run(binding.execute({"id": str(event_id)}, ctx))
+
+    result = outcome.result
+    assert result["objectType"] == "timeline_event"
+    obj = result["data"]["object"]
+    assert obj == {
+        "name": "Coronation",
+        "description": "Single event.",
+        "content": "Event markdown.",
+        "trackId": str(track_id),
+        "startDate": {"year": 1, "month": 3},
+        "endDate": None,
+        "tags": ["court"],
+        "links": [{"linkId": str(link_id), "objectType": "outline", "objectId": str(object_id)}],
+    }
+    assert "track" not in obj
+    assert "siblings" not in obj
+    assert "version" not in obj
+    assert "metadata" not in obj
 
 
 def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:

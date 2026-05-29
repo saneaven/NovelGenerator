@@ -27,7 +27,6 @@ const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
   read_story_entity_folder: { category: 'read', objectType: 'story_entity_folder' },
   read_outline: { category: 'read', objectType: 'outline' },
   read_manuscript: { category: 'read', objectType: 'manuscript' },
-  read_timeline: { category: 'read', objectType: 'timeline_track' },
   read_timeline_track: { category: 'read', objectType: 'timeline_track' },
   read_timeline_event: { category: 'read', objectType: 'timeline_event' },
   create_story_entity: { category: 'create', objectType: 'story_entity', storyEntityKindFromArgs: true },
