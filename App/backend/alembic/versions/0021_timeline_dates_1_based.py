@@ -98,7 +98,7 @@ def _rewrite_event_dates(delta: int) -> None:
                 stmt = (
                     sa.update(events_table)
                     .where(events_table.c.id == event.id)
-                    .values(**{k: sa.cast(sa.literal(v), JSONB) for k, v in updated.items()})
+                    .values(**updated)
                 )
                 session.execute(stmt)
 
