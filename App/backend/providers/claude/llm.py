@@ -311,8 +311,8 @@ class ClaudeProvider(BaseProvider):
             if isinstance(raw_effort, str) and raw_effort.strip():
                 effort = raw_effort.strip().lower()
 
-        if effort not in {"low", "medium", "high", "max"}:
-            raise ValueError("Claude adaptive thinking effort must be one of: low, medium, high, max")
+        if effort not in {"low", "medium", "high", "xhigh", "max"}:
+            raise ValueError("Claude adaptive thinking effort must be one of: low, medium, high, xhigh, max")
 
         thinking: Dict[str, object] = {"type": "adaptive", "display": "summarized"}
         output_config: Dict[str, object] = {"effort": effort}

@@ -15,7 +15,7 @@ class ThinkingConfig(BaseModel):
     Fields are optional; providers pick what they understand.
     """
     # Common effort values across providers.
-    # Claude adaptive thinking uses: low | medium | high | max
+    # Claude adaptive thinking uses: low | medium | high | xhigh | max
     effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]] = None
     max_tokens: Optional[int] = None
 

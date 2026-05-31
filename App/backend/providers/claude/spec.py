@@ -56,7 +56,7 @@ SPEC = ProviderSpec(
                         "effort": FieldSpec(
                             kind="enum",
                             default="high",
-                            options=("low", "medium", "high", "max"),
+                            options=("low", "medium", "high", "xhigh", "max"),
                             when=(Condition(op="eq", path="advanced.thinking_mode", value="model"),),
                             ui=UIHint(
                                 widget="select",
