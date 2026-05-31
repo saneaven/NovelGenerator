@@ -114,6 +114,20 @@
     height: 100%;
 }
 
+/* Details section wrapper (kind, parent folder, name, summary) */
+.expanded-section-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* Hide the inactive section when the Edit tab is split on mobile.
+   Scoped to .expanded-edit-content so it outranks .expanded-field-grow's
+   `display: flex`, which is defined later in this stylesheet. */
+.expanded-edit-content .expanded-section-hidden {
+    display: none;
+}
+
 .expanded-readonly-reason {
     margin: 0;
     padding: var(--spacing-sm) var(--spacing-md);
@@ -161,6 +175,14 @@
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-bold);
     padding: var(--spacing-md);
+}
+
+/* Summary textarea (mobile) - multi-line variant of the summary input.
+   Fills the available space in the Details tab; no manual drag-resize. */
+.expanded-textarea-description {
+    resize: none;
+    line-height: var(--line-height-normal, 1.5);
+    font-family: inherit;
 }
 
 .expanded-input:focus {
@@ -211,6 +233,7 @@
 /* Metadata */
 .expanded-metadata {
     display: flex;
+    flex-wrap: nowrap;
     gap: var(--spacing-lg);
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
@@ -220,6 +243,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--spacing-xs);
+    white-space: nowrap;
 }
 
 /* Image tab */
@@ -256,6 +280,33 @@
 
     .expanded-actions-row {
         flex-wrap: wrap;
+    }
+
+    /* On the Details tab, let the Summary textarea fill the leftover space
+       instead of leaving a gap above the pinned action bar. */
+    .expanded-section-details {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .expanded-field-summary {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .expanded-textarea-description {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .expanded-metadata {
+        display: none;
+    }
+
+    /* Push the primary (Save) button to the right now that the
+       centered metadata spacer is hidden on mobile */
+    .expanded-actions-row > *:last-child {
+        margin-left: auto;
     }
 }
 

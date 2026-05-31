@@ -140,10 +140,6 @@
   .story-entity-manager__actions {
     justify-content: flex-start;
   }
-
-  .story-entity-overlay-fields {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ===== Parent folder navigation bar ===== */

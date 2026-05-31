@@ -15,7 +15,9 @@ import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
 import './ObjectCardExpanded.css';
 
-type TabType = 'edit' | 'image';
+type TabType = 'edit' | 'details' | 'content' | 'image';
+
+const isEditTab = (tab: TabType) => tab === 'edit' || tab === 'details' || tab === 'content';
 
 interface ObjectCardExpandedProps {
     itemId: string;
@@ -67,11 +69,35 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     onAssetChange,
 }) => {
     const { currentProjectId } = useProjectStore();
+    const [isMobile, setIsMobile] = useState(
+        () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+    );
     const [activeTab, setActiveTab] = useState<TabType>('edit');
     const [name, setName] = useState(itemData.name);
     const [description, setDescription] = useState(itemData.description);
     const [content, setContent] = useState<TipTapDoc>(normalizeDoc(itemData.content));
     const editorRef = useRef<RichTextEditorRef>(null);
+
+    // Track viewport so the Edit tab can split into Details/Content on mobile
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const mql = window.matchMedia('(max-width: 768px)');
+        const handleChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+        setIsMobile(mql.matches);
+        mql.addEventListener('change', handleChange);
+        return () => mql.removeEventListener('change', handleChange);
+    }, []);
+
+    // Keep activeTab valid as the viewport crosses the mobile breakpoint
+    useEffect(() => {
+        if (isMobile) {
+            setActiveTab((prev) => (prev === 'edit' ? 'details' : prev));
+        } else {
+            setActiveTab((prev) => (prev === 'details' || prev === 'content' ? 'edit' : prev));
+        }
+    }, [isMobile]);
 
     // Reset form when itemData changes
     useEffect(() => {
@@ -89,7 +115,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     const hasImage = Boolean(mainAsset);
 
     const handleTabSwitch = async (tab: TabType) => {
-        if (hasUnsavedChanges && activeTab === 'edit' && tab !== 'edit') {
+        if (hasUnsavedChanges && isEditTab(activeTab) && !isEditTab(tab)) {
             const confirmed = await confirm({
                 title: 'Unsaved Changes',
                 message: 'You have unsaved changes. Discard them?',
@@ -154,12 +180,29 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
             <div className="expanded-content-section">
                 {/* Tab navigation */}
                 <div className="expanded-tabs">
-                    <button
-                        className={`expanded-tab ${activeTab === 'edit' ? 'active' : ''}`}
-                        onClick={() => handleTabSwitch('edit')}
-                    >
-                        Edit
-                    </button>
+                    {isMobile ? (
+                        <>
+                            <button
+                                className={`expanded-tab ${activeTab === 'details' ? 'active' : ''}`}
+                                onClick={() => handleTabSwitch('details')}
+                            >
+                                Details
+                            </button>
+                            <button
+                                className={`expanded-tab ${activeTab === 'content' ? 'active' : ''}`}
+                                onClick={() => handleTabSwitch('content')}
+                            >
+                                Content
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            className={`expanded-tab ${activeTab === 'edit' ? 'active' : ''}`}
+                            onClick={() => handleTabSwitch('edit')}
+                        >
+                            Edit
+                        </button>
+                    )}
                     <button
                         className={`expanded-tab ${activeTab === 'image' ? 'active' : ''}`}
                         onClick={() => handleTabSwitch('image')}
@@ -180,45 +223,65 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
 
                 {/* Tab content */}
                 <div className="expanded-tab-content">
-                    {activeTab === 'edit' && (
+                    {isEditTab(activeTab) && (
                         <div className="expanded-edit-content">
-                            {extraEditFields}
+                            {/* Details section: kind, parent folder, name, summary */}
+                            <div
+                                className={`expanded-section-details ${isMobile && activeTab !== 'details' ? 'expanded-section-hidden' : ''}`}
+                            >
+                                {extraEditFields}
 
-                            {readOnlyReason && (
-                                <p className="expanded-readonly-reason">{readOnlyReason}</p>
-                            )}
+                                {readOnlyReason && (
+                                    <p className="expanded-readonly-reason">{readOnlyReason}</p>
+                                )}
 
-                            {/* Name field */}
-                            <div className="expanded-field">
-                                <label htmlFor={`expanded-name-${itemId}`}>Name</label>
-                                <input
-                                    id={`expanded-name-${itemId}`}
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="Enter name..."
-                                    className="expanded-input expanded-input-name"
-                                    disabled={readOnly}
-                                />
-                            </div>
+                                {/* Name field */}
+                                <div className="expanded-field">
+                                    <label htmlFor={`expanded-name-${itemId}`}>Name</label>
+                                    <input
+                                        id={`expanded-name-${itemId}`}
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="Enter name..."
+                                        className="expanded-input expanded-input-name"
+                                        disabled={readOnly}
+                                    />
+                                </div>
 
-                            {/* Description field - One-line summary */}
-                            <div className="expanded-field">
-                                <label htmlFor={`expanded-description-${itemId}`}>Summary</label>
-                                <input
-                                    id={`expanded-description-${itemId}`}
-                                    type="text"
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="One-line summary..."
-                                    className="expanded-input expanded-input-description"
-                                    maxLength={500}
-                                    disabled={readOnly}
-                                />
+                                {/* Description field - One-line summary (textarea on mobile) */}
+                                <div className="expanded-field expanded-field-summary">
+                                    <label htmlFor={`expanded-description-${itemId}`}>Summary</label>
+                                    {isMobile ? (
+                                        <textarea
+                                            id={`expanded-description-${itemId}`}
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="One-line summary..."
+                                            className="expanded-input expanded-textarea-description"
+                                            maxLength={500}
+                                            rows={3}
+                                            disabled={readOnly}
+                                        />
+                                    ) : (
+                                        <input
+                                            id={`expanded-description-${itemId}`}
+                                            type="text"
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="One-line summary..."
+                                            className="expanded-input expanded-input-description"
+                                            maxLength={500}
+                                            disabled={readOnly}
+                                        />
+                                    )}
+                                </div>
                             </div>
 
                             {/* Content field - Rich Text Editor */}
-                            <div className="expanded-field expanded-field-grow">
+                            <div
+                                className={`expanded-field expanded-field-grow ${isMobile && activeTab !== 'content' ? 'expanded-section-hidden' : ''}`}
+                            >
                                 <label>Content</label>
                                 <RichTextEditor
                                     ref={editorRef}
@@ -241,7 +304,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                                 size="sm"
                                             />
                                         }
-                                        align="right"
+                                        align="left"
                                     >
                                         <DropdownSection>
                                             <DropdownItem
