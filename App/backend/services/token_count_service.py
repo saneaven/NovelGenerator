@@ -11,6 +11,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from ..providers.registry import resolve_llm_tokenizer
 from ..providers.shared.parsing.multimodal import (
     _format_text_file,
     _load_text_part,
@@ -42,7 +43,6 @@ from pypdf import PdfReader
 
 
 TokenizerName = Literal["openai", "claude", "gemini"]
-ProviderName = Literal["openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"]
 CountMethod = Literal["tiktoken", "claude_api", "gemini_api"]
 TokenCountCache = dict[str, Any]
 
@@ -59,7 +59,7 @@ OPENAI_PDF_FALLBACK_HEIGHT = 792.0
 @dataclass(frozen=True)
 class TokenCountResult:
     token_count: int
-    provider: ProviderName
+    provider: str
     model: str
     effective_tokenizer: TokenizerName
     is_estimate: bool
@@ -70,11 +70,11 @@ class TokenCountResult:
 _TIKTOKEN_ENCODERS: dict[str, Any] = {}
 
 
-def _normalize_provider(provider: str) -> ProviderName:
+def _normalize_provider_id(provider: str) -> str:
     normalized = str(provider or "").strip().lower()
-    if normalized not in {"openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"}:
-        raise ValueError(f"Unsupported provider: {provider}")
-    return normalized  # type: ignore[return-value]
+    if not normalized:
+        raise ValueError("provider is required")
+    return normalized
 
 
 def _normalize_tokenizer_override(tokenizer_override: str | None) -> TokenizerName | None:
@@ -86,17 +86,19 @@ def _normalize_tokenizer_override(tokenizer_override: str | None) -> TokenizerNa
     return None
 
 
-def resolve_tokenizer(provider: str, tokenizer_override: str | None = None) -> TokenizerName:
+def resolve_tokenizer(
+    provider: str,
+    tokenizer_override: str | None = None,
+    *,
+    task_config: dict[str, Any] | None = None,
+    variant_hint: str | None = None
+) -> TokenizerName:
     override = _normalize_tokenizer_override(tokenizer_override)
     if override is not None:
         return override
 
-    provider_name = _normalize_provider(provider)
-    if provider_name == "claude":
-        return "claude"
-    if provider_name == "gemini":
-        return "gemini"
-    return "openai"
+    provider_name = _normalize_provider_id(provider)
+    return resolve_llm_tokenizer(provider_name, task_config=task_config, variant_hint=variant_hint)
 
 
 def _encoding_for_model(model: str) -> str:
@@ -127,10 +129,11 @@ async def count_text_tokens(
     model: str,
     text: str,
     tokenizer_override: str | None = None,
+    variant_hint: str | None = None,
     allow_custom_base_url: bool = True,
 ) -> TokenCountResult:
-    provider_name = _normalize_provider(provider)
-    tokenizer = resolve_tokenizer(provider_name, tokenizer_override)
+    provider_name = _normalize_provider_id(provider)
+    tokenizer = resolve_tokenizer(provider_name, tokenizer_override, variant_hint=variant_hint)
     safe_model = str(model or "").strip()
     safe_text = str(text or "")
 
@@ -698,11 +701,12 @@ async def count_message_tokens(
     model: str,
     message: dict[str, Any],
     tokenizer_override: str | None = None,
+    variant_hint: str | None = None,
     allow_custom_base_url: bool = True,
     cache: TokenCountCache | None = None,
 ) -> int:
-    provider_name = _normalize_provider(provider)
-    tokenizer = resolve_tokenizer(provider_name, tokenizer_override)
+    provider_name = _normalize_provider_id(provider)
+    tokenizer = resolve_tokenizer(provider_name, tokenizer_override, variant_hint=variant_hint)
     safe_model = str(model or "").strip()
 
     primary_error: Exception | None = None
@@ -758,11 +762,12 @@ async def count_conversation_tokens(
     system_prompt: str,
     conversation: list[dict[str, Any]],
     tokenizer_override: str | None = None,
+    variant_hint: str | None = None,
     allow_custom_base_url: bool = True,
     cache: TokenCountCache | None = None,
 ) -> int:
-    provider_name = _normalize_provider(provider)
-    tokenizer = resolve_tokenizer(provider_name, tokenizer_override)
+    provider_name = _normalize_provider_id(provider)
+    tokenizer = resolve_tokenizer(provider_name, tokenizer_override, variant_hint=variant_hint)
     safe_model = str(model or "").strip()
 
     primary_error: Exception | None = None

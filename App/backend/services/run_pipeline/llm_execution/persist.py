@@ -185,11 +185,11 @@ async def _fill_reasoning_token_count(
         ],
     }
 
-    tokenizer_override = (
-        task_config.advanced.get("tokenizer_override")
-        if isinstance(getattr(task_config, "advanced", None), dict)
-        else None
-    )
+    advanced = task_config.advanced if isinstance(getattr(task_config, "advanced", None), dict) else {}
+    tokenizer_override_raw = advanced.get("tokenizer_override")
+    tokenizer_override = tokenizer_override_raw if isinstance(tokenizer_override_raw, str) else None
+    variant_hint_raw = advanced.get("custom_kind")
+    variant_hint = variant_hint_raw if isinstance(variant_hint_raw, str) else None
     try:
         non_reasoning_tokens = await count_message_tokens(
             request.db,
@@ -198,6 +198,7 @@ async def _fill_reasoning_token_count(
             model=task_config.model,
             message=assistant_output_message,
             tokenizer_override=tokenizer_override,
+            variant_hint=variant_hint,
         )
     except Exception:
         return 0

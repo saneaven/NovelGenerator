@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from App.backend.providers.registry import list_specs
 from App.backend.services.reasoning.history_filter import filter_history_by_run, get_completed_runs, pick_runs
 from App.backend.services.reasoning.mode_policy import apply_thinking_mode
 from App.backend.services.reasoning.normalize import normalize_reasoning_detail
@@ -51,6 +52,48 @@ def test_normalize_reasoning_detail_allows_nanogpt_payload() -> None:
     assert out["data"]["reasoning_text"] == "checked the route"
     assert out["data"]["reasoning_details"] == [{"format": "native", "text": "checked"}]
     assert out["token_count"] == 12
+
+
+def test_normalize_reasoning_detail_accepts_registered_llm_provider_ids() -> None:
+    provider_ids = {spec.id for spec in list_specs() if spec.llm is not None}
+
+    assert "ollama_cloud" in provider_ids
+    for provider_id in provider_ids:
+        out = normalize_reasoning_detail(
+            {
+                "type": provider_id,
+                "meta": {"provider": provider_id},
+                "data": {},
+                "token_count": 0,
+            }
+        )
+
+        assert out is not None
+        assert out["type"] == provider_id
+        assert out["meta"]["provider"] == provider_id
+
+
+def test_normalize_reasoning_detail_rejects_image_only_provider_type_and_meta() -> None:
+    assert normalize_reasoning_detail(
+        {
+            "type": "novelai",
+            "meta": {"provider": "novelai"},
+            "data": {},
+            "token_count": 0,
+        }
+    ) is None
+
+    out = normalize_reasoning_detail(
+        {
+            "type": "openai",
+            "meta": {"provider": "novelai"},
+            "data": {},
+            "token_count": 0,
+        }
+    )
+
+    assert out is not None
+    assert "provider" not in out["meta"]
 
 
 def test_get_completed_runs_excludes_current_run() -> None:

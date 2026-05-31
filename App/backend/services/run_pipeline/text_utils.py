@@ -53,6 +53,7 @@ async def count_tokens(
     model: str,
     text: str,
     tokenizer_override: str | None,
+    variant_hint: str | None = None,
 ) -> int:
     result = await count_text_tokens(
         db,
@@ -61,6 +62,7 @@ async def count_tokens(
         model=model,
         text=text,
         tokenizer_override=tokenizer_override,
+        variant_hint=variant_hint,
     )
     return int(result.token_count)
 

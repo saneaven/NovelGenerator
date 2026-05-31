@@ -394,6 +394,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     provider: agentConfig?.provider || 'openrouter',
     model: agentConfig?.model || '',
     tokenizer_override: agentConfig?.advanced?.tokenizer_override ?? undefined,
+    variant_hint: agentConfig?.advanced?.custom_kind ?? undefined,
     enabled: showTokenCount && selectedItemsContent.length > 0,
   });
 

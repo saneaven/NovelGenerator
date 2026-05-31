@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .shared.conditions import get_path
-from .shared.contracts import DerivedFlag, LLMSpec, ProviderSpec
+from .shared.contracts import DerivedFlag, LLMSpec, ProviderSpec, TokenizerFamily
 from .shared.normalize import merge_specs, normalize_by_spec
 from .shared.registry import list_specs as _list_specs
 from .shared.registry import require_provider_module, require_spec as _require_spec
@@ -62,6 +62,29 @@ def normalize_embedding_config(provider_id: str, config: dict[str, Any]) -> dict
     if provider.embedding is None:
         raise ValueError(f"Provider '{provider_id}' does not support embedding")
     return normalize_by_spec(config, provider.embedding.config)
+
+
+def resolve_llm_tokenizer(
+    provider_id: str,
+    *,
+    task_config: dict[str, Any] | None = None,
+    variant_hint: str | None = None,
+) -> TokenizerFamily:
+    provider = require_spec(provider_id)
+    if provider.llm is None:
+        raise ValueError(f"Provider '{provider_id}' does not support llm")
+
+    safe_variant_hint = None
+    if variant_hint is not None:
+        safe_variant_hint = str(variant_hint or "").strip() or None
+        if safe_variant_hint is not None and safe_variant_hint not in provider.llm.variants:
+            available = ", ".join(sorted(provider.llm.variants))
+            raise ValueError(
+                f"Provider '{provider_id}' does not support llm variant '{variant_hint}'. Available: {available}"
+            )
+
+    variant = _resolve_llm_variant_spec(provider.llm, data=task_config, variant_hint=safe_variant_hint)
+    return variant.tokenizer
 
 
 def prepare_provider_config(

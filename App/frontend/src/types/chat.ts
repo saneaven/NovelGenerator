@@ -41,9 +41,9 @@ export interface ConversationBlock {
 }
 
 export interface ReasoningDetail {
-  type: 'custom' | 'openai' | 'gemini' | 'claude' | 'openrouter' | 'openai_compatible_template' | 'xai' | 'nanogpt';
+  type: string;
   meta: {
-    provider?: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai' | 'nanogpt';
+    provider?: string;
     thinking_display?: string;
     openrouter_reasoning_format?: string;
     custom_thinking_template_id?: string;

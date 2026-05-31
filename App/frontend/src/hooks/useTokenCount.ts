@@ -15,6 +15,8 @@ export interface UseTokenCountOptions {
   model: string;
   /** Optional tokenizer override (for OpenRouter/Custom) */
   tokenizer_override?: TokenizerType;
+  /** Optional provider variant hint (for Custom provider runtime variants) */
+  variant_hint?: string | null;
   /** Debounce delay in milliseconds (default: 500) */
   debounceMs?: number;
   /** Whether token counting is enabled (default: true) */
@@ -46,10 +48,11 @@ function getCacheKey(
   text: string,
   provider: string,
   model: string,
-  tokenizer?: string
+  tokenizer?: string,
+  variantHint?: string | null
 ): string {
   const textHash = `${text.substring(0, 100)}:${text.length}`;
-  return `${provider}:${model}:${tokenizer || 'default'}:${textHash}`;
+  return `${provider}:${model}:${tokenizer || 'default'}:${variantHint || 'default'}:${textHash}`;
 }
 
 /**
@@ -61,6 +64,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
     provider,
     model,
     tokenizer_override,
+    variant_hint,
     debounceMs = 500,
     enabled = true,
   } = options;
@@ -78,8 +82,8 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
 
   // Generate cache key
   const cacheKey = useMemo(
-    () => getCacheKey(text, provider, model, tokenizer_override),
-    [text, provider, model, tokenizer_override]
+    () => getCacheKey(text, provider, model, tokenizer_override, variant_hint),
+    [text, provider, model, tokenizer_override, variant_hint]
   );
 
   useEffect(() => {
@@ -129,6 +133,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
           provider,
           model,
           tokenizer_override,
+          variant_hint,
           abortRef.current.signal
         );
 
@@ -171,7 +176,7 @@ export function useTokenCount(options: UseTokenCountOptions): UseTokenCountResul
         abortRef.current.abort();
       }
     };
-  }, [text, provider, model, tokenizer_override, debounceMs, enabled, cacheKey]);
+  }, [text, provider, model, tokenizer_override, variant_hint, debounceMs, enabled, cacheKey]);
 
   return result;
 }

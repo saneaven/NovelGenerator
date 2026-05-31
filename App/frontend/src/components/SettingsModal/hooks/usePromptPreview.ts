@@ -192,6 +192,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     provider: taskConfig?.provider || 'openrouter',
     model: taskConfig?.model || '',
     tokenizer_override: taskConfig?.advanced?.tokenizer_override ?? undefined,
+    variant_hint: taskConfig?.advanced?.custom_kind ?? undefined,
     enabled: !isLoading && !error,
   });
 

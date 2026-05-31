@@ -3,28 +3,6 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 from typing import Any, Optional, Dict, List, Literal
 from enum import Enum
 
-
-class ProviderType(str, Enum):
-    """AI provider types"""
-    OPENAI = "openai"
-    NANOGPT = "nanogpt"
-    GEMINI = "gemini"
-    CLAUDE = "claude"
-    OPENROUTER = "openrouter"
-    CUSTOM = "custom"
-    XAI = "xai"
-
-
-class EmbeddingProviderType(str, Enum):
-    """Embedding provider types (subset of ProviderType)."""
-
-    OPENAI = "openai"
-    NANOGPT = "nanogpt"
-    GEMINI = "gemini"
-    OPENROUTER = "openrouter"
-    CUSTOM = "custom"
-
-
 class AITaskType(str, Enum):
     """AI task types"""
     AGENT = "agent"
@@ -130,59 +108,6 @@ class TaskConfigSettings(BaseModel):
         if unknown:
             raise ValueError(f"Unknown task override keys: {', '.join(sorted(unknown))}")
         return value
-
-
-class OpenRouterCredentials(BaseModel):
-    """OpenRouter credentials"""
-    apiKey: str = ""
-
-
-class CustomCredentials(BaseModel):
-    """Custom endpoint credentials"""
-    baseUrl: str = ""
-    apiKey: Optional[str] = ""
-
-
-class ClaudeCredentials(BaseModel):
-    """Claude (Anthropic) credentials"""
-    apiKey: str = ""
-
-
-class GeminiCredentials(BaseModel):
-    """Gemini (Google) credentials"""
-    apiKey: str = ""
-
-
-class OpenAICredentials(BaseModel):
-    """OpenAI credentials"""
-    apiKey: str = ""
-
-
-class NanoGPTCredentials(BaseModel):
-    """NanoGPT credentials"""
-    apiKey: str = ""
-
-
-class XAICredentials(BaseModel):
-    """xAI (Grok) credentials"""
-    apiKey: str = ""
-
-
-class NovelAICredentials(BaseModel):
-    """NovelAI credentials"""
-    apiKey: str = ""
-
-
-class ProviderCredentials(BaseModel):
-    """All provider credentials"""
-    openai: OpenAICredentials = Field(default_factory=OpenAICredentials)
-    nanogpt: NanoGPTCredentials = Field(default_factory=NanoGPTCredentials)
-    gemini: GeminiCredentials = Field(default_factory=GeminiCredentials)
-    claude: ClaudeCredentials = Field(default_factory=ClaudeCredentials)
-    openrouter: OpenRouterCredentials = Field(default_factory=OpenRouterCredentials)
-    custom: CustomCredentials = Field(default_factory=CustomCredentials)
-    xai: XAICredentials = Field(default_factory=XAICredentials)
-    novelai: NovelAICredentials = Field(default_factory=NovelAICredentials)
 
 
 class ThemeMode(str, Enum):

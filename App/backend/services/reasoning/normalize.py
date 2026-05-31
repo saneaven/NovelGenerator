@@ -2,34 +2,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...providers.registry import list_specs
 
-REASONING_TYPES = {
-    "custom",
-    "openai",
-    "gemini",
-    "claude",
-    "openrouter",
-    "openai_compatible_template",
-    "xai",
-    "nanogpt",
-    "ollama_cloud",
-}
-REASONING_PROVIDERS = {"openai", "gemini", "claude", "openrouter", "custom", "xai", "nanogpt", "ollama_cloud"}
+
+def _reasoning_providers() -> set[str]:
+    return {spec.id for spec in list_specs() if spec.llm is not None}
 
 
 def normalize_reasoning_detail(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
 
+    provider_ids = _reasoning_providers()
     reasoning_type = str(raw.get("type") or "").strip()
-    if reasoning_type not in REASONING_TYPES:
+    if reasoning_type not in provider_ids and reasoning_type != "openai_compatible_template":
         return None
 
     meta_raw = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
     meta: dict[str, Any] = {}
 
     provider = str(meta_raw.get("provider") or "").strip()
-    if provider in REASONING_PROVIDERS:
+    if provider in provider_ids:
         meta["provider"] = provider
 
     thinking_display = meta_raw.get("thinking_display")

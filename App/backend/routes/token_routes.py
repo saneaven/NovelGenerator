@@ -15,10 +15,11 @@ router = APIRouter(prefix="/api/v1/tokens", tags=["tokens"])
 
 class CountTokensRequest(BaseModel):
     """Request body for token counting."""
-    provider: Literal["openai", "nanogpt", "gemini", "claude", "openrouter", "custom", "xai"]
+    provider: str
     model: str
     text: str
     tokenizer_override: Literal["openai", "claude", "gemini"] | None = None
+    variant_hint: str | None = None
 
 
 class CountTokensResponse(BaseModel):
@@ -47,6 +48,7 @@ async def count_tokens(
             model=request.model,
             text=request.text,
             tokenizer_override=request.tokenizer_override,
+            variant_hint=request.variant_hint,
             # SSRF hardening for route-level counting.
             allow_custom_base_url=False,
         )
@@ -58,6 +60,11 @@ async def count_tokens(
             is_estimate=result.is_estimate,
             fallback_used=result.fallback_used,
             method=result.method,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token counting request is invalid: {str(e)}",
         )
     except Exception as e:
         raise HTTPException(

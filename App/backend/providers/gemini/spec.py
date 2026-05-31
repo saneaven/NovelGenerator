@@ -180,6 +180,7 @@ SPEC = ProviderSpec(
                 id="default",
                 runtime=RuntimeSpec(adapter="default"),
                 task_config=ObjectSpec(fields={}),
+                tokenizer="gemini",
             )
         },
         default_variant="default",

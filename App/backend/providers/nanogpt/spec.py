@@ -263,6 +263,7 @@ SPEC = ProviderSpec(
                 id="default",
                 runtime=RuntimeSpec(adapter="default"),
                 task_config=ObjectSpec(fields={}),
+                tokenizer="openai",
             ),
         },
         default_variant="default",

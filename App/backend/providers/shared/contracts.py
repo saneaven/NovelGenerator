@@ -9,6 +9,7 @@ from .parsing.tool_call_arguments import parse_tool_call_arguments
 
 ProviderId = str
 CapabilityName = Literal["llm", "embedding", "image"]
+TokenizerFamily = Literal["openai", "claude", "gemini"]
 
 
 class _Missing:
@@ -98,6 +99,7 @@ class LLMVariantSpec:
     id: str
     runtime: RuntimeSpec
     task_config: ObjectSpec
+    tokenizer: TokenizerFamily = "openai"
 
 
 @dataclass(frozen=True)

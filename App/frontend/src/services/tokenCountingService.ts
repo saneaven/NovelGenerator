@@ -27,6 +27,7 @@ export async function countTokens(
   provider: ProviderType,
   model: string,
   tokenizer_override?: TokenizerType,
+  variant_hint?: string | null,
   signal?: AbortSignal
 ): Promise<TokenCountResult> {
   const response = await tokenService.countTokens(
@@ -35,6 +36,7 @@ export async function countTokens(
       model,
       text,
       tokenizer_override,
+      variant_hint,
     },
     { signal }
   );

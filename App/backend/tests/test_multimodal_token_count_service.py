@@ -8,15 +8,21 @@ from uuid import uuid4
 
 import pytest
 
-if "sqlalchemy.orm" not in sys.modules:
+try:
+    import sqlalchemy.orm as _sqlalchemy_orm  # noqa: F401
+except Exception:
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
     fake_sqlalchemy_orm = types.ModuleType("sqlalchemy.orm")
 
     class _StubSession:
         pass
 
+    def _stub_declarative_base():
+        return object()
+
     fake_sqlalchemy.orm = fake_sqlalchemy_orm
     fake_sqlalchemy_orm.Session = _StubSession
+    fake_sqlalchemy_orm.declarative_base = _stub_declarative_base
     sys.modules["sqlalchemy"] = fake_sqlalchemy
     sys.modules["sqlalchemy.orm"] = fake_sqlalchemy_orm
 
@@ -137,13 +143,35 @@ if "google.genai" not in sys.modules:
     sys.modules["google"] = fake_google
     sys.modules["google.genai"] = fake_genai
 
-from App.backend.providers import multimodal
+from App.backend.providers.shared.parsing import multimodal
 from App.backend.services.chat_attachment_service import (
     ChatAttachmentValidationError,
     IncomingMessageAttachment,
     chat_attachment_service,
 )
 from App.backend.services import token_count_service
+
+
+def test_resolve_tokenizer_uses_provider_specs() -> None:
+    assert token_count_service.resolve_tokenizer("ollama_cloud") == "openai"
+    assert token_count_service.resolve_tokenizer("claude") == "claude"
+    assert token_count_service.resolve_tokenizer("gemini") == "gemini"
+    assert token_count_service.resolve_tokenizer("custom", variant_hint="claude") == "claude"
+
+
+def test_resolve_tokenizer_override_wins_over_provider_spec() -> None:
+    assert token_count_service.resolve_tokenizer("gemini", tokenizer_override="openai") == "openai"
+
+
+def test_resolve_tokenizer_rejects_unknown_and_non_llm_providers() -> None:
+    with pytest.raises(ValueError, match="Unknown provider"):
+        token_count_service.resolve_tokenizer("not_real")
+
+    with pytest.raises(ValueError, match="does not support llm"):
+        token_count_service.resolve_tokenizer("novelai")
+
+    with pytest.raises(ValueError, match="does not support llm variant"):
+        token_count_service.resolve_tokenizer("custom", variant_hint="bogus")
 
 
 def test_inspect_attachment_accepts_utf8_text_files() -> None:

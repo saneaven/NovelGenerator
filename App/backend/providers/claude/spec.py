@@ -100,6 +100,7 @@ SPEC = ProviderSpec(
                 id="default",
                 runtime=RuntimeSpec(adapter="default"),
                 task_config=ObjectSpec(fields={}),
+                tokenizer="claude",
             )
         },
         default_variant="default",

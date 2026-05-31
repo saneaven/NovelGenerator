@@ -59,14 +59,7 @@ function toToolCallStatus(value: unknown): ToolCallStatus {
 }
 
 function isReasoningDetailType(value: unknown): value is ReasoningDetail['type'] {
-  return value === 'custom'
-    || value === 'openai'
-    || value === 'gemini'
-    || value === 'claude'
-    || value === 'openrouter'
-    || value === 'openai_compatible_template'
-    || value === 'xai'
-    || value === 'nanogpt';
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | undefined {

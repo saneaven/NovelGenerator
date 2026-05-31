@@ -11,6 +11,7 @@ export interface CountTokensRequest {
   model: string;
   text: string;
   tokenizer_override?: TokenizerOverride;
+  variant_hint?: string | null;
 }
 
 export interface CountTokensResponse {

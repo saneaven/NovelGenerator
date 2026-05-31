@@ -124,6 +124,7 @@ SPEC = ProviderSpec(
                         ),
                     }),
                 }),
+                tokenizer="openai",
             ),
             "openai_response": LLMVariantSpec(
                 id="openai_response",
@@ -177,6 +178,7 @@ SPEC = ProviderSpec(
                         ),
                     }),
                 }),
+                tokenizer="openai",
             ),
             "claude": LLMVariantSpec(
                 id="claude",
@@ -202,6 +204,7 @@ SPEC = ProviderSpec(
                         ),
                     }),
                 }),
+                tokenizer="claude",
             ),
         },
         supports_tools=True,

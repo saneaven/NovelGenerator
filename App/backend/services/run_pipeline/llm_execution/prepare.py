@@ -85,6 +85,7 @@ async def _count_provider_messages_tokens(
     run: Any,
     task_config: Any,
     tokenizer_override: str | None,
+    variant_hint: str | None,
     messages: list[dict[str, Any]],
 ) -> int:
     system_prompt, conversation = _split_system_prompt(messages)
@@ -96,6 +97,7 @@ async def _count_provider_messages_tokens(
         system_prompt=system_prompt,
         conversation=conversation,
         tokenizer_override=tokenizer_override,
+        variant_hint=variant_hint,
     )
 
 
@@ -141,7 +143,11 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     task_type = scenario_bundle.task_type
     runtime = get_llm_runtime(db, user_id=run.user_id, task_type=task_type)
     task_config = runtime.task_config
-    tokenizer_override = task_config.advanced.get("tokenizer_override") if isinstance(task_config.advanced, dict) else None
+    advanced = task_config.advanced if isinstance(task_config.advanced, dict) else {}
+    tokenizer_override_raw = advanced.get("tokenizer_override")
+    tokenizer_override = tokenizer_override_raw if isinstance(tokenizer_override_raw, str) else None
+    variant_hint_raw = advanced.get("custom_kind")
+    variant_hint = variant_hint_raw if isinstance(variant_hint_raw, str) else None
 
     parent = resolve_parent(db, thread)
     output_mode = resolve_output_mode(
@@ -179,7 +185,6 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         raise RuntimeError(f"Invalid provider configuration: {task_config.provider}")
 
     native_tool_call_mode = output_mode == "native_tool_call"
-    advanced = task_config.advanced if isinstance(task_config.advanced, dict) else {}
     thinking_mode = str(advanced.get("thinking_mode") or "off")
     tool_history_limit = int(getattr(settings, "tool_call_history_limit", 5) or 0)
     thinking_history_limit = int(getattr(settings, "thinking_history_limit", 5) or 0)
@@ -205,6 +210,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                 run=run,
                 task_config=task_config,
                 tokenizer_override=tokenizer_override,
+                variant_hint=variant_hint,
                 messages=provider_messages,
             )
             if total_tokens <= budget_tokens:

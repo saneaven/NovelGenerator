@@ -3,16 +3,8 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 
-ReasoningType = Literal[
-    "custom",
-    "openai",
-    "gemini",
-    "claude",
-    "openrouter",
-    "openai_compatible_template",
-    "xai",
-]
-ReasoningProvider = Literal["openai", "gemini", "claude", "openrouter", "custom", "xai"]
+ReasoningType = str
+ReasoningProvider = str
 
 
 class ReasoningMeta(TypedDict, total=False):
