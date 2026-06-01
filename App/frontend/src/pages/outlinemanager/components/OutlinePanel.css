@@ -178,9 +178,32 @@
   color: var(--color-text-primary);
 }
 
-.outline-manager .timeline-creation-panel {
-  margin-bottom: var(--spacing-2xl);
-  animation: slideDown var(--transition-base);
+/* ============================================================================
+   EXPAND-TO-EDIT OVERLAY (shares shape with the story-entity card overlay)
+   ============================================================================ */
+.outline-card-expanded-container {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--overlay-dark-heavy);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+}
+
+.outline-card-expanded-container > * {
+  width: 100%;
+  max-width: 1200px;
+  max-height: 90dvh;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .outline-card-expanded-container {
+    padding: var(--spacing-md);
+  }
 }
 
 /* ============================================================================
@@ -357,64 +380,6 @@
    Card base styles are in OutlineItemCard.css
    ============================================================================ */
 
-/* Edit Mode Styling */
-.outline-manager .content-card.is-editing {
-  border-color: var(--color-brand-primary-border);
-  box-shadow: 0 0 0 1px var(--color-brand-primary-soft), var(--shadow-lg);
-}
-
-/* ============================================================================
-   INLINE EDIT INPUTS
-   ============================================================================ */
-
-.outline-manager .inline-title-input {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  width: 100%;
-  border: none;
-  border-bottom: 2px solid var(--color-border-default);
-  background: transparent;
-  padding: var(--spacing-xs) 0;
-  color: var(--color-text-primary);
-  transition: border-color var(--transition-base);
-  line-height: 1.2;
-}
-
-.outline-manager .inline-title-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-}
-
-.outline-manager .inline-description-input {
-  width: 100%;
-  background-color: var(--color-surface-subtle);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-md);
-  font-family: inherit;
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-relaxed);
-  color: var(--color-text-primary);
-  resize: vertical;
-  min-height: 100px;
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
-}
-
-.outline-manager .inline-description-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
-  background-color: var(--color-surface-base);
-}
-
-/* Content Editor */
-.outline-manager .inline-content-editor {
-  margin-top: var(--spacing-md);
-}
-
-.outline-manager .inline-content-editor .rich-text-editor {
-  min-height: 150px;
-}
 
 /* Form group grow - for content editors in modals */
 .item-form .form-group-grow {
@@ -440,19 +405,6 @@
   margin-top: var(--spacing-md);
 }
 
-.outline-manager .edit-actions-split {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--color-border-subtle);
-  margin-top: var(--spacing-md);
-}
-
-.outline-manager .edit-actions-right {
-  display: flex;
-  gap: var(--spacing-sm);
-}
 
 /* ============================================================================
    CHAPTER STREAM WRAPPER (Height Animation)
@@ -556,32 +508,11 @@
 
 /* Chapter card/header/expand styles are in OutlineItemCard.css */
 
-/* Chapter Card - editing overrides */
-.outline-manager .chapter-card .inline-title-input {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.outline-manager .chapter-card .inline-description-input {
-  min-height: 80px;
-}
 
 /* ============================================================================
    ADD NODES (Creation)
    ============================================================================ */
 
-/* Creation Node (Add Act/Chapter Inline) */
-.outline-manager .creation-node .node-marker,
-.outline-manager .creation-node .chapter-marker {
-  border-color: var(--color-border-default);
-  color: var(--color-text-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-surface-base);
-}
-
-/* Add Act Node */
 
 
 

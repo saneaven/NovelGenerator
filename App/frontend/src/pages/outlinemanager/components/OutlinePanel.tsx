@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   DndContext,
@@ -15,29 +15,31 @@ import {
 } from '@dnd-kit/sortable';
 import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
+import { AnimatePresence, motion } from 'motion/react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import TranslationModal from '../../../components/Modal/TranslationModal';
-import { BaseModal } from '../../../components/BaseModal';
 import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import DragHandle from '../../../components/ui/DragHandle';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
-import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
+import { Plus, Edit, Trash, Books, MoreHorizontal, HamburgerMenu, ChevronRight, Scroll, Refresh } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject';
-import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
+import ObjectCardExpanded from '../../../components/ObjectManager/ObjectCards/ObjectCardExpanded';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import './OutlinePanel.css';
+
+type OutlineLevel = 'outline' | 'act' | 'chapter';
 
 interface OutlinePanelProps {
   globalDisplayLanguage: string;
@@ -54,11 +56,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // Selected outline state
   const [selectedOutlineId, setSelectedOutlineId] = useState<string | null>(null);
 
-  // Editing state for outlines (sidebar handles editing and adding now)
-  const [editingOutline, setEditingOutline] = useState<string | null>(null);
-  const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
+  // Unified overlay editor state (replaces per-level inline/modal editing)
+  const [editingTarget, setEditingTarget] = useState<{ id: string; kind: OutlineLevel } | null>(null);
+  const [creatingTarget, setCreatingTarget] = useState<{ kind: 'act' | 'chapter'; parentId: string } | null>(null);
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | null>(null);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [translationTargetId, setTranslationTargetId] = useState<string | null>(null);
 
@@ -67,26 +70,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
 
-  // Editing state for acts
-  const [editingAct, setEditingAct] = useState<string | null>(null);
-  const [editActData, setEditActData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
-  const [showAddActForm, setShowAddActForm] = useState<string | null>(null);
+  // AI edit modal targets (per level)
   const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
-
-  // Editing state for chapters
-  const [editingChapter, setEditingChapter] = useState<string | null>(null);
-  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string; content: TipTapDoc }>({ name: '', description: '', content: emptyDoc() });
-  const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
 
   // Collapse/expand state (acts and chapters only - outlines selected from sidebar)
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
-
-  // RichTextEditor refs for content editing
-  const outlineEditorRef = useRef<RichTextEditorRef>(null);
-  const actEditorRef = useRef<RichTextEditorRef>(null);
-  const chapterEditorRef = useRef<RichTextEditorRef>(null);
 
   const isMainLanguageView = globalDisplayLanguage === settings.mainLanguage;
 
@@ -225,8 +215,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   useEffect(() => {
     if (isMainLanguageView) return;
-    setShowAddActForm(null);
-    setShowAddChapterForm(null);
+    // Creation is main-language only — close any open create overlay when switching away
+    setCreatingTarget((prev) => (prev ? null : prev));
   }, [isMainLanguageView]);
 
   // Toggle expand/collapse for acts
@@ -258,50 +248,42 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // OUTLINE HANDLERS
   // ========================================================================
 
-  const startEditingOutline = (outlineId: string) => {
-    const outline = store.objects[outlineId] as OutlineObject;
-    if (!outline) return;
-    const languageState = getLanguageState(outline);
-    if (!languageState.canEdit) {
-      openTranslationModal(outlineId);
+  const openEditor = useCallback((id: string, kind: OutlineLevel) => {
+    const obj = store.objects[id] as OutlineObject | undefined;
+    if (!obj) return;
+    if (!getLanguageState(obj).canEdit) {
+      openTranslationModal(id);
       return;
     }
-    const data = getDataForLanguage(outline, languageState.viewLanguage);
-    setEditOutlineData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
-    setEditingOutline(outlineId);
-  };
+    setCreatingTarget(null);
+    setEditingTarget({ id, kind });
+  }, [store.objects, getLanguageState, openTranslationModal]);
 
-  const handleUpdateOutline = async () => {
-    if (!editingOutline || !editOutlineData.name.trim()) return;
+  const closeEditor = useCallback(() => setEditingTarget(null), []);
 
-    const outline = store.objects[editingOutline] as OutlineObject;
-    if (!outline) return;
-
-    const languageState = getLanguageState(outline);
+  const handleSaveOutlineItem = useCallback(async (name: string, description: string, content: TipTapDoc) => {
+    if (!editingTarget) return;
+    const obj = store.objects[editingTarget.id] as OutlineObject | undefined;
+    if (!obj) return;
+    const languageState = getLanguageState(obj);
     if (!languageState.canEdit) {
-      openTranslationModal(editingOutline);
+      openTranslationModal(editingTarget.id);
       return;
     }
-
     try {
-      await store.updateObject('outline', editingOutline, {
-        data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim(), content: normalizeDoc(editOutlineData.content) },
+      await store.updateObject('outline', editingTarget.id, {
+        data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
         language: languageState.requestedLanguage,
         rich_text_format: 'tiptap',
         create_new_version: languageState.createNewVersion,
         user_request: 'Manual Edit',
       });
-      setEditingOutline(null);
+      closeEditor();
     } catch (error) {
-      console.error('Failed to update outline:', error);
-      showAlert({ title: 'Update Error', message: 'Failed to update outline. Please try again.' });
+      console.error('Failed to update outline item:', error);
+      showAlert({ title: 'Update Error', message: 'Failed to save changes. Please try again.' });
     }
-  };
-
-  const cancelEditingOutline = () => {
-    setEditingOutline(null);
-    setEditOutlineData({ name: '', description: '', content: emptyDoc() });
-  };
+  }, [editingTarget, store, getLanguageState, openTranslationModal, closeEditor]);
 
   // Inline description editing handlers
   const handleStartEditDescription = () => {
@@ -397,56 +379,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         'User Creation',
         'act'
       );
-      setShowAddActForm(null);
     } catch (error) {
       console.error('Failed to create act:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create act. Please try again.' });
     }
-  };
-
-  const startEditingAct = (actId: string) => {
-    const act = store.objects[actId] as OutlineObject;
-    if (!act) return;
-    const languageState = getLanguageState(act);
-    if (!languageState.canEdit) {
-      openTranslationModal(actId);
-      return;
-    }
-    const data = getDataForLanguage(act, languageState.viewLanguage);
-    setEditActData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
-    setEditingAct(actId);
-  };
-
-  const handleUpdateAct = async () => {
-    if (!editingAct || !editActData.name.trim()) return;
-
-    const act = store.objects[editingAct] as OutlineObject;
-    if (!act) return;
-
-    const languageState = getLanguageState(act);
-    if (!languageState.canEdit) {
-      openTranslationModal(editingAct);
-      return;
-    }
-
-    try {
-      await store.updateObject('outline', editingAct, {
-        data: { name: editActData.name.trim(), description: editActData.description.trim(), content: normalizeDoc(editActData.content) },
-        language: languageState.requestedLanguage,
-        rich_text_format: 'tiptap',
-        create_new_version: languageState.createNewVersion,
-        user_request: 'Manual Edit',
-      });
-      setEditingAct(null);
-    } catch (error) {
-      console.error('Failed to update act:', error);
-      showAlert({ title: 'Update Error', message: 'Failed to update act. Please try again.' });
-    }
-  };
-
-  const cancelEditingAct = () => {
-    setEditingAct(null);
-    setEditActData({ name: '', description: '', content: emptyDoc() });
   };
 
   const handleDeleteAct = async (actId: string) => {
@@ -487,56 +423,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         'User Creation',
         'chapter'
       );
-      setShowAddChapterForm(null);
     } catch (error) {
       console.error('Failed to create chapter:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create chapter. Please try again.' });
     }
-  };
-
-  const startEditingChapter = (chapterId: string) => {
-    const chapter = store.objects[chapterId] as OutlineObject;
-    if (!chapter) return;
-    const languageState = getLanguageState(chapter);
-    if (!languageState.canEdit) {
-      openTranslationModal(chapterId);
-      return;
-    }
-    const data = getDataForLanguage(chapter, languageState.viewLanguage);
-    setEditChapterData({ name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) });
-    setEditingChapter(chapterId);
-  };
-
-  const handleUpdateChapter = async () => {
-    if (!editingChapter || !editChapterData.name.trim()) return;
-
-    const chapter = store.objects[editingChapter] as OutlineObject;
-    if (!chapter) return;
-
-    const languageState = getLanguageState(chapter);
-    if (!languageState.canEdit) {
-      openTranslationModal(editingChapter);
-      return;
-    }
-
-    try {
-      await store.updateObject('outline', editingChapter, {
-        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: normalizeDoc(editChapterData.content) },
-        language: languageState.requestedLanguage,
-        rich_text_format: 'tiptap',
-        create_new_version: languageState.createNewVersion,
-        user_request: 'Manual Edit',
-      });
-      setEditingChapter(null);
-    } catch (error) {
-      console.error('Failed to update chapter:', error);
-      showAlert({ title: 'Update Error', message: 'Failed to update chapter. Please try again.' });
-    }
-  };
-
-  const cancelEditingChapter = () => {
-    setEditingChapter(null);
-    setEditChapterData({ name: '', description: '', content: emptyDoc() });
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
@@ -558,6 +448,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
   };
 
+  // Create handler for the overlay (isNewItem mode) — dispatches by level
+  const handleCreateOutlineItem = useCallback(async (name: string, description: string, content: TipTapDoc) => {
+    if (!creatingTarget) return;
+    if (creatingTarget.kind === 'act') {
+      await handleAddAct(creatingTarget.parentId, name, description, content);
+    } else {
+      await handleAddChapter(creatingTarget.parentId, name, description, content);
+    }
+    setCreatingTarget(null);
+  }, [creatingTarget, handleAddAct, handleAddChapter]);
+
   // Get selected outline data for header
   const selectedOutlineData = useMemo(() => {
     if (!selectedOutline) return { name: 'Select Outline', description: '', content: emptyDoc() };
@@ -577,11 +478,29 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     ),
     [getRichTextMarkdown, selectedOutline, selectedOutlineLanguageState],
   );
-  const editingOutlineLanguageState = useMemo(() => {
-    if (!editingOutline) return null;
-    const outline = store.objects[editingOutline] as OutlineObject | undefined;
-    return outline ? getLanguageState(outline) : null;
-  }, [editingOutline, getLanguageState, store.objects]);
+  const editingObject = useMemo(
+    () => (editingTarget ? (store.objects[editingTarget.id] as OutlineObject | undefined) ?? null : null),
+    [editingTarget, store.objects],
+  );
+  const editingLanguageState = useMemo(
+    () => (editingObject ? getLanguageState(editingObject) : null),
+    [editingObject, getLanguageState],
+  );
+  const editingData = useMemo<{ name: string; description: string; content: TipTapDoc }>(
+    () => {
+      if (!editingObject || !editingLanguageState) {
+        return { name: '', description: '', content: emptyDoc() };
+      }
+      const data = getDataForLanguage(editingObject, editingLanguageState.viewLanguage);
+      return {
+        name: data.name ?? '',
+        description: data.description ?? '',
+        content: normalizeDoc(data.content),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editingObject, editingLanguageState],
+  );
 
   // Get acts for selected outline
   const selectedOutlineActs = useMemo(
@@ -728,14 +647,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // Handle version history
   const handleShowVersionHistory = () => {
     if (selectedOutlineId) {
+      setVersionHistoryTargetId(selectedOutlineId);
       setShowVersionHistory(true);
     }
   };
 
   const handleRestoreVersion = async () => {
-    if (!selectedOutlineId) return;
+    const targetId = versionHistoryTargetId ?? selectedOutlineId;
+    if (!targetId) return;
     try {
-      await store.fetchObject('outline', selectedOutlineId);
+      await store.fetchObject('outline', targetId);
     } catch (error) {
       console.error('Failed to refresh after restore:', error);
     }
@@ -766,7 +687,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
               <>
                 {isMainLanguageView ? (
                   <TextButton
-                    onClick={() => setShowAddActForm(selectedOutlineId)}
+                    onClick={() => selectedOutlineId && setCreatingTarget({ kind: 'act', parentId: selectedOutlineId })}
                     iconLeft={<Plus size="xs" />}
                     size="sm"
                   >
@@ -888,18 +809,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
               </div>
             )}
 
-            {/* Add Act Form (when shown) */}
-            {showAddActForm === selectedOutlineId && selectedOutlineId && (
-              <div className="timeline-creation-panel">
-                <AddActForm
-                  onAdd={(name, desc, content) => handleAddAct(selectedOutlineId, name, desc, content)}
-                  onCancel={() => setShowAddActForm(null)}
-                />
-              </div>
-            )}
-
             {/* Timeline Track for Selected Outline */}
-            {selectedOutline && selectedOutlineActs.length === 0 && showAddActForm !== selectedOutlineId && (
+            {selectedOutline && selectedOutlineActs.length === 0 && (
               <div className="empty-timeline-state">
                 <Books size="md" className="empty-icon" />
                 <h3>No Acts Yet</h3>
@@ -909,7 +820,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                     : `Add acts in ${settings.mainLanguage}, then translate them into ${globalDisplayLanguage}.`}
                 </p>
                 {isMainLanguageView ? (
-                  <TextButton onClick={() => setShowAddActForm(selectedOutlineId)} iconLeft={<Plus />}>
+                  <TextButton onClick={() => selectedOutlineId && setCreatingTarget({ kind: 'act', parentId: selectedOutlineId })} iconLeft={<Plus />}>
                     Add First Act
                   </TextButton>
                 ) : null}
@@ -927,7 +838,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                       const isActExpanded = !collapsedActs.has(act.id);
 
                       return (
-                        <SortableActGroup key={act.id} id={act.id} disabled={editingAct === act.id} isExpanded={isActExpanded}>
+                        <SortableActGroup key={act.id} id={act.id} disabled={editingTarget?.id === act.id} isExpanded={isActExpanded}>
                           {(dragHandle) => (
                             <>
                               {/* Act Node */}
@@ -941,113 +852,49 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                   </div>
 
                                   <div className="act-content-wrapper">
-                                    {editingAct === act.id ? (
-                                      <div className="outline-item-card">
-                                            <div className="content-card act-card is-editing">
-                                              <div className="outline-item-card__drag-slot">
-                                                {dragHandle}
-                                              </div>
-                                              <div className="card-header">
-                                                <div className="card-title-section" style={{ flex: 1 }}>
-                                                  <input
-                                                    type="text"
-                                                    className="inline-title-input"
-                                                    value={editActData.name}
-                                                    onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                                    placeholder="Act Title"
-                                                    autoFocus
-                                                  />
-                                                </div>
-                                              </div>
-                                              <div className="card-body-wrapper is-expanded">
-                                                <div className="card-body-content">
-                                                  <textarea
-                                                    className="inline-description-input"
-                                                    value={editActData.description}
-                                                    onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
-                                                    placeholder="Describe the main events that happen in this act"
-                                                    rows={4}
-                                                  />
-                                                  <div className="inline-content-editor">
-                                                    <RichTextEditor
-                                                      ref={actEditorRef}
-                                                      key={editingAct}
-                                                      initialContent={editActData.content}
-                                                      onChange={(doc) => setEditActData(prev => ({ ...prev, content: normalizeDoc(doc) }))}
-                                                      placeholder="Full act content..."
-                                                    />
-                                                  </div>
-                                                  <div className="edit-actions-split">
-                                                    <TextButton
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      onClick={actLanguageState.isMainLanguage
-                                                        ? () => setShowActAIModal(act.id)
-                                                        : () => openTranslationModal(act.id)}
-                                                      iconLeft={actLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
-                                                    >
-                                                      {actLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
-                                                    </TextButton>
-                                                    <div className="edit-actions-right">
-                                                      <TextButton
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={cancelEditingAct}
-                                                        iconLeft={<Close size="xs" />}
-                                                      >
-                                                        Cancel
-                                                      </TextButton>
-                                                      <TextButton
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        onClick={handleUpdateAct}
-                                                        iconLeft={<Save size="xs" />}
-                                                      >
-                                                        {actLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
-                                                      </TextButton>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            </div>
-                                      </div>
-                                    ) : (
-                                      <OutlineItemCard
-                                        variant="act"
-                                        name={actData.name || 'Untitled Act'}
-                                        description={actData.description}
-                                        contentMarkdown={getRichTextMarkdown(act.id, actLanguageState.viewLanguage, 'content')}
-                                        meta={`${actChapters.length} Chapters`}
-                                        expanded={isActExpanded}
-                                        showFallbackWarning={actLanguageState.isFallbackView}
-                                        dragHandle={dragHandle}
-                                        onHeaderClick={() => toggleActExpand(act.id)}
-                                        footerActions={
-                                          <>
-                                            <DropdownMenu
-                                              trigger={
-                                                <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                  More
-                                                </TextButton>
-                                              }
-                                            >
-                                              {actLanguageState.isTranslationView && (
-                                                <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(act.id)} />
-                                              )}
-                                              <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
-                                            </DropdownMenu>
-                                            <TextButton
-                                              size="sm"
-                                              variant="secondary"
-                                              iconLeft={<Edit size="xs" />}
-                                              onClick={() => (actLanguageState.canEdit ? startEditingAct(act.id) : openTranslationModal(act.id))}
-                                            >
-                                              {actLanguageState.canEdit ? 'Edit' : 'Translate'}
-                                            </TextButton>
-                                          </>
-                                        }
-                                      />
-                                    )}
+                                    <OutlineItemCard
+                                      variant="act"
+                                      name={actData.name || 'Untitled Act'}
+                                      description={actData.description}
+                                      contentMarkdown={getRichTextMarkdown(act.id, actLanguageState.viewLanguage, 'content')}
+                                      meta={`${actChapters.length} Chapters`}
+                                      expanded={isActExpanded}
+                                      showFallbackWarning={actLanguageState.isFallbackView}
+                                      dragHandle={dragHandle}
+                                      onHeaderClick={() => toggleActExpand(act.id)}
+                                      footerActions={
+                                        <>
+                                          <DropdownMenu
+                                            trigger={
+                                              <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                More
+                                              </TextButton>
+                                            }
+                                          >
+                                            <DropdownItem
+                                              icon={<Scroll size="sm" />}
+                                              label="Version History"
+                                              onClick={() => {
+                                                setVersionHistoryTargetId(act.id);
+                                                setShowVersionHistory(true);
+                                              }}
+                                            />
+                                            {actLanguageState.isTranslationView && (
+                                              <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(act.id)} />
+                                            )}
+                                            <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                                          </DropdownMenu>
+                                          <TextButton
+                                            size="sm"
+                                            variant="secondary"
+                                            iconLeft={<Edit size="xs" />}
+                                            onClick={() => openEditor(act.id, 'act')}
+                                          >
+                                            {actLanguageState.canEdit ? 'Edit' : 'Translate'}
+                                          </TextButton>
+                                        </>
+                                      }
+                                    />
                                   </div>
                                 </div>
                               </div>
@@ -1066,119 +913,54 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                         const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
 
                                         return (
-                                          <SortableChapterNode key={chapter.id} id={chapter.id} disabled={editingChapter === chapter.id} chapterIndex={chapterIndex}>
+                                          <SortableChapterNode key={chapter.id} id={chapter.id} disabled={editingTarget?.id === chapter.id} chapterIndex={chapterIndex}>
                                             {(chapterDragHandle) => (
                                               <>
                                                 <div className="chapter-marker"></div>
                                                 <div className="chapter-content-wrapper">
-                                                  {editingChapter === chapter.id ? (
-                                                    <div className="outline-item-card">
-                                                      <div className="content-card chapter-card is-editing">
-                                                        <div className="outline-item-card__drag-slot">
-                                                          {chapterDragHandle}
-                                                        </div>
-                                                            <div className="chapter-header">
-                                                              <div className="chapter-info" style={{ flex: 1 }}>
-                                                                <span className="chapter-index">CH {globalChapterIndex}</span>
-                                                                <input
-                                                                  type="text"
-                                                                  className="inline-title-input"
-                                                                  value={editChapterData.name}
-                                                                  onChange={(e) => setEditChapterData(prev => ({ ...prev, name: e.target.value }))}
-                                                                  placeholder="Chapter Title"
-                                                                  autoFocus
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                            <div className="chapter-expand-wrapper is-expanded">
-                                                              <div className="chapter-expand-content">
-                                                                <textarea
-                                                                  className="inline-description-input"
-                                                                  value={editChapterData.description}
-                                                                  onChange={(e) => setEditChapterData(prev => ({ ...prev, description: e.target.value }))}
-                                                                  placeholder="Describe what happens in this chapter"
-                                                                  rows={3}
-                                                                />
-                                                                <div className="inline-content-editor">
-                                                                  <RichTextEditor
-                                                                    ref={chapterEditorRef}
-                                                                    key={editingChapter}
-                                                                    initialContent={editChapterData.content}
-                                                                    onChange={(doc) => setEditChapterData(prev => ({ ...prev, content: normalizeDoc(doc) }))}
-                                                                    placeholder="Full chapter content..."
-                                                                  />
-                                                                </div>
-                                                                <div className="edit-actions-split">
-                                                                  <TextButton
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    onClick={chapterLanguageState.isMainLanguage
-                                                                      ? () => setShowChapterAIModal(chapter.id)
-                                                                      : () => openTranslationModal(chapter.id)}
-                                                                    iconLeft={chapterLanguageState.isMainLanguage ? <AIAssist size="xs" /> : <Refresh size="xs" />}
-                                                                  >
-                                                                    {chapterLanguageState.isMainLanguage ? 'AI Edit' : 'Retranslate'}
-                                                                  </TextButton>
-                                                                  <div className="edit-actions-right">
-                                                                    <TextButton
-                                                                      variant="ghost"
-                                                                      size="sm"
-                                                                      onClick={cancelEditingChapter}
-                                                                      iconLeft={<Close size="xs" />}
-                                                                    >
-                                                                      Cancel
-                                                                    </TextButton>
-                                                                    <TextButton
-                                                                      variant="secondary"
-                                                                      size="sm"
-                                                                      onClick={handleUpdateChapter}
-                                                                      iconLeft={<Save size="xs" />}
-                                                                    >
-                                                                      {chapterLanguageState.isTranslationView ? 'Save Translation' : 'Save'}
-                                                                    </TextButton>
-                                                                  </div>
-                                                                </div>
-                                                              </div>
-                                                            </div>
-                                                      </div>
-                                                    </div>
-                                                  ) : (
-                                                    <OutlineItemCard
-                                                      variant="chapter"
-                                                      name={chData.name || 'Untitled Chapter'}
-                                                      description={chData.description}
-                                                      contentMarkdown={getRichTextMarkdown(chapter.id, chapterLanguageState.viewLanguage, 'content')}
-                                                      chapterIndex={globalChapterIndex}
-                                                      expanded={isChapterExpanded}
-                                                      showFallbackWarning={chapterLanguageState.isFallbackView}
-                                                      dragHandle={chapterDragHandle}
-                                                      onHeaderClick={() => toggleChapterExpand(chapter.id)}
-                                                      footerActions={
-                                                        <>
-                                                          <DropdownMenu
-                                                            trigger={
-                                                              <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                                More
-                                                              </TextButton>
-                                                            }
-                                                          >
-                                                            {chapterLanguageState.isTranslationView && (
-                                                              <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(chapter.id)} />
-                                                            )}
-                                                            <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
-                                                          </DropdownMenu>
-                                                          <TextButton
-                                                            size="sm"
-                                                            variant="secondary"
-                                                            iconLeft={<Edit size="xs" />}
-                                                            onClick={() => (chapterLanguageState.canEdit ? startEditingChapter(chapter.id) : openTranslationModal(chapter.id))}
-                                                          >
-                                                            {chapterLanguageState.canEdit ? 'Edit' : 'Translate'}
-                                                          </TextButton>
-                                                        </>
-                                                      }
-                                                    />
-                                                  )}
+                                                  <OutlineItemCard
+                                                    variant="chapter"
+                                                    name={chData.name || 'Untitled Chapter'}
+                                                    description={chData.description}
+                                                    contentMarkdown={getRichTextMarkdown(chapter.id, chapterLanguageState.viewLanguage, 'content')}
+                                                    chapterIndex={globalChapterIndex}
+                                                    expanded={isChapterExpanded}
+                                                    showFallbackWarning={chapterLanguageState.isFallbackView}
+                                                    dragHandle={chapterDragHandle}
+                                                    onHeaderClick={() => toggleChapterExpand(chapter.id)}
+                                                    footerActions={
+                                                      <>
+                                                        <DropdownMenu
+                                                          trigger={
+                                                            <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                              More
+                                                            </TextButton>
+                                                          }
+                                                        >
+                                                          <DropdownItem
+                                                            icon={<Scroll size="sm" />}
+                                                            label="Version History"
+                                                            onClick={() => {
+                                                              setVersionHistoryTargetId(chapter.id);
+                                                              setShowVersionHistory(true);
+                                                            }}
+                                                          />
+                                                          {chapterLanguageState.isTranslationView && (
+                                                            <DropdownItem icon={<Refresh size="sm" />} label="Retranslate" onClick={() => openTranslationModal(chapter.id)} />
+                                                          )}
+                                                          <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
+                                                        </DropdownMenu>
+                                                        <TextButton
+                                                          size="sm"
+                                                          variant="secondary"
+                                                          iconLeft={<Edit size="xs" />}
+                                                          onClick={() => openEditor(chapter.id, 'chapter')}
+                                                        >
+                                                          {chapterLanguageState.canEdit ? 'Edit' : 'Translate'}
+                                                        </TextButton>
+                                                      </>
+                                                    }
+                                                  />
                                                 </div>
                                               </>
                                             )}
@@ -1189,20 +971,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                   </DndContext>
 
                                   {/* Add Chapter Button */}
-                                  {isMainLanguageView && showAddChapterForm === act.id ? (
-                                    <div className="timeline-chapter-node creation-node">
-                                      <div className="timeline-chapter-node-motion">
-                                        <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
-                                        <div className="chapter-content-wrapper">
-                                          <AddChapterForm
-                                            onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
-                                            onCancel={() => setShowAddChapterForm(null)}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : isMainLanguageView ? (
-                                    <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
+                                  {isMainLanguageView ? (
+                                    <div className="timeline-chapter-node add-chapter-node" onClick={() => setCreatingTarget({ kind: 'chapter', parentId: act.id })}>
                                       <div className="timeline-chapter-node-motion">
                                         <div className="chapter-marker add-marker"><Plus size="xs" /></div>
                                         <div className="chapter-content-wrapper">
@@ -1279,7 +1049,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           selectedOutlineId={selectedOutlineId}
           onSelectOutline={setSelectedOutlineId}
           displayLanguage={globalDisplayLanguage}
-          onEditOutline={startEditingOutline}
+          onEditOutline={(id) => openEditor(id, 'outline')}
           onTranslateOutline={openTranslationModal}
           onRetranslateOutline={openTranslationModal}
           onAIEditOutline={(outlineId) => {
@@ -1290,65 +1060,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           onDeleteOutline={handleDeleteOutline}
           canCreateOutline={isMainLanguageView}
         />
-      )}
-
-      {/* Edit Outline Modal */}
-      {editingOutline && (
-        <BaseModal
-          isOpen={true}
-          onClose={cancelEditingOutline}
-          size="medium"
-          title={editingOutlineLanguageState?.isTranslationView ? 'Edit Outline Translation' : 'Edit Outline'}
-          footer={
-            <div className="form-actions">
-              <TextButton variant="ghost" size="sm" onClick={cancelEditingOutline}>
-                Cancel
-              </TextButton>
-              <TextButton
-                variant="secondary"
-                size="sm"
-                onClick={handleUpdateOutline}
-                disabled={!editOutlineData.name.trim()}
-              >
-                {editingOutlineLanguageState?.isTranslationView ? 'Save Translation' : 'Save'}
-              </TextButton>
-            </div>
-          }
-        >
-          <div className="item-form edit-form">
-            <div className="form-group">
-              <label htmlFor="edit-outline-name">Outline Title</label>
-              <input
-                id="edit-outline-name"
-                type="text"
-                value={editOutlineData.name}
-                onChange={(e) => setEditOutlineData((prev) => ({ ...prev, name: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="edit-outline-description">Description (Optional)</label>
-              <textarea
-                id="edit-outline-description"
-                value={editOutlineData.description}
-                onChange={(e) =>
-                  setEditOutlineData((prev) => ({ ...prev, description: e.target.value }))
-                }
-                rows={4}
-              />
-            </div>
-            <div className="form-group form-group-grow">
-              <label>Content</label>
-              <RichTextEditor
-                ref={outlineEditorRef}
-                key={editingOutline}
-                initialContent={editOutlineData.content}
-                onChange={(doc) => setEditOutlineData((prev) => ({ ...prev, content: normalizeDoc(doc) }))}
-                placeholder="Full outline content..."
-              />
-            </div>
-          </div>
-        </BaseModal>
       )}
 
       {/* AI Edit Modals */}
@@ -1382,13 +1093,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         />
       )}
 
-      {/* Outline Version History Modal */}
-      {selectedOutlineId && (
+      {/* Version History Modal (outline / act / chapter) */}
+      {(versionHistoryTargetId || selectedOutlineId) && (
         <VersionHistoryModal
           isOpen={showVersionHistory}
-          onClose={() => setShowVersionHistory(false)}
+          onClose={() => {
+            setShowVersionHistory(false);
+            setVersionHistoryTargetId(null);
+          }}
           objectType="outline"
-          objectId={selectedOutlineId}
+          objectId={(versionHistoryTargetId ?? selectedOutlineId) as string}
           onRestoreVersion={handleRestoreVersion}
         />
       )}
@@ -1409,142 +1123,76 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           defaultTargetLanguage={globalDisplayLanguage}
         />
       )}
-    </div>
-  );
-};
 
-// ============================================================================
-// ADD ACT FORM
-// ============================================================================
-
-interface AddActFormProps {
-  onAdd: (name: string, description: string, content: TipTapDoc) => void;
-  onCancel: () => void;
-}
-
-const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAdd(name, description, content);
-    setName('');
-    setDescription('');
-    setContent(emptyDoc());
-  };
-
-  return (
-    <div className="item-form add-form">
-      <h4>Add New Act</h4>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="add-act-name">Act Title</label>
-          <input
-            id="add-act-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Act 1: The Beginning"
-            autoFocus
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="add-act-description">Description (Optional)</label>
-          <textarea
-            id="add-act-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the main events..."
-            rows={3}
-          />
-        </div>
-        <div className="form-group form-group-grow">
-          <label>Content (Optional)</label>
-          <RichTextEditor
-            initialContent={content}
-            onChange={setContent}
-            placeholder="Full act content..."
-          />
-        </div>
-        <div className="form-actions">
-          <TextButton variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </TextButton>
-          <TextButton variant="secondary" size="sm" type="submit" disabled={!name.trim()}>
-            Create Act
-          </TextButton>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-// ============================================================================
-// ADD CHAPTER FORM
-// ============================================================================
-
-interface AddChapterFormProps {
-  onAdd: (name: string, description: string, content: TipTapDoc) => void;
-  onCancel: () => void;
-}
-
-const AddChapterForm: React.FC<AddChapterFormProps> = ({ onAdd, onCancel }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [content, setContent] = useState<TipTapDoc>(emptyDoc());
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAdd(name, description, content);
-    setName('');
-    setDescription('');
-    setContent(emptyDoc());
-  };
-
-  return (
-    <div className="item-form add-form chapter-add-form">
-      <h4>Add New Chapter</h4>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="add-chapter-name">Chapter Title</label>
-          <input
-            id="add-chapter-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Chapter 1: The Beginning"
-            autoFocus
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="add-chapter-description">Description (Optional)</label>
-          <textarea
-            id="add-chapter-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What happens in this chapter..."
-            rows={2}
-          />
-        </div>
-        <div className="form-group form-group-grow">
-          <label>Content (Optional)</label>
-          <RichTextEditor
-            initialContent={content}
-            onChange={setContent}
-            placeholder="Full chapter content..."
-          />
-        </div>
-        <div className="form-actions">
-          <TextButton variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </TextButton>
-          <TextButton variant="secondary" size="sm" type="submit" disabled={!name.trim()}>
-            Create Chapter
-          </TextButton>
-        </div>
-      </form>
+      {/* Expand-to-edit overlay (edit existing, or create new act/chapter) */}
+      <AnimatePresence mode="sync">
+        {editingTarget && editingObject ? (
+          <motion.div
+            key={`outline-edit-${editingTarget.id}`}
+            className="outline-card-expanded-container"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
+            transition={{ duration: 0.2 }}
+          >
+            <ObjectCardExpanded
+              itemId={editingTarget.id}
+              objectType={editingTarget.kind}
+              hideImageTab
+              mainAsset={null}
+              itemData={editingData}
+              effectiveLanguage={editingLanguageState?.viewLanguage ?? settings.mainLanguage}
+              versionNumber={editingObject.version.number}
+              readOnly={!editingLanguageState?.canEdit}
+              saveLabel={editingLanguageState?.isTranslationView ? 'Save Translation' : 'Save'}
+              hideAIEdit={!editingLanguageState?.isMainLanguage}
+              primaryActionLabel={!editingLanguageState?.canEdit ? 'Translate' : undefined}
+              onPrimaryAction={() => openTranslationModal(editingTarget.id)}
+              onAIEdit={editingLanguageState?.isMainLanguage ? () => {
+                if (editingTarget.kind === 'outline') setShowOutlineAIModal(editingTarget.id);
+                else if (editingTarget.kind === 'act') setShowActAIModal(editingTarget.id);
+                else setShowChapterAIModal(editingTarget.id);
+              } : undefined}
+              onRetranslate={editingLanguageState?.isTranslationView ? () => openTranslationModal(editingTarget.id) : undefined}
+              onVersionHistory={() => {
+                setVersionHistoryTargetId(editingTarget.id);
+                setShowVersionHistory(true);
+              }}
+              onDelete={() => {
+                const { id, kind } = editingTarget;
+                closeEditor();
+                if (kind === 'outline') void handleDeleteOutline(id);
+                else if (kind === 'act') void handleDeleteAct(id);
+                else void handleDeleteChapter(id);
+              }}
+              onSave={handleSaveOutlineItem}
+              onCancel={closeEditor}
+            />
+          </motion.div>
+        ) : creatingTarget ? (
+          <motion.div
+            key={`outline-create-${creatingTarget.kind}`}
+            className="outline-card-expanded-container"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
+            transition={{ duration: 0.2 }}
+          >
+            <ObjectCardExpanded
+              itemId={`new-${creatingTarget.kind}`}
+              objectType={creatingTarget.kind}
+              hideImageTab
+              mainAsset={null}
+              isNewItem
+              itemData={{ name: '', description: '', content: emptyDoc() }}
+              effectiveLanguage={settings.mainLanguage}
+              versionNumber={0}
+              onSave={handleCreateOutlineItem}
+              onCancel={() => setCreatingTarget(null)}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 };

@@ -24,7 +24,7 @@ interface ObjectCardExpandedProps {
     itemData: { name: string; description: string; content: TipTapDoc };
     effectiveLanguage: string;
     versionNumber: number;
-    objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity';
+    objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity' | 'outline' | 'act' | 'chapter';
     mainAsset: Asset | null;
     loading?: boolean;
     isNewItem?: boolean;
@@ -33,6 +33,7 @@ interface ObjectCardExpandedProps {
     primaryActionLabel?: string;
     saveLabel?: string;
     hideAIEdit?: boolean;
+    hideImageTab?: boolean;
     extraEditFields?: React.ReactNode;
     onSave: (name: string, description: string, content: TipTapDoc) => void;
     onCancel: () => void;
@@ -58,6 +59,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     primaryActionLabel,
     saveLabel,
     hideAIEdit = false,
+    hideImageTab = false,
     extraEditFields,
     onSave,
     onCancel,
@@ -203,13 +205,15 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                             Edit
                         </button>
                     )}
-                    <button
-                        className={`expanded-tab ${activeTab === 'image' ? 'active' : ''}`}
-                        onClick={() => handleTabSwitch('image')}
-                        disabled={isNewItem}
-                    >
-                        Image
-                    </button>
+                    {!hideImageTab && (
+                        <button
+                            className={`expanded-tab ${activeTab === 'image' ? 'active' : ''}`}
+                            onClick={() => handleTabSwitch('image')}
+                            disabled={isNewItem}
+                        >
+                            Image
+                        </button>
+                    )}
                     <IconButton
                         icon={<Collapse size="md" />}
                         onClick={handleCancel}
@@ -380,7 +384,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                         </div>
                     )}
 
-                    {activeTab === 'image' && currentProjectId && (
+                    {!hideImageTab && activeTab === 'image' && currentProjectId && (
                         <div className="expanded-image-tab">
                             <ImageTabContent
                                 mode="object"
