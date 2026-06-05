@@ -70,14 +70,14 @@ def _story_entity_specs(ctx) -> list[ToolSpec]:
                     description="Create a story entity.",
                     parameters=obj_schema(
                         {"kind": _ENTITY_KIND, "name": _NAME, "description": _DESC, "content": _CONTENT, "folderId": _FOLDER_ID},
-                        ["kind", "name", "content"],
+                        ["kind", "name", "description", "content"],
                     ),
                     auto_approve_category="create",
                 ),
                 ToolSpec(
                     name="create_story_entity_folder",
                     description="Create a story entity folder.",
-                    parameters=obj_schema({"name": _NAME, "description": _DESC, "parentId": _PARENT_ID}, ["name"]),
+                    parameters=obj_schema({"name": _NAME, "description": _DESC, "parentId": _PARENT_ID}, ["name", "description"]),
                     auto_approve_category="create",
                 ),
                 ToolSpec(

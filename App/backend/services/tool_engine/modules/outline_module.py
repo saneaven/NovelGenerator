@@ -65,7 +65,7 @@ def _outline_specs(ctx) -> list[ToolSpec]:
                             "description": _DESC,
                             "content": _CONTENT,
                         },
-                        ["kind", "name", "content"],
+                        ["kind", "name", "description", "content"],
                     ),
                     auto_approve_category="create",
                 ),

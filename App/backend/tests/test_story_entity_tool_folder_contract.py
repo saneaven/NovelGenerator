@@ -205,6 +205,7 @@ def test_story_entity_tool_schemas_include_optional_folder_id() -> None:
     }
 
     assert specs["create_story_entity"].parameters["properties"]["folderId"]["type"] == ["string", "null"]
+    assert specs["create_story_entity"].parameters["required"] == ["kind", "name", "description", "content"]
     assert specs["replace_story_entity"].parameters["properties"]["folderId"]["type"] == ["string", "null"]
     assert specs["patch_story_entity"].parameters["properties"]["folderId"]["type"] == ["string", "null"]
 
@@ -215,7 +216,7 @@ def test_story_entity_folder_tool_schemas_are_registered(monkeypatch) -> None:
     module = StoryEntityFeatureModule()
     specs = {binding.spec.name: binding.spec for binding in module.list_bindings(ctx)}
 
-    assert specs["create_story_entity_folder"].parameters["required"] == ["name"]
+    assert specs["create_story_entity_folder"].parameters["required"] == ["name", "description"]
     assert specs["create_story_entity_folder"].parameters["properties"]["parentId"]["type"] == ["string", "null"]
     assert specs["read_story_entity_folder"].parameters["required"] == ["id"]
     assert specs["replace_story_entity_folder"].parameters["properties"]["position"]["type"] == "integer"
@@ -296,6 +297,8 @@ def test_create_outline_uses_markdown_projection(monkeypatch) -> None:
 
     monkeypatch.setattr(outline_module.object_service, "create_object", _fake_create_object)
     binding = _binding_by_name(OutlineFeatureModule(), _module_context(), "create_outline")
+
+    assert binding.spec.parameters["required"] == ["kind", "name", "description", "content"]
 
     outcome = asyncio.run(
         binding.execute(
