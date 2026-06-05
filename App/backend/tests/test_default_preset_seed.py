@@ -175,3 +175,33 @@ def test_default_prompt_outline_and_manuscript_fragments_include_number_attribut
     assert "render_index_timeline_events" in common_index
     assert "project.timeline.tracks" in common_index
     assert "project.timeline.events" in common_index
+
+
+def test_default_translation_fragments_include_timeline_content_contract() -> None:
+    document = _load_default_prompt_document()
+
+    translation_context = document["fragments"]["translation"]["objectContext"]["content"]
+    translation_reference = document["fragments"]["translation"]["referenceContext"]["content"]
+    translation_tools = document["fragments"]["translation"]["tools"]["content"]
+    translation_native = document["fragments"]["translation"]["nativeOutput"]["content"]
+    translation_system = document["prompts"]["translation"]["object"]["system_template"]
+
+    for fragment in (translation_context, translation_reference):
+        assert "ctx.timelineTracks" in fragment
+        assert "<timeline-tracks>" in fragment
+        assert '<timeline-track id="{{ track.id|e }}" name="{{ track.name|e }}"' in fragment
+        assert "<content>{{ track.content|e }}</content>" in fragment
+        assert '<event id="{{ ev.id|e }}" track-id="{{ ev.trackId|e }}" track="{{ ev.trackName|e }}">' in fragment
+        assert "<content>{{ ev.content|e }}</content>" in fragment
+        assert "<tags>" in fragment
+        assert "<tag>{{ tag|e }}</tag>" in fragment
+
+    assert "`translate_timeline_track`" in translation_tools
+    assert "`translate_timeline_event`" in translation_tools
+    assert "`patch_translation_timeline_track`" in translation_tools
+    assert "`patch_translation_timeline_event`" in translation_tools
+    assert '"tool":"translate_timeline_track"' in translation_native
+    assert '"tool":"translate_timeline_event"' in translation_native
+    assert '"tool":"patch_translation_timeline_track"' in translation_native
+    assert '"tool":"patch_translation_timeline_event"' in translation_native
+    assert "timeline tracks/events" in translation_system

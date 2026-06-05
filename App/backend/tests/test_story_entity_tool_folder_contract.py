@@ -88,6 +88,7 @@ from App.backend.services.tool_engine.modules import outline_module, story_entit
 from App.backend.services.tool_engine.modules.outline_module import OutlineFeatureModule
 from App.backend.services.tool_engine.modules.story_entity_module import StoryEntityFeatureModule
 from App.backend.services.tool_engine.modules.timeline_module import TimelineFeatureModule
+from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 
 
 def _module_context() -> ToolModuleContext:
@@ -473,6 +474,30 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
         assert key in event_props
 
 
+def test_timeline_translate_schemas_require_content(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_module, "is_translation_journey", lambda _ctx: True)
+    specs = {binding.spec.name: binding.spec for binding in TimelineFeatureModule().list_bindings(_module_context())}
+
+    for tool_name in ("translate_timeline_track", "translate_timeline_event"):
+        params = specs[tool_name].parameters
+        assert params["required"] == ["id", "name", "description", "content"]
+        assert params["properties"]["content"]["type"] == "string"
+
+        missing_content = validate_schema_required_enum_additional_properties(
+            {"id": "target-1", "name": "Translated name", "description": "Translated desc"},
+            params,
+        )
+        assert missing_content.valid is False
+        assert "Missing required parameter: content" in str(missing_content.reason)
+
+        explicit_empty_content = validate_schema_required_enum_additional_properties(
+            {"id": "target-1", "name": "Translated name", "description": "Translated desc", "content": ""},
+            params,
+        )
+        assert explicit_empty_content.valid is True
+
+
 class _TimelineProjectionQuery:
     def __init__(self, rows: list[object]) -> None:
         self._rows = rows
@@ -851,6 +876,69 @@ def test_validate_replace_timeline_event_allows_metadata_only(monkeypatch) -> No
     )
 
     assert result.valid is True
+
+
+def test_translate_timeline_tools_pass_markdown_content(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_module, "is_translation_journey", lambda _ctx: True)
+    feature = TimelineFeatureModule()
+    ctx = _execution_context()
+    captured: dict[str, dict[str, object]] = {}
+
+    def _fake_update_track(_db, **kwargs):
+        captured["track"] = kwargs
+        return {"id": str(kwargs["track_id"])}
+
+    def _fake_update_event(_db, **kwargs):
+        captured["event"] = kwargs
+        return {"id": str(kwargs["event_id"])}
+
+    monkeypatch.setattr(timeline_module.timeline_service, "update_track", _fake_update_track)
+    monkeypatch.setattr(timeline_module.timeline_service, "update_event", _fake_update_event)
+
+    track_id = uuid4()
+    event_id = uuid4()
+    track_binding = _binding_by_name(feature, _module_context(), "translate_timeline_track")
+    event_binding = _binding_by_name(feature, _module_context(), "translate_timeline_event")
+
+    asyncio.run(
+        track_binding.execute(
+            {
+                "id": str(track_id),
+                "name": "Translated track",
+                "description": "Translated track desc",
+                "content": "Translated track markdown",
+            },
+            ctx,
+        )
+    )
+    asyncio.run(
+        event_binding.execute(
+            {
+                "id": str(event_id),
+                "name": "Translated event",
+                "description": "Translated event desc",
+                "content": "Translated event markdown",
+            },
+            ctx,
+        )
+    )
+
+    assert captured["track"]["track_id"] == track_id
+    assert captured["track"]["name"] == "Translated track"
+    assert captured["track"]["description"] == "Translated track desc"
+    assert captured["track"]["content"] == "Translated track markdown"
+    assert captured["track"]["rich_text_format"] == "markdown"
+    assert captured["track"]["create_new_version"] is False
+    assert captured["track"]["user_request"] == "tool:translate_timeline_track"
+
+    assert captured["event"]["event_id"] == event_id
+    assert captured["event"]["name"] == "Translated event"
+    assert captured["event"]["description"] == "Translated event desc"
+    assert captured["event"]["content"] == "Translated event markdown"
+    assert captured["event"]["rich_text_format"] == "markdown"
+    assert captured["event"]["create_new_version"] is False
+    assert captured["event"]["user_request"] == "tool:translate_timeline_event"
 
 
 def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> None:

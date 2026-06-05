@@ -79,6 +79,45 @@ export interface PromptProjectGuidelines {
   authorNote: string;
 }
 
+export interface PromptProjectTimelineEvent {
+  id: string;
+  trackId: string;
+  trackName: string;
+  name: string;
+  description: string;
+  content: string;
+  startDate: Record<string, number>;
+  endDate: Record<string, number> | null;
+  tags: string[];
+  formattedDate: string;
+}
+
+export interface PromptProjectTimelineTrack {
+  id: string;
+  parentId: string | null;
+  position: number;
+  color: string | null;
+  name: string;
+  description: string;
+  content: string;
+  events: PromptProjectTimelineEvent[];
+  children: PromptProjectTimelineTrack[];
+}
+
+export interface PromptProjectTimeline {
+  id: string;
+  projectId: string;
+  calendar: {
+    units: Array<{
+      name: string;
+      label?: string;
+      count?: number;
+    }>;
+  };
+  tracks: PromptProjectTimelineTrack[];
+  events: PromptProjectTimelineEvent[];
+}
+
 export interface PromptProjectLanguageBucket {
   basicInfo: PromptProjectBasicInfo;
   guidelines: PromptProjectGuidelines;
@@ -86,6 +125,7 @@ export interface PromptProjectLanguageBucket {
   storyEntityTree: PromptStoryEntityTreeNode[];
   outline: PromptProjectOutline;
   manuscripts: PromptProjectManuscript[];
+  timeline: PromptProjectTimeline;
 }
 
 export type PromptProjectContentByLanguage = Record<string, PromptProjectLanguageBucket>;
@@ -97,6 +137,7 @@ export interface PromptProjectData {
   storyEntityTree: PromptStoryEntityTreeNode[];
   outline: PromptProjectOutline;
   manuscripts: PromptProjectManuscript[];
+  timeline: PromptProjectTimeline;
   contentByLang: PromptProjectContentByLanguage;
 }
 
@@ -108,6 +149,9 @@ interface PromptProjectSkeletonIds {
   outlineAct: string;
   outlineChapter: string;
   manuscript: string;
+  timelineTrack: string;
+  timelineChildTrack: string;
+  timelineEvent: string;
 }
 
 export interface BuildPromptProjectDataOptions {
@@ -124,6 +168,9 @@ const PLACEHOLDER_IDS: PromptProjectSkeletonIds = {
   outlineAct: '[ placeholder-act-id ]',
   outlineChapter: '[ placeholder-chapter-id ]',
   manuscript: '[ placeholder-manuscript-id ]',
+  timelineTrack: '[ placeholder-timeline-track-id ]',
+  timelineChildTrack: '[ placeholder-timeline-track-child-id ]',
+  timelineEvent: '[ placeholder-timeline-event-id ]',
 };
 
 function normalizeLanguages(languages?: string[]): string[] {
@@ -324,6 +371,58 @@ function buildManuscripts(ids: PromptProjectSkeletonIds): PromptProjectManuscrip
   ];
 }
 
+function buildTimeline(ids: PromptProjectSkeletonIds): PromptProjectTimeline {
+  const event: PromptProjectTimelineEvent = {
+    id: ids.timelineEvent,
+    trackId: ids.timelineChildTrack,
+    trackName: '[ Placeholder for child timeline track name ]',
+    name: '[ Placeholder for timeline event name ]',
+    description: '[ Placeholder for timeline event description ]',
+    content: '[ Placeholder for timeline event content ]',
+    startDate: { year: 1, month: 1 },
+    endDate: null,
+    tags: ['[ Placeholder timeline tag ]'],
+    formattedDate: '[ Placeholder formatted timeline date ]',
+  };
+
+  const childTrack: PromptProjectTimelineTrack = {
+    id: ids.timelineChildTrack,
+    parentId: ids.timelineTrack,
+    position: 0,
+    color: null,
+    name: '[ Placeholder for child timeline track name ]',
+    description: '[ Placeholder for child timeline track description ]',
+    content: '[ Placeholder for child timeline track content ]',
+    events: [event],
+    children: [],
+  };
+
+  return {
+    id: '[ placeholder-timeline-id ]',
+    projectId: '[ placeholder-project-id ]',
+    calendar: {
+      units: [
+        { name: 'year', label: 'Year' },
+        { name: 'month', label: 'Month', count: 12 },
+      ],
+    },
+    tracks: [
+      {
+        id: ids.timelineTrack,
+        parentId: null,
+        position: 0,
+        color: null,
+        name: '[ Placeholder for timeline track name ]',
+        description: '[ Placeholder for timeline track description ]',
+        content: '[ Placeholder for timeline track content ]',
+        events: [],
+        children: [childTrack],
+      },
+    ],
+    events: [event],
+  };
+}
+
 function buildLanguageBucket(ids: PromptProjectSkeletonIds): PromptProjectLanguageBucket {
   const basicInfo = buildBasicInfo(ids);
   const guidelines = buildGuidelines(ids);
@@ -331,6 +430,7 @@ function buildLanguageBucket(ids: PromptProjectSkeletonIds): PromptProjectLangua
   const storyEntityTree = buildStoryEntityTree(ids);
   const outline = buildOutline(ids);
   const manuscripts = buildManuscripts(ids);
+  const timeline = buildTimeline(ids);
 
   return {
     basicInfo,
@@ -339,6 +439,7 @@ function buildLanguageBucket(ids: PromptProjectSkeletonIds): PromptProjectLangua
     storyEntityTree,
     outline,
     manuscripts,
+    timeline,
   };
 }
 
@@ -364,6 +465,7 @@ export function buildPromptProjectDataSkeleton(
     storyEntityTree: primaryBucket.storyEntityTree,
     outline: primaryBucket.outline,
     manuscripts: primaryBucket.manuscripts,
+    timeline: primaryBucket.timeline,
     contentByLang,
   };
 }

@@ -100,6 +100,8 @@ const PREVIEW_CHAPTER = {
 const PREVIEW_ROOT_LOCATION_ID = '[ placeholder-story-entity-id-3 ]';
 const PREVIEW_NESTED_ENTITY_ID = '[ placeholder-story-entity-id-2 ]';
 const PREVIEW_MANUSCRIPT_ID = '[ placeholder-manuscript-id ]';
+const PREVIEW_TIMELINE_TRACK_ID = '[ placeholder-timeline-track-id ]';
+const PREVIEW_TIMELINE_EVENT_ID = '[ placeholder-timeline-event-id ]';
 
 const PREVIEW_ALL_OBJECT_IDS = [
   PREVIEW_BASIC_INFO.id,
@@ -111,12 +113,16 @@ const PREVIEW_ALL_OBJECT_IDS = [
   PREVIEW_ACT.id,
   PREVIEW_CHAPTER.id,
   PREVIEW_MANUSCRIPT_ID,
+  PREVIEW_TIMELINE_TRACK_ID,
+  PREVIEW_TIMELINE_EVENT_ID,
 ];
 
 const PREVIEW_CONTEXT_IDS = [
   PREVIEW_NESTED_ENTITY_ID,
   PREVIEW_CHAPTER.id,
   PREVIEW_MANUSCRIPT_ID,
+  PREVIEW_TIMELINE_TRACK_ID,
+  PREVIEW_TIMELINE_EVENT_ID,
 ];
 
 /**
@@ -345,11 +351,10 @@ export function buildModeSpecificData(
           objectIds: filteredIds.objectIds,
           contextObjectIds: filteredIds.contextObjectIds,
           currentTranslatedContents: [{
-            id: '[ placeholder-obj-id ]',
-            type: 'story_entity',
-            kind: 'character',
-            name: '[ Placeholder for object name ]',
-            translatedContent: '[ Placeholder for existing translation ]',
+            id: PREVIEW_TIMELINE_TRACK_ID,
+            type: 'timeline_track',
+            name: '[ Placeholder for timeline track name ]',
+            translatedContent: '[ Placeholder for existing timeline track translation ]',
           }],
           messages: [{
             id: '[ placeholder-msg-id ]',

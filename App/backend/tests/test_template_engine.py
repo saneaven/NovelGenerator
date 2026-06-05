@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from jinja2.sandbox import SecurityError
 
@@ -9,6 +12,15 @@ from App.backend.services.template_engine import (
     render_template,
     validate_template_source,
 )
+
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_default_fragment(name: str) -> str:
+    document = json.loads((ROOT / "App" / "backend" / "prompts" / "Default.nbprompt").read_text(encoding="utf-8"))
+    folder, fragment_name = name.split("/", 1)
+    return str(document["fragments"][folder][fragment_name]["content"])
 
 
 def _project_fixture() -> dict[str, object]:
@@ -329,6 +341,49 @@ def test_render_template_supports_with_plus_include() -> None:
     )
 
     assert rendered == "Lang=English, Ids=2"
+
+
+def test_default_translation_object_context_renders_timeline_content() -> None:
+    env = create_environment(fragment_map={"translation/objectContext": _load_default_fragment("translation/objectContext")})
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% with lang = "English", ids = ["track-child", "event-early"] %}'
+        '{% include "fragment:translation/objectContext" %}'
+        "{% endwith %}",
+        {"project": project},
+    )
+
+    assert '<timeline-track id="track-child" name="Child Track" parent-id="track-main" position="0">' in rendered
+    assert "<content>Child track content</content>" in rendered
+    assert '<event id="event-early" track-id="track-secondary" track="Secondary Track">' in rendered
+    assert "<content>Early event content</content>" in rendered
+    assert "<tag>seed</tag>" in rendered
+    assert '<timeline-track id="track-main"' not in rendered
+
+
+def test_default_translation_reference_context_renders_timeline_content() -> None:
+    env = create_environment(fragment_map={"translation/referenceContext": _load_default_fragment("translation/referenceContext")})
+    project = _project_fixture()
+
+    rendered = render_template(
+        env,
+        '{% include "fragment:translation/referenceContext" %}',
+        {
+            "project": project,
+            "translation": {
+                "targetLanguage": "English",
+                "contextObjectIds": ["track-child", "event-early"],
+            },
+        },
+    )
+
+    assert '<timeline-track id="track-child" name="Child Track" parent-id="track-main" position="0">' in rendered
+    assert "<content>Child track content</content>" in rendered
+    assert '<event id="event-early" track-id="track-secondary" track="Secondary Track">' in rendered
+    assert "<content>Early event content</content>" in rendered
+    assert "<tag>setup</tag>" in rendered
 
 
 def test_render_template_supports_select_object_context_helper() -> None:

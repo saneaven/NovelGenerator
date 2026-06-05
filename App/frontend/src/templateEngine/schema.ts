@@ -18,6 +18,7 @@ import {
   type PromptProjectOutlineNode,
   type PromptProjectOutline,
   type PromptProjectStoryEntity,
+  type PromptProjectTimeline,
   type PromptStoryEntityTreeNode,
 } from './projectShape';
 
@@ -63,6 +64,10 @@ export const UNIFIED_SCHEMA = {
     manuscripts: {
       desc: "All manuscripts array",
       example: PROJECT_SCHEMA_EXAMPLE.manuscripts as PromptProjectManuscript[],
+    },
+    timeline: {
+      desc: "Timeline tracks and events",
+      example: PROJECT_SCHEMA_EXAMPLE.timeline as PromptProjectTimeline,
     },
     contentByLang: {
       desc: "All language versions (keyed by language name)",
