@@ -11,6 +11,7 @@ import {
 import {
   canResumeThreadStatus,
 } from '../../types/thread';
+import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
 import type { ThreadStatus } from '../../types/thread';
 import ThreadMessageList from '../ThreadConversation/ThreadMessageList';
 import { TextButton } from '../TextButton';
@@ -59,6 +60,13 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     setFeedbackOpen(false);
     setFeedbackText('');
     setFooterActionInFlight(null);
+  }, [threadId]);
+
+  useEffect(() => {
+    const ctx = useThreadStore.getState().threadsById[threadId]?.latestRunContext ?? null;
+    if (ctx === null) {
+      void fetchAndReplaceThreadSnapshot(threadId);
+    }
   }, [threadId]);
 
   const journeyStatus = (storedThreadStatus ?? status) as ThreadStatus;
@@ -244,7 +252,7 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
                       <TextButton
                         variant="primary"
                         onClick={handleSendFeedback}
-                        disabled={!feedbackText.trim() || isSendBlocked}
+                        disabled={!feedbackText.trim() || isSendBlocked || latestRunContext === null}
                         loading={footerActionInFlight === 'feedback'}
                       >
                         Send
