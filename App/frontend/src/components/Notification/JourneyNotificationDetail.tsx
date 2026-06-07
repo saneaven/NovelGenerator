@@ -47,12 +47,14 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
     runtimeUnresolvedToolCallCount,
     pendingToolCallCount,
     latestRunContext,
+    streamActive,
   } = useThreadStore(
     useShallow((state) => ({
       storedThreadStatus: state.threadsById[threadId]?.status,
       runtimeUnresolvedToolCallCount: state.threadsById[threadId]?.unresolvedToolCallCount ?? 0,
       pendingToolCallCount: state.pendingToolCallIdsByThread[threadId]?.length ?? 0,
       latestRunContext: state.threadsById[threadId]?.latestRunContext ?? null,
+      streamActive: state.activeStreamByThread[threadId] ?? false,
     })),
   );
 
@@ -63,11 +65,15 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
   }, [threadId]);
 
   useEffect(() => {
-    const ctx = useThreadStore.getState().threadsById[threadId]?.latestRunContext ?? null;
-    if (ctx === null) {
+    const state = useThreadStore.getState();
+    const thread = state.threadsById[threadId];
+    const tStatus = thread?.status;
+    const isLive = tStatus === 'running' || tStatus === 'processing' || state.isThreadStreamActive(threadId);
+    if (isLive) return; // Never fetch a snapshot mid-stream; it would clobber the live stream.
+    if ((thread?.latestRunContext ?? null) === null) {
       void fetchAndReplaceThreadSnapshot(threadId);
     }
-  }, [threadId]);
+  }, [threadId, storedThreadStatus, streamActive]);
 
   const journeyStatus = (storedThreadStatus ?? status) as ThreadStatus;
   const statusText = formatNotificationStatusLabelFor('journey', journeyStatus as NotificationStatus);
