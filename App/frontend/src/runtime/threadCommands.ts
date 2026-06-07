@@ -7,6 +7,7 @@ import {
 import { useSettingsStore } from '../store/settingsStore';
 import { useThreadStore } from '../store/threadStore';
 import { nowIso, toThreadType, type LatestRunContext, type ThreadInfo, type ThreadStatus } from '../types/thread';
+import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
 
 interface ThreadContextParams {
@@ -69,6 +70,17 @@ function upsertThreadStatus(params: {
   };
 
   if (existing) {
+    // Guard against a stale command HTTP response regressing thread status.
+    // startRun/resumeRun return the run-creation snapshot (running/processing).
+    // If SSE has already advanced this same run to a settled state
+    // (waiting/done/...), do not let the late response overwrite it.
+    const sameRun = Boolean(params.runId && existing.latestRunId === params.runId);
+    const wouldRegressToLive = sameRun
+      && isNonLiveThreadStatus(existing.status)
+      && !isNonLiveThreadStatus(params.status);
+    if (wouldRegressToLive) {
+      return;
+    }
     store.patchThread(params.threadId, partial);
     return;
   }

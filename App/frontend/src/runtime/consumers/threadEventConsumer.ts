@@ -761,12 +761,23 @@ export class ThreadEventConsumer {
         console.debug('[AutoContinue] Resuming parent thread', { threadId, assistantId: latestAssistant.id, toolCallCount: toolCalls.length });
         const response = await threadService.resumeRun(threadId);
         this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
-        store.setThreadRuntime(threadId, {
-          status: response.threadStatus,
-          latestRunId: response.runId,
-          latestRunStatus: response.status,
-          updatedAt: nowIso(),
-        });
+        // Re-read fresh state: SSE may have advanced this resumed run while the
+        // resume HTTP call was in flight. Don't let the run-creation snapshot
+        // (running/processing) regress a status SSE already settled for the same run.
+        const current = useThreadStore.getState().threadsById[threadId];
+        const sameRun = Boolean(current && response.runId && current.latestRunId === response.runId);
+        const wouldRegressToLive = current != null
+          && sameRun
+          && isNonLiveThreadStatus(current.status)
+          && !isNonLiveThreadStatus(response.threadStatus);
+        store.setThreadRuntime(threadId, wouldRegressToLive
+          ? { latestRunId: response.runId, updatedAt: nowIso() }
+          : {
+              status: response.threadStatus,
+              latestRunId: response.runId,
+              latestRunStatus: response.status,
+              updatedAt: nowIso(),
+            });
       } catch (err) {
         console.error('[AutoContinue] Resume failed, will retry on next event', { threadId, error: err });
       } finally {
