@@ -91,6 +91,8 @@ class OllamaCloudProvider(AsyncOpenAIProvider):
         provider_settings: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict]:
         del provider_preference, model, provider_settings
+        if thinking_mode in {"off", "custom"}:
+            return {"reasoning_effort": "none"}
         if thinking_mode != "model" or not isinstance(thinking_config, dict):
             return None
         effort = thinking_config.get("effort")
@@ -110,6 +112,9 @@ class OllamaCloudProvider(AsyncOpenAIProvider):
         delta = choices[0].get("delta")
         if not isinstance(delta, dict):
             return chunk, []
+        reasoning = delta.get("reasoning")
+        if isinstance(reasoning, str) and "thinking" not in delta:
+            delta["thinking"] = {"text": reasoning}
         thinking = delta.get("thinking")
         if isinstance(thinking, str):
             delta["thinking"] = {"text": thinking}
@@ -138,4 +143,3 @@ class OllamaCloudProvider(AsyncOpenAIProvider):
 def create_provider(*, provider_config: dict[str, object], runtime_spec: object):
     del runtime_spec
     return OllamaCloudProvider(provider_config)
-

@@ -135,7 +135,7 @@ def test_ollama_cloud_request_uses_openai_base_url_and_reasoning_effort() -> Non
     assert request["tools"] == [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
 
 
-def test_ollama_cloud_request_omits_reasoning_when_not_model_thinking() -> None:
+def test_ollama_cloud_request_disables_native_reasoning_when_off() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
 
     request = provider._prepare_request_kwargs(
@@ -151,17 +151,29 @@ def test_ollama_cloud_request_omits_reasoning_when_not_model_thinking() -> None:
         provider_settings=None,
     )
 
-    assert "extra_body" not in request
+    assert request["extra_body"] == {"reasoning_effort": "none"}
 
 
-def test_ollama_cloud_string_thinking_delta_is_normalized_and_persisted() -> None:
+def test_ollama_cloud_request_disables_native_reasoning_for_custom_thinking() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
-    chunk, extra = provider._mutate_chunk(
-        {"choices": [{"delta": {"thinking": "checked path ", "content": "answer"}}]},
-        "model",
-    )
-    assert extra == []
 
+    request = provider._prepare_request_kwargs(
+        messages=[{"role": "user", "content": "hello"}],
+        model="qwen3",
+        temperature=0.7,
+        tools=None,
+        tool_choice=None,
+        max_tokens=None,
+        provider_preference=None,
+        thinking_config={"effort": "high"},
+        thinking_mode="custom",
+        provider_settings=None,
+    )
+
+    assert request["extra_body"] == {"reasoning_effort": "none"}
+
+
+def _persisted_reasoning_text_from_chunk(provider: OllamaCloudProvider, chunk: dict[str, Any]) -> str:
     assembler = FallbackSnapshotAssembler(provider="ollama_cloud", model="qwen3")
     for event in provider._chunk_to_events(chunk):
         if event.kind == "delta" and event.delta is not None:
@@ -176,7 +188,40 @@ def test_ollama_cloud_string_thinking_delta_is_normalized_and_persisted() -> Non
         "provider": "ollama_cloud",
         "thinking_display": "reasoning_text",
     }
-    assert reasoning["data"]["reasoning_text"] == "checked path "
+    return reasoning["data"]["reasoning_text"]
+
+
+def test_ollama_cloud_string_thinking_delta_is_normalized_and_persisted() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    chunk, extra = provider._mutate_chunk(
+        {"choices": [{"delta": {"thinking": "checked path ", "content": "answer"}}]},
+        "model",
+    )
+    assert extra == []
+
+    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "checked path "
+
+
+def test_ollama_cloud_reasoning_delta_is_normalized_and_persisted() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    chunk, extra = provider._mutate_chunk(
+        {"choices": [{"delta": {"reasoning": "checked route ", "content": "answer"}}]},
+        "model",
+    )
+    assert extra == []
+
+    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "checked route "
+
+
+def test_ollama_cloud_reasoning_delta_does_not_override_existing_thinking() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    chunk, extra = provider._mutate_chunk(
+        {"choices": [{"delta": {"reasoning": "ignored ", "thinking": "kept ", "content": "answer"}}]},
+        "model",
+    )
+    assert extra == []
+
+    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "kept "
 
 
 class _FakeResponse:

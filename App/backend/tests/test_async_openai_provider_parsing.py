@@ -7,10 +7,15 @@ import types
 if "openai" not in sys.modules:
     fake_openai = types.ModuleType("openai")
 
+    class _StubAsyncOpenAI:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
     class _StubOpenAIError(Exception):
         pass
 
-    fake_openai.AsyncOpenAI = object
+    fake_openai.AsyncOpenAI = _StubAsyncOpenAI
     fake_openai.OpenAIError = _StubOpenAIError
     fake_openai.APIConnectionError = _StubOpenAIError
     fake_openai.APIStatusError = _StubOpenAIError
