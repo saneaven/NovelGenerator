@@ -15,9 +15,9 @@ interface SubPageConfig {
 const SUB_PAGES: SubPageConfig[] = [
   { id: 'project-home', labelKey: 'unifiedWorkspace.subPages.projectHome', defaultLabel: 'Project Home', icon: <Home size="lg" /> },
   { id: 'story-entity', labelKey: 'unifiedWorkspace.subPages.storyEntities', defaultLabel: 'Story Entities', icon: <Folder size="lg" /> },
+  { id: 'timeline', labelKey: 'unifiedWorkspace.subPages.timeline', defaultLabel: 'Timeline', icon: <Timeline size="lg" /> },
   { id: 'outline-manager', labelKey: 'unifiedWorkspace.subPages.outlineManager', defaultLabel: 'Outline Manager', icon: <Clipboard size="lg" /> },
   { id: 'novel-editor', labelKey: 'unifiedWorkspace.subPages.novelEditor', defaultLabel: 'Novel Editor', icon: <Document size="lg" /> },
-  { id: 'timeline', labelKey: 'unifiedWorkspace.subPages.timeline', defaultLabel: 'Timeline', icon: <Timeline size="lg" /> },
   { id: 'config', labelKey: 'unifiedWorkspace.subPages.config', defaultLabel: 'Config', icon: <Configs size="lg" /> },
 ];
 
