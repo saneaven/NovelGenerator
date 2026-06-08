@@ -58,6 +58,7 @@ export function useTimelinePositioning(
   viewport: TimelineViewport,
   originBase: number,
   contentMaxBase: number,
+  gutterBase: number,
 ) {
   const units = calendar.units;
 
@@ -106,12 +107,15 @@ export function useTimelinePositioning(
     [dateToPixel],
   );
 
-  /** Total width of the canvas in pixels, sized to fit all content plus padding. */
+  /**
+   * Total width of the canvas in pixels: content span plus a symmetric right gutter (the
+   * left gutter already lives in originBase). Uses the same gutterBase as the scroll clamp's
+   * right bound so native drag-scroll and zoom-driven scroll stop at the same place.
+   */
   const canvasWidth = useMemo(() => {
-    const contentWidth = (contentMaxBase - originBase) / viewport.scale;
-    const padding = viewport.viewportWidth * 0.5;
-    return Math.max(contentWidth + padding, viewport.viewportWidth);
-  }, [contentMaxBase, originBase, viewport.scale, viewport.viewportWidth]);
+    const contentWidth = (contentMaxBase + gutterBase - originBase) / viewport.scale;
+    return Math.max(contentWidth, viewport.viewportWidth);
+  }, [contentMaxBase, gutterBase, originBase, viewport.scale, viewport.viewportWidth]);
 
   const rulerTicks = useMemo((): RulerTick[] => {
     if (units.length === 0) return [];

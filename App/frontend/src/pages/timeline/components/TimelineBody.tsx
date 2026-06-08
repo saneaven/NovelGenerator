@@ -71,11 +71,13 @@ const TimelineBody: React.FC<TimelineBodyProps> = ({
   }, [onSetViewportWidth]);
 
   // Re-anchor native scroll position after a zoom action. scrollOffset is the
-  // desired left-edge base position; convert to pixels for the current scale.
+  // desired left-edge base position; convert to pixels for the current scale and
+  // clamp into the scrollable range so a stale/over-range target can't cause a jump.
   useLayoutEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const targetLeft = (scrollOffset - originBase) / scale;
+    const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    const targetLeft = Math.min(maxLeft, Math.max(0, (scrollOffset - originBase) / scale));
     el.scrollLeft = targetLeft;
     if (rulerRef.current) {
       rulerRef.current.scrollLeft = targetLeft;
