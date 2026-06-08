@@ -80,14 +80,13 @@ const parseOpenAIModelId = (id: string): { series: string; version: string } | n
 // Capitalize first letter
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
-// Parse Ollama model tags: family[-variant][:tag]
-const parseOllamaModelId = (id: string): { family: string; variant?: string; tag?: string } | null => {
+// Parse Ollama model tags for grouping. Size tags stay on the model card itself.
+const parseOllamaModelId = (id: string): { family: string; variant?: string } | null => {
   const trimmed = id.trim();
   if (!trimmed) return null;
 
   const tagSeparator = trimmed.indexOf(':');
   const baseName = (tagSeparator >= 0 ? trimmed.slice(0, tagSeparator) : trimmed).trim();
-  const tag = tagSeparator >= 0 ? trimmed.slice(tagSeparator + 1).trim() : '';
   if (!baseName) return null;
 
   const variantSeparator = baseName.indexOf('-');
@@ -98,7 +97,6 @@ const parseOllamaModelId = (id: string): { family: string; variant?: string; tag
   return {
     family: capitalize(rawFamily),
     variant: variant || undefined,
-    tag: tag || undefined,
   };
 };
 
@@ -206,7 +204,7 @@ const sortOllamaTreeNode = (node: TreeNode) => {
   node.children.forEach(sortOllamaTreeNode);
 };
 
-// Build tree for Ollama tags: Family -> Variant? -> Tag? -> Models
+// Build tree for Ollama tags: Family -> Variant? -> Models
 const buildOllamaTree = (models: any[]): TreeNode[] => {
   const familyMap: Record<string, TreeNode> = {};
   const otherNode: TreeNode = { id: 'ollama-other', label: 'Other', type: 'family', children: [] };
@@ -243,14 +241,6 @@ const buildOllamaTree = (models: any[]): TreeNode[] => {
         `ollama-variant-${parts.family}-${parts.variant}`,
         parts.variant,
         'version',
-      );
-    }
-    if (parts.tag) {
-      parentNode = getOrCreateTreeChild(
-        parentNode,
-        `ollama-tag-${parts.family}-${parts.variant ?? ''}-${parts.tag}`,
-        parts.tag,
-        'grade',
       );
     }
 
