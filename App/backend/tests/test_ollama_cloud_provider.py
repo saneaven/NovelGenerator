@@ -226,6 +226,65 @@ def test_ollama_cloud_reasoning_delta_does_not_override_existing_thinking() -> N
     assert _persisted_reasoning_text_from_chunk(provider, chunk) == "kept "
 
 
+def test_ollama_cloud_reasoning_text_history_serializes_to_openai_reasoning() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "ollama_cloud",
+                    "meta": {
+                        "provider": "ollama_cloud",
+                        "thinking_display": "reasoning_text",
+                    },
+                    "data": {"reasoning_text": "checked path "},
+                    "token_count": 0,
+                },
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning": "checked path ",
+        }
+    ]
+
+
+def test_ollama_cloud_reasoning_text_history_ignores_non_ollama_detail() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "nanogpt",
+                    "meta": {
+                        "provider": "nanogpt",
+                        "thinking_display": "reasoning_text",
+                    },
+                    "data": {"reasoning_text": "not for ollama"},
+                    "token_count": 0,
+                },
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+        }
+    ]
+
+
 class _FakeResponse:
     def __init__(self, payload: dict[str, Any], status_code: int = 200, text: str = "") -> None:
         self._payload = payload

@@ -118,6 +118,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [activeGeneralTarget, setActiveGeneralTarget] = useState<GeneralConfigTarget>('general');
   const [activeSearchMemoryTarget, setActiveSearchMemoryTarget] = useState<SearchMemoryConfigTarget>('general');
   const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
+  const wasOpenRef = useRef(false);
   const [settingsSnapshot, setSettingsSnapshot] = useState<string>('');
   const [credentialsSnapshot, setCredentialsSnapshot] = useState<string>('');
   const localSettingsSnapshot = useMemo(() => JSON.stringify(localSettings), [localSettings]);
@@ -140,7 +141,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const isAdmin = Boolean(user?.is_admin);
 
   useEffect(() => {
-    if (isOpen) {
+    // Initialize only on the closed→open transition. Re-running this body while
+    // the modal stays open (e.g. when saving settings mutates the global settings
+    // store) would reset localCredentials to an empty draft mid-save, wiping the
+    // user's input and re-activating the Save button.
+    if (isOpen && !wasOpenRef.current) {
+      wasOpenRef.current = true;
       setLocalSettings(settings);
       setActiveGeneralTarget('general');
       setActiveSearchMemoryTarget('general');
@@ -163,6 +169,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         .then((resp) => setStoredProviders(Array.isArray(resp.providers) ? resp.providers : []))
         .catch(() => setStoredProviders([]));
       setToast(null);
+    } else if (!isOpen) {
+      wasOpenRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, loadProviderSpecs, settings]);

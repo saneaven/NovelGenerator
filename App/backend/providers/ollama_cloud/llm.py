@@ -78,6 +78,23 @@ class OllamaCloudProvider(AsyncOpenAIProvider):
             "token_count": 0,
         }
 
+    def _convert_assistant_reasoning_history(self, reasoning_detail: Dict[str, Any]) -> Dict[str, object]:
+        converted = super()._convert_assistant_reasoning_history(reasoning_detail)
+        if "reasoning" in converted:
+            return converted
+
+        reasoning_type = str(reasoning_detail.get("type") or "").strip()
+        meta = reasoning_detail.get("meta") if isinstance(reasoning_detail.get("meta"), dict) else {}
+        provider = str(meta.get("provider") or "").strip()
+        if reasoning_type != "ollama_cloud" and provider != "ollama_cloud":
+            return converted
+
+        data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+        reasoning_text = data.get("reasoning_text")
+        if isinstance(reasoning_text, str) and reasoning_text:
+            converted["reasoning"] = reasoning_text
+        return converted
+
     def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
         return "reasoning_text"
 

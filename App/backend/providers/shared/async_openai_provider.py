@@ -213,26 +213,33 @@ class AsyncOpenAIProvider(BaseProvider):
                 converted_msg["tool_calls"] = tool_calls
 
             if role == "assistant" and isinstance(reasoning_detail, dict):
-                reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
-                reasoning_meta = reasoning_detail.get("meta") if isinstance(reasoning_detail.get("meta"), dict) else {}
-                if isinstance(reasoning_data.get("reasoning"), str):
-                    converted_msg["reasoning"] = reasoning_data["reasoning"]
-
-                details = None
-                if isinstance(reasoning_data.get("reasoning_details"), list):
-                    details = reasoning_data["reasoning_details"]
-                elif isinstance(reasoning_data.get("details"), list):
-                    details = reasoning_data["details"]
-                if isinstance(details, list) and details:
-                    expected_format = reasoning_meta.get("openrouter_reasoning_format")
-                    if isinstance(expected_format, str) and expected_format.strip():
-                        details = [
-                            detail for detail in details
-                            if not isinstance(detail, dict) or detail.get("format") == expected_format
-                        ]
-                    converted_msg["reasoning_details"] = details
+                converted_msg.update(self._convert_assistant_reasoning_history(reasoning_detail))
 
             converted.append(converted_msg)
+
+        return converted
+
+    def _convert_assistant_reasoning_history(self, reasoning_detail: Dict[str, Any]) -> Dict[str, object]:
+        reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
+        reasoning_meta = reasoning_detail.get("meta") if isinstance(reasoning_detail.get("meta"), dict) else {}
+        converted: Dict[str, object] = {}
+
+        if isinstance(reasoning_data.get("reasoning"), str):
+            converted["reasoning"] = reasoning_data["reasoning"]
+
+        details = None
+        if isinstance(reasoning_data.get("reasoning_details"), list):
+            details = reasoning_data["reasoning_details"]
+        elif isinstance(reasoning_data.get("details"), list):
+            details = reasoning_data["details"]
+        if isinstance(details, list) and details:
+            expected_format = reasoning_meta.get("openrouter_reasoning_format")
+            if isinstance(expected_format, str) and expected_format.strip():
+                details = [
+                    detail for detail in details
+                    if not isinstance(detail, dict) or detail.get("format") == expected_format
+                ]
+            converted["reasoning_details"] = details
 
         return converted
 

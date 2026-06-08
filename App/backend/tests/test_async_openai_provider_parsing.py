@@ -82,6 +82,78 @@ from App.backend.providers.shared.parsing.fallback_snapshot_assembler import Fal
 from App.backend.services.reasoning.normalize import normalize_reasoning_detail
 
 
+class _TestOpenAIProvider(AsyncOpenAIProvider):
+    @property
+    def name(self) -> str:
+        return "test"
+
+    @property
+    def display_name(self) -> str:
+        return "Test"
+
+    def validate_config(self) -> bool:
+        return False
+
+
+def test_convert_messages_preserves_generic_reasoning_history() -> None:
+    provider = _TestOpenAIProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "openai",
+                    "data": {"reasoning": "stored reasoning"},
+                },
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning": "stored reasoning",
+        }
+    ]
+
+
+def test_convert_messages_filters_generic_reasoning_detail_history() -> None:
+    provider = _TestOpenAIProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "openrouter",
+                    "meta": {"openrouter_reasoning_format": "openai"},
+                    "data": {
+                        "details": [
+                            {"format": "openai", "text": "kept"},
+                            {"format": "anthropic", "text": "dropped"},
+                            {"text": "unformatted"},
+                        ],
+                    },
+                },
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning_details": [
+                {"format": "openai", "text": "kept"},
+            ],
+        }
+    ]
+
+
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:
     events = AsyncOpenAIProvider._chunk_to_events(
         {
