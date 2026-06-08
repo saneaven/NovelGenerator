@@ -185,6 +185,11 @@
   gap: var(--spacing-sm);
 }
 
+.workspace-config-journey-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .workspace-config-candidate-item {
   display: flex;
   align-items: center;

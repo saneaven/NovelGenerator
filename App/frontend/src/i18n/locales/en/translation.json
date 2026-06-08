@@ -1449,7 +1449,7 @@
       "errors": "errors: {{count}}",
       "lastIndexed": "Last indexed:",
       "refresh": "Refresh",
-      "reindex": "Reindex"
+      "reindex": "Sync index"
     },
     "projectExport": {
       "title": "Project Export (.nbproj)",

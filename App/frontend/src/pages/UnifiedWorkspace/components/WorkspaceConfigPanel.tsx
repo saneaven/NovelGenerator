@@ -634,7 +634,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         ) : journeys.length === 0 ? (
           <div className="workspace-config-empty">{t('workspaceConfig.journeys.empty')}</div>
         ) : (
-          <ul className="workspace-config-candidate-list">
+          <ul className="workspace-config-candidate-list workspace-config-journey-list">
             {journeys.map((journey) => {
               const canResume = canResumeThreadStatus(journey.status);
               const canCancel = canCancelThreadStatus(journey.status);

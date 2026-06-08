@@ -481,7 +481,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
       </div>
 
       <div ref={scrollContainerRef} className="editor-content-wrapper">
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} className="editor-content-inner" />
       </div>
     </div>
   );

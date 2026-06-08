@@ -1449,7 +1449,7 @@
       "errors": "errors: {{count}}",
       "lastIndexed": "Last indexed:",
       "refresh": "Refresh",
-      "reindex": "Reindex"
+      "reindex": "인덱스 동기화"
     },
     "projectExport": {
       "title": "프로젝트 내보내기 (.nbproj)",
