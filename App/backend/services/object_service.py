@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import asyncio
-import logging
 from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import event, func, and_
+from sqlalchemy import func, and_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from ..database import SessionLocal
 from ..models.db_models import (
     Asset,
     BasicInfo,
@@ -37,7 +33,6 @@ from ..services.deletion_service import (
     delete_object_versions_bulk,
     delete_semantic_sources_bulk,
 )
-from ..services.semantic_index_service import index_object, invalidate_object_index
 from ..utils.timeline_calendar import default_calendar
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
@@ -63,6 +58,10 @@ from .outline_service import (
 )
 from .asset_change_events import queue_scene_assets_change
 from .object_change_events import queue_object_change
+from .semantic_index_queue import (
+    invalidate_semantic_index as _invalidate_semantic_index,
+    queue_semantic_index as _queue_semantic_index,
+)
 from .story_entity_tree_service import (
     collect_descendant_folder_ids,
     collect_descendant_story_entity_ids,
@@ -74,8 +73,6 @@ from .story_entity_tree_service import (
     normalize_story_entity_parent,
 )
 from .timeline_service import _move_track, _sanitize_tags, _validate_event_dates, timeline_service
-from .credential_service import CredentialServiceError, credential_service
-from .settings_service import settings_service
 from .storage_usage_service import (
     apply_project_usage_delta,
     apply_project_usage_deltas,
@@ -103,127 +100,6 @@ from .object_version_language_service import (
     upsert_version_language,
     versions_desc_with_languages,
 )
-
-_PENDING_SEMANTIC_OPS_KEY = "_pending_semantic_ops"
-_SEMANTIC_EXCLUDED_TYPES = {"basic_info", "guidelines", STORY_ENTITY_FOLDER_TYPE}
-logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class _PendingSemanticOp:
-    user_id: UUID
-    project_id: UUID
-    object_type: str
-    object_id: UUID
-
-
-def _queue_semantic_index(
-    db: Session,
-    *,
-    user_id: UUID | None,
-    project_id: UUID,
-    object_type: str,
-    object_id: UUID,
-) -> None:
-    if user_id is None:
-        return
-    if object_type in _SEMANTIC_EXCLUDED_TYPES:
-        return
-    pending = db.info.setdefault(_PENDING_SEMANTIC_OPS_KEY, [])
-    op = _PendingSemanticOp(
-        user_id=user_id,
-        project_id=project_id,
-        object_type=object_type,
-        object_id=object_id,
-    )
-    if op not in pending:
-        pending.append(op)
-
-
-def _invalidate_semantic_index(
-    db: Session,
-    *,
-    user_id: UUID | None,
-    project_id: UUID,
-    object_type: str,
-    object_id: UUID,
-) -> None:
-    if user_id is None:
-        return
-    if object_type in _SEMANTIC_EXCLUDED_TYPES:
-        return
-    invalidate_object_index(
-        db,
-        user_id=user_id,
-        project_id=project_id,
-        object_type=object_type,
-        object_id=object_id,
-    )
-
-
-_SEMANTIC_SEMAPHORE = asyncio.Semaphore(3)
-
-
-async def _process_pending_semantic_op(op: _PendingSemanticOp) -> None:
-    async with _SEMANTIC_SEMAPHORE:
-        await _process_pending_semantic_op_inner(op)
-
-
-async def _process_pending_semantic_op_inner(op: _PendingSemanticOp) -> None:
-    db = SessionLocal()
-    try:
-        if not settings_service.is_vector_storage_enabled(db, op.user_id):
-            return
-
-        embedding_cfg = settings_service.get_search_embedding_config(db, op.user_id)
-        if not embedding_cfg.provider or not embedding_cfg.model:
-            return
-
-        try:
-            provider_config = credential_service.get_provider_config(db, op.user_id, embedding_cfg.provider)
-        except CredentialServiceError:
-            return
-
-        await index_object(
-            db,
-            user_id=op.user_id,
-            project_id=op.project_id,
-            object_type=op.object_type,
-            object_id=op.object_id,
-            provider_config=provider_config,
-            force=False,
-        )
-    except Exception:
-        logger.exception(
-            "Semantic indexing hook failed for %s/%s",
-            op.object_type,
-            op.object_id,
-        )
-    finally:
-        db.close()
-
-
-@event.listens_for(Session, "after_commit")
-def _dispatch_pending_semantic_ops(session: Session) -> None:
-    pending = session.info.pop(_PENDING_SEMANTIC_OPS_KEY, None)
-    if not pending:
-        return
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        logger.warning("Skipping queued semantic indexing hooks: no running event loop")
-        return
-
-    unique_ops = list(dict.fromkeys(pending))
-    for op in unique_ops:
-        loop.create_task(_process_pending_semantic_op(op))
-
-
-@event.listens_for(Session, "after_rollback")
-def _clear_pending_semantic_ops(session: Session) -> None:
-    session.info.pop(_PENDING_SEMANTIC_OPS_KEY, None)
-
 
 def _resolve_project_user_id(db: Session, *, project_id: UUID) -> UUID:
     owner_id = db.query(Project.user_id).filter(Project.id == project_id).scalar()

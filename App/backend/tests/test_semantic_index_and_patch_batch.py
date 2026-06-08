@@ -122,6 +122,114 @@ def _payload(hash_value: str) -> semantic_index_service.CurrentPayload:
     )
 
 
+class FakeProjectRefsQuery:
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = list(rows)
+
+    def join(self, *_args: object, **_kwargs: object) -> "FakeProjectRefsQuery":
+        return self
+
+    def filter(self, *_args: object, **_kwargs: object) -> "FakeProjectRefsQuery":
+        return self
+
+    def order_by(self, *_args: object, **_kwargs: object) -> "FakeProjectRefsQuery":
+        return self
+
+    def all(self) -> list[object]:
+        return list(self._rows)
+
+
+class FakeProjectRefsSession:
+    def __init__(self, rows_by_model: dict[object, list[object]]) -> None:
+        self._rows_by_model = rows_by_model
+
+    def query(self, model: object) -> FakeProjectRefsQuery:
+        return FakeProjectRefsQuery(self._rows_by_model.get(model, []))
+
+
+def test_extract_index_text_timeline_objects_are_body_only() -> None:
+    content_tree = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Only this timeline body is indexed."}],
+            }
+        ],
+    }
+    version_data = {
+        "English": {
+            "name": "Do not index this title",
+            "description": "Do not index this summary",
+            "content": content_tree,
+        }
+    }
+
+    assert semantic_index_service.extract_index_text("timeline_track", version_data, "English") == {
+        "content": "Only this timeline body is indexed."
+    }
+    assert semantic_index_service.extract_index_text("timeline_event", version_data, "English") == {
+        "content": "Only this timeline body is indexed."
+    }
+
+
+def test_project_object_refs_include_timeline_tracks_and_date_sorted_events() -> None:
+    project_id = uuid4()
+    story_id = uuid4()
+    outline_id = uuid4()
+    manuscript_id = uuid4()
+    timeline_id = uuid4()
+    track_id = uuid4()
+    later_event_id = uuid4()
+    earlier_event_id = uuid4()
+
+    timeline = SimpleNamespace(
+        id=timeline_id,
+        project_id=project_id,
+        calendar={"units": [{"name": "year", "label": "Year"}]},
+    )
+    track = SimpleNamespace(
+        id=track_id,
+        timeline_id=timeline_id,
+        parent_id=None,
+        position=0,
+        created_at=datetime(2026, 1, 1),
+    )
+    later_event = SimpleNamespace(
+        id=later_event_id,
+        track_id=track_id,
+        start_date={"year": 3},
+        end_date=None,
+        created_at=datetime(2026, 1, 3),
+    )
+    earlier_event = SimpleNamespace(
+        id=earlier_event_id,
+        track_id=track_id,
+        start_date={"year": 1},
+        end_date=None,
+        created_at=datetime(2026, 1, 4),
+    )
+    db = FakeProjectRefsSession(
+        {
+            semantic_index_service.StoryEntity: [SimpleNamespace(id=story_id)],
+            semantic_index_service.Outline: [SimpleNamespace(id=outline_id)],
+            semantic_index_service.Manuscript: [SimpleNamespace(id=manuscript_id, chapter_id=outline_id)],
+            semantic_index_service.Timeline: [timeline],
+            semantic_index_service.TimelineTrack: [track],
+            semantic_index_service.TimelineEvent: [later_event, earlier_event],
+        }
+    )
+
+    assert semantic_index_service._project_object_refs(db, project_id=project_id) == [
+        ("story_entity", story_id),
+        ("outline", outline_id),
+        ("manuscript", manuscript_id),
+        ("timeline_track", track_id),
+        ("timeline_event", earlier_event_id),
+        ("timeline_event", later_event_id),
+    ]
+
+
 def test_index_object_commits_before_embedding(monkeypatch) -> None:
     db = FakeSemanticSession()
     source = SimpleNamespace(
@@ -154,7 +262,11 @@ def test_index_object_commits_before_embedding(monkeypatch) -> None:
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
     monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        semantic_index_service,
+        "_latest_version_with_language",
+        lambda *_args, **_kwargs: (SimpleNamespace(id=uuid4()), SimpleNamespace(data={})),
+    )
     monkeypatch.setattr(
         semantic_index_service,
         "_build_current_payload",
@@ -207,7 +319,11 @@ def test_index_object_returns_stale_when_payload_changes_before_apply(monkeypatc
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
     monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        semantic_index_service,
+        "_latest_version_with_language",
+        lambda *_args, **_kwargs: (SimpleNamespace(id=uuid4()), SimpleNamespace(data={})),
+    )
     monkeypatch.setattr(
         semantic_index_service,
         "_build_current_payload",
@@ -258,7 +374,11 @@ def test_index_object_skips_missing_main_language_without_embedding(monkeypatch)
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
     monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        semantic_index_service,
+        "_latest_version_with_language",
+        lambda *_args, **_kwargs: (SimpleNamespace(id=uuid4()), SimpleNamespace(data={})),
+    )
     monkeypatch.setattr(
         semantic_index_service,
         "_build_current_payload",
@@ -308,7 +428,11 @@ def test_index_object_records_error_when_embedding_raises(monkeypatch) -> None:
         lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": None},
     )
     monkeypatch.setattr(semantic_index_service, "get_main_language", lambda *_args, **_kwargs: "English")
-    monkeypatch.setattr(semantic_index_service, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace(data={}))
+    monkeypatch.setattr(
+        semantic_index_service,
+        "_latest_version_with_language",
+        lambda *_args, **_kwargs: (SimpleNamespace(id=uuid4()), SimpleNamespace(data={})),
+    )
     monkeypatch.setattr(
         semantic_index_service,
         "_build_current_payload",
@@ -455,6 +579,73 @@ def test_get_project_status_counts_project_refs_not_existing_rows(monkeypatch) -
     assert status["last_indexed_at"] == datetime(2026, 1, 3).isoformat()
 
 
+def test_reindex_project_indexes_timeline_refs_and_preserves_existing_timeline_sources(monkeypatch) -> None:
+    user_id = uuid4()
+    project_id = uuid4()
+    track_id = uuid4()
+    event_id = uuid4()
+    removed_id = uuid4()
+    refs = [("timeline_track", track_id), ("timeline_event", event_id)]
+    existing_timeline_source = SimpleNamespace(object_type="timeline_track", object_id=track_id)
+    removed_source = SimpleNamespace(object_type="story_entity", object_id=removed_id)
+
+    class FakeSemanticSourceQuery:
+        def filter(self, *_args: object, **_kwargs: object) -> "FakeSemanticSourceQuery":
+            return self
+
+        def all(self) -> list[object]:
+            return [existing_timeline_source, removed_source]
+
+    class FakeReindexSession:
+        def __init__(self) -> None:
+            self.deleted: list[object] = []
+            self.flush_calls = 0
+
+        def query(self, model: object) -> FakeSemanticSourceQuery:
+            assert model is semantic_index_service.SemanticSource
+            return FakeSemanticSourceQuery()
+
+        def delete(self, source: object) -> None:
+            self.deleted.append(source)
+
+        def flush(self) -> None:
+            self.flush_calls += 1
+
+    indexed_refs: list[tuple[str, object]] = []
+
+    async def _fake_index_object(_db, *, object_type, object_id, **_kwargs):
+        indexed_refs.append((object_type, object_id))
+        return {"rebuilt": True, "skipped": False, "missing_main_language": False}
+
+    monkeypatch.setattr(
+        semantic_index_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed", "dimensions": 2},
+    )
+    monkeypatch.setattr(semantic_index_service, "_project_object_refs", lambda *_args, **_kwargs: refs)
+    monkeypatch.setattr(semantic_index_service, "index_object", _fake_index_object)
+
+    db = FakeReindexSession()
+    summary = asyncio.run(
+        semantic_index_service.reindex_project(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            provider_config={"api_key": "x"},
+        )
+    )
+
+    assert indexed_refs == refs
+    assert db.deleted == [removed_source]
+    assert db.flush_calls == 1
+    assert summary == {
+        "indexed_sources": 2,
+        "rebuilt_sources": 2,
+        "skipped_sources": 0,
+        "missing_main_language_sources": 0,
+    }
+
+
 class FakeNestedSession:
     def __init__(self) -> None:
         self.begin_nested_calls = 0
@@ -565,4 +756,4 @@ def test_thread_routes_marks_processing_tool_calls_failed_after_flush_errors() -
     backend_root = Path(__file__).resolve().parents[1]
     routes_text = (backend_root / "routes" / "thread_routes.py").read_text(encoding="utf-8")
 
-    assert 'tc.status in {"applied", "processing"}' in routes_text
+    assert 'failed_row.status in {"processing", "working"}' in routes_text

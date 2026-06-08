@@ -19,6 +19,7 @@ from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..services.deletion_service import delete_object_versions_bulk, delete_semantic_sources_bulk
 from ..services.object_change_events import queue_object_change
 from ..services.ownership import resolve_project_id_for_object
+from ..services.semantic_index_queue import invalidate_semantic_index, queue_semantic_index
 from ..services.storage_usage_service import (
     build_object_version_delta,
     build_story_core_delta,
@@ -816,6 +817,13 @@ class TimelineService:
             create_new_version=True,
         )
 
+        queue_semantic_index(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            object_type=TIMELINE_TRACK_TYPE,
+            object_id=track.id,
+        )
         queue_object_change(
             db,
             user_id=user_id,
@@ -922,6 +930,21 @@ class TimelineService:
             enforce_quota=True,
         )
 
+        if content is not _UNSET:
+            invalidate_semantic_index(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                object_type=TIMELINE_TRACK_TYPE,
+                object_id=track.id,
+            )
+            queue_semantic_index(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                object_type=TIMELINE_TRACK_TYPE,
+                object_id=track.id,
+            )
         queue_object_change(
             db,
             user_id=user_id,
@@ -1118,6 +1141,13 @@ class TimelineService:
             create_new_version=True,
         )
 
+        queue_semantic_index(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            object_type=TIMELINE_EVENT_TYPE,
+            object_id=event.id,
+        )
         queue_object_change(
             db,
             user_id=user_id,
@@ -1251,6 +1281,21 @@ class TimelineService:
             enforce_quota=True,
         )
 
+        if content is not _UNSET:
+            invalidate_semantic_index(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                object_type=TIMELINE_EVENT_TYPE,
+                object_id=event.id,
+            )
+            queue_semantic_index(
+                db,
+                user_id=user_id,
+                project_id=project_id,
+                object_type=TIMELINE_EVENT_TYPE,
+                object_id=event.id,
+            )
         queue_object_change(
             db,
             user_id=user_id,

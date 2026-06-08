@@ -82,6 +82,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 import App.backend.services.object_service as object_service_module
+import App.backend.services.timeline_service as timeline_service_module
 from App.backend.models.db_models import RichTextImageRef
 
 
@@ -137,6 +138,22 @@ class FakeCreateSession:
 
     def flush(self) -> None:
         return None
+
+
+class FakeTimelineSession:
+    def __init__(self, rows_by_model: dict[object, object | None] | None = None) -> None:
+        self.rows_by_model = rows_by_model or {}
+        self.added: list[object] = []
+        self.flush_calls = 0
+
+    def query(self, model: object) -> FakeFirstQuery:
+        return FakeFirstQuery(self.rows_by_model.get(model))
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    def flush(self) -> None:
+        self.flush_calls += 1
 
 
 def test_update_object_manuscript_path_uses_rich_text_image_refs(monkeypatch) -> None:
@@ -577,3 +594,243 @@ def test_timeline_event_metadata_update_changes_track_dates_and_tags(monkeypatch
         }
     ]
     assert flush_calls == [True]
+
+
+def _patch_timeline_write_side_effects(monkeypatch, *, serialize_event: bool = False) -> None:
+    monkeypatch.setattr(timeline_service_module, "_insert_track_position", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        timeline_service_module,
+        "_create_or_update_version",
+        lambda *_args, **_kwargs: SimpleNamespace(id=uuid4()),
+    )
+    monkeypatch.setattr(timeline_service_module, "_latest_version", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        timeline_service_module,
+        "latest_payload_with_fallback",
+        lambda *_args, **_kwargs: (SimpleNamespace(), SimpleNamespace(data={"name": "Old", "description": "Old", "content": ""})),
+    )
+    monkeypatch.setattr(timeline_service_module, "_version_entry_for_parent", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "_latest_versions_map", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(timeline_service_module, "snapshot_story_core_row", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "snapshot_object_version_row", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "build_story_core_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "build_object_version_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "queue_object_change", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "_normalize_rich_value", lambda value, **_kwargs: value)
+    if serialize_event:
+        monkeypatch.setattr(timeline_service_module, "_serialize_event", lambda event, **_kwargs: {"id": str(event.id)})
+    else:
+        monkeypatch.setattr(timeline_service_module, "_serialize_track_tree", lambda track, **_kwargs: {"id": str(track.id)})
+
+
+def test_timeline_track_create_and_content_update_queue_semantic_index(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    timeline = SimpleNamespace(id=uuid4(), project_id=project_id)
+    queued: list[dict[str, object]] = []
+    invalidated: list[dict[str, object]] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch)
+    monkeypatch.setattr(service, "get_or_create_timeline", lambda *_args, **_kwargs: timeline)
+    monkeypatch.setattr(timeline_service_module, "queue_semantic_index", lambda *_args, **kwargs: queued.append(kwargs))
+    monkeypatch.setattr(timeline_service_module, "invalidate_semantic_index", lambda *_args, **kwargs: invalidated.append(kwargs))
+
+    create_db = FakeTimelineSession()
+    create_result = service.create_track(
+        create_db,
+        project_id=project_id,
+        language="English",
+        name="Track",
+        description="Summary",
+        content="Track body",
+        parent_id=None,
+        position=None,
+        color=None,
+        user_request="test",
+        user_id=user_id,
+    )
+    created_track_id = create_db.added[0].id
+    assert create_result == {"id": str(created_track_id)}
+    assert queued == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "timeline_track",
+            "object_id": created_track_id,
+        }
+    ]
+    assert invalidated == []
+
+    track = SimpleNamespace(id=uuid4(), timeline_id=timeline.id, color=None)
+    monkeypatch.setattr(timeline_service_module, "_track_query", lambda *_args, **_kwargs: FakeFirstQuery(track))
+
+    service.update_track(
+        FakeTimelineSession(),
+        project_id=project_id,
+        track_id=track.id,
+        language="English",
+        name=None,
+        description=None,
+        content="Updated body",
+        user_request="test",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert invalidated == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "timeline_track",
+            "object_id": track.id,
+        }
+    ]
+    assert queued[-1] == {
+        "user_id": user_id,
+        "project_id": project_id,
+        "object_type": "timeline_track",
+        "object_id": track.id,
+    }
+
+
+def test_timeline_track_metadata_only_update_does_not_queue_semantic_index(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4(), color=None)
+    queued: list[dict[str, object]] = []
+    invalidated: list[dict[str, object]] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch)
+    monkeypatch.setattr(timeline_service_module, "_track_query", lambda *_args, **_kwargs: FakeFirstQuery(track))
+    monkeypatch.setattr(timeline_service_module, "queue_semantic_index", lambda *_args, **kwargs: queued.append(kwargs))
+    monkeypatch.setattr(timeline_service_module, "invalidate_semantic_index", lambda *_args, **kwargs: invalidated.append(kwargs))
+
+    service.update_track(
+        FakeTimelineSession(),
+        project_id=project_id,
+        track_id=track.id,
+        language=None,
+        name=None,
+        description=None,
+        color="#112233",
+        user_request="test",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert track.color == "#112233"
+    assert queued == []
+    assert invalidated == []
+
+
+def test_timeline_event_create_and_content_update_queue_semantic_index(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4())
+    timeline = SimpleNamespace(id=track.timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    queued: list[dict[str, object]] = []
+    invalidated: list[dict[str, object]] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch, serialize_event=True)
+    monkeypatch.setattr(timeline_service_module, "_track_query", lambda *_args, **_kwargs: FakeFirstQuery(track))
+    monkeypatch.setattr(timeline_service_module, "queue_semantic_index", lambda *_args, **kwargs: queued.append(kwargs))
+    monkeypatch.setattr(timeline_service_module, "invalidate_semantic_index", lambda *_args, **kwargs: invalidated.append(kwargs))
+
+    create_db = FakeTimelineSession({timeline_service_module.Timeline: timeline})
+    create_result = service.create_event(
+        create_db,
+        project_id=project_id,
+        track_id=track.id,
+        language="English",
+        name="Event",
+        description="Summary",
+        content="Event body",
+        start_date={"year": 1},
+        end_date=None,
+        tags=[],
+        user_request="test",
+        user_id=user_id,
+    )
+    created_event_id = create_db.added[0].id
+    assert create_result == {"id": str(created_event_id)}
+    assert queued == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "timeline_event",
+            "object_id": created_event_id,
+        }
+    ]
+    assert invalidated == []
+
+    event = SimpleNamespace(id=uuid4(), track_id=track.id, start_date={"year": 1}, end_date=None, tags=[], links=[])
+    monkeypatch.setattr(timeline_service_module, "_event_query", lambda *_args, **_kwargs: FakeFirstQuery(event))
+
+    service.update_event(
+        FakeTimelineSession({timeline_service_module.TimelineTrack: track, timeline_service_module.Timeline: timeline}),
+        project_id=project_id,
+        event_id=event.id,
+        track_id=None,
+        language="English",
+        name=None,
+        description=None,
+        content="Updated event body",
+        user_request="test",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert invalidated == [
+        {
+            "user_id": user_id,
+            "project_id": project_id,
+            "object_type": "timeline_event",
+            "object_id": event.id,
+        }
+    ]
+    assert queued[-1] == {
+        "user_id": user_id,
+        "project_id": project_id,
+        "object_type": "timeline_event",
+        "object_id": event.id,
+    }
+
+
+def test_timeline_event_metadata_only_update_does_not_queue_semantic_index(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4())
+    timeline = SimpleNamespace(id=track.timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    event = SimpleNamespace(id=uuid4(), track_id=track.id, start_date={"year": 1}, end_date=None, tags=[], links=[])
+    queued: list[dict[str, object]] = []
+    invalidated: list[dict[str, object]] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch, serialize_event=True)
+    monkeypatch.setattr(timeline_service_module, "_event_query", lambda *_args, **_kwargs: FakeFirstQuery(event))
+    monkeypatch.setattr(timeline_service_module, "queue_semantic_index", lambda *_args, **kwargs: queued.append(kwargs))
+    monkeypatch.setattr(timeline_service_module, "invalidate_semantic_index", lambda *_args, **kwargs: invalidated.append(kwargs))
+
+    service.update_event(
+        FakeTimelineSession({timeline_service_module.TimelineTrack: track, timeline_service_module.Timeline: timeline}),
+        project_id=project_id,
+        event_id=event.id,
+        track_id=None,
+        language=None,
+        name=None,
+        description=None,
+        start_date={"year": 2},
+        tags=["battle"],
+        user_request="test",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert event.start_date == {"year": 2}
+    assert event.tags == ["battle"]
+    assert queued == []
+    assert invalidated == []

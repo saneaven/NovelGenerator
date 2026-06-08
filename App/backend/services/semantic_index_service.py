@@ -14,11 +14,15 @@ from ..models.db_models import (
     Manuscript,
     Outline,
     StoryEntity,
+    Timeline,
+    TimelineEvent,
+    TimelineTrack,
     UserSettings,
 )
 from ..models.semantic_models import SemanticChunk, SemanticSource
 from ..models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ..utils.story_entities import STORY_ENTITY_TYPE
+from ..utils.timeline_calendar import default_calendar, to_base_units
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .semantic_chunker import merge_blocks_by_length, split_markdown_blocks, split_plaintext_blocks
 from .semantic_embedding_service import embed_many
@@ -244,6 +248,15 @@ def _latest_versions_for_refs(
         key: payload_by_version_id.get(version.id, {})
         for key, version in latest_versions.items()
     }
+
+
+def _timeline_date_sort_value(date_value: Any, calendar: dict[str, Any]) -> int:
+    if not isinstance(date_value, dict):
+        return 0
+    try:
+        return to_base_units(date_value, calendar)
+    except ValueError:
+        return 0
 
 
 def compute_order_meta(db: Session, *, project_id: UUID, object_type: str, object_id: UUID) -> OrderMeta:
@@ -796,6 +809,56 @@ def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UU
         manuscript = manuscripts_by_chapter.get(outline.id)
         if manuscript is not None:
             refs.append(("manuscript", manuscript.id))
+
+    timelines = db.query(Timeline).filter(Timeline.project_id == project_id).all()
+    timeline_by_id = {timeline.id: timeline for timeline in timelines if isinstance(timeline.id, UUID)}
+
+    timeline_tracks = (
+        db.query(TimelineTrack)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .order_by(
+            TimelineTrack.timeline_id.asc(),
+            TimelineTrack.parent_id.asc().nullsfirst(),
+            TimelineTrack.position.asc(),
+            TimelineTrack.created_at.asc(),
+            TimelineTrack.id.asc(),
+        )
+        .all()
+    )
+    for track in timeline_tracks:
+        refs.append(("timeline_track", track.id))
+
+    track_by_id = {track.id: track for track in timeline_tracks}
+    track_order = {track.id: index for index, track in enumerate(timeline_tracks)}
+    timeline_events = (
+        db.query(TimelineEvent)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(Timeline.project_id == project_id)
+        .all()
+    )
+
+    def event_sort_key(event: TimelineEvent) -> tuple[int, int, int, str, str]:
+        track = track_by_id.get(event.track_id)
+        timeline = timeline_by_id.get(track.timeline_id) if track is not None else None
+        calendar = timeline.calendar if timeline is not None and isinstance(timeline.calendar, dict) else default_calendar()
+        start_value = _timeline_date_sort_value(event.start_date, calendar)
+        end_value = (
+            _timeline_date_sort_value(event.end_date, calendar)
+            if isinstance(event.end_date, dict)
+            else start_value
+        )
+        return (
+            int(track_order.get(event.track_id, len(track_order))),
+            start_value,
+            end_value,
+            event.created_at.isoformat() if event.created_at else "",
+            str(event.id),
+        )
+
+    for event in sorted(timeline_events, key=event_sort_key):
+        refs.append(("timeline_event", event.id))
 
     return refs
 
