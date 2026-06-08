@@ -22,8 +22,8 @@ SPEC = ProviderSpec(
         description_key="settings.taskConfig.providerDescriptions.ollamaCloud",
         llm_order=55,
         embedding_order=35,
-        model_browser_grouping_llm="provider_family",
-        model_browser_grouping_embedding="provider_family",
+        model_browser_grouping_llm="ollama_tag_family",
+        model_browser_grouping_embedding="ollama_tag_family",
     ),
     credentials=ObjectSpec(fields={
         "api_key": FieldSpec(

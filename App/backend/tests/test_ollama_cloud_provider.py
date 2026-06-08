@@ -83,6 +83,8 @@ def test_ollama_cloud_provider_is_registered_and_projects_specs() -> None:
     assert spec.llm is not None
     assert spec.embedding is not None
     assert spec.ui.display_name_key == "settings.credentials.ollamaCloud.title"
+    assert spec.ui.model_browser_grouping_llm == "ollama_tag_family"
+    assert spec.ui.model_browser_grouping_embedding == "ollama_tag_family"
 
 
 def test_ollama_cloud_credentials_normalize_to_api_key_only() -> None:

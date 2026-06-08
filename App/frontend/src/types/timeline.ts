@@ -64,8 +64,8 @@ export interface FullTimeline {
 }
 
 export const TIMELINE_OBJECT_TYPE_CONFIG: Record<TimelineObjectType, { label: string; order: number }> = {
-  timeline_track: { label: 'Timeline Track', order: 5.4 },
-  timeline_event: { label: 'Timeline Event', order: 5.5 },
+  timeline_track: { label: 'Timeline Track', order: 1.4 },
+  timeline_event: { label: 'Timeline Event', order: 1.5 },
 };
 
 export function isTimelineObjectType(type: string): type is TimelineObjectType {

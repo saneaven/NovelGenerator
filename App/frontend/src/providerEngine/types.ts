@@ -131,8 +131,8 @@ export interface PublicProviderUI {
   llm_order?: number | null;
   embedding_order?: number | null;
   image_order?: number | null;
-  model_browser_grouping_llm: 'flat' | 'openai_series' | 'gemini_family' | 'provider_family';
-  model_browser_grouping_embedding: 'flat' | 'provider_family';
+  model_browser_grouping_llm: 'flat' | 'openai_series' | 'gemini_family' | 'provider_family' | 'ollama_tag_family';
+  model_browser_grouping_embedding: 'flat' | 'provider_family' | 'ollama_tag_family';
   llm_show_architecture: boolean;
   llm_show_pricing: boolean;
   llm_show_endpoints: boolean;

@@ -185,8 +185,14 @@ class ProviderUI:
     llm_order: int | None = None
     embedding_order: int | None = None
     image_order: int | None = None
-    model_browser_grouping_llm: Literal["flat", "openai_series", "gemini_family", "provider_family"] = "flat"
-    model_browser_grouping_embedding: Literal["flat", "provider_family"] = "flat"
+    model_browser_grouping_llm: Literal[
+        "flat",
+        "openai_series",
+        "gemini_family",
+        "provider_family",
+        "ollama_tag_family",
+    ] = "flat"
+    model_browser_grouping_embedding: Literal["flat", "provider_family", "ollama_tag_family"] = "flat"
     llm_show_architecture: bool = False
     llm_show_pricing: bool = False
     llm_show_endpoints: bool = False

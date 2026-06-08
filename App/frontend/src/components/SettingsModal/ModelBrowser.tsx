@@ -80,6 +80,28 @@ const parseOpenAIModelId = (id: string): { series: string; version: string } | n
 // Capitalize first letter
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Parse Ollama model tags: family[-variant][:tag]
+const parseOllamaModelId = (id: string): { family: string; variant?: string; tag?: string } | null => {
+  const trimmed = id.trim();
+  if (!trimmed) return null;
+
+  const tagSeparator = trimmed.indexOf(':');
+  const baseName = (tagSeparator >= 0 ? trimmed.slice(0, tagSeparator) : trimmed).trim();
+  const tag = tagSeparator >= 0 ? trimmed.slice(tagSeparator + 1).trim() : '';
+  if (!baseName) return null;
+
+  const variantSeparator = baseName.indexOf('-');
+  const rawFamily = (variantSeparator >= 0 ? baseName.slice(0, variantSeparator) : baseName).trim();
+  const variant = variantSeparator >= 0 ? baseName.slice(variantSeparator + 1).trim() : '';
+  if (!rawFamily) return null;
+
+  return {
+    family: capitalize(rawFamily),
+    variant: variant || undefined,
+    tag: tag || undefined,
+  };
+};
+
 const getCapabilityLabels = (model: any): string[] => {
   const raw = model?.capabilities;
   if (Array.isArray(raw)) {
@@ -151,6 +173,97 @@ const buildOpenRouterTree = (models: any[]): TreeNode[] => {
   });
 
   return Object.values(familyMap).sort((a, b) => a.label.localeCompare(b.label));
+};
+
+const getOrCreateTreeChild = (
+  parent: TreeNode,
+  id: string,
+  label: string,
+  type: Exclude<TreeNode['type'], 'model'>,
+): TreeNode => {
+  let node = parent.children!.find(child => child.id === id);
+  if (!node) {
+    node = {
+      id,
+      label,
+      type,
+      children: []
+    };
+    parent.children!.push(node);
+  }
+  return node;
+};
+
+const sortOllamaTreeNode = (node: TreeNode) => {
+  if (!node.children) return;
+
+  node.children.sort((a, b) => {
+    if (a.type === 'model' && b.type === 'model') return 0;
+    if (a.type === 'model') return 1;
+    if (b.type === 'model') return -1;
+    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  });
+  node.children.forEach(sortOllamaTreeNode);
+};
+
+// Build tree for Ollama tags: Family -> Variant? -> Tag? -> Models
+const buildOllamaTree = (models: any[]): TreeNode[] => {
+  const familyMap: Record<string, TreeNode> = {};
+  const otherNode: TreeNode = { id: 'ollama-other', label: 'Other', type: 'family', children: [] };
+
+  models.forEach(model => {
+    const modelId = typeof model.id === 'string' ? model.id : '';
+    const parts = parseOllamaModelId(modelId);
+    const modelNode: TreeNode = {
+      id: model.id,
+      label: model.display_name || model.name || model.id,
+      type: 'model',
+      model
+    };
+
+    if (!parts) {
+      otherNode.children!.push(modelNode);
+      return;
+    }
+
+    const familyKey = parts.family.toLowerCase();
+    if (!familyMap[familyKey]) {
+      familyMap[familyKey] = {
+        id: `ollama-family-${parts.family}`,
+        label: parts.family,
+        type: 'family',
+        children: []
+      };
+    }
+
+    let parentNode = familyMap[familyKey];
+    if (parts.variant) {
+      parentNode = getOrCreateTreeChild(
+        parentNode,
+        `ollama-variant-${parts.family}-${parts.variant}`,
+        parts.variant,
+        'version',
+      );
+    }
+    if (parts.tag) {
+      parentNode = getOrCreateTreeChild(
+        parentNode,
+        `ollama-tag-${parts.family}-${parts.variant ?? ''}-${parts.tag}`,
+        parts.tag,
+        'grade',
+      );
+    }
+
+    parentNode.children!.push(modelNode);
+  });
+
+  const familyNodes = Object.values(familyMap).sort((a, b) => (
+    a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+  ));
+  familyNodes.forEach(sortOllamaTreeNode);
+  sortOllamaTreeNode(otherNode);
+
+  return [...familyNodes, otherNode].filter(node => node.children!.length > 0);
 };
 
 // Build tree for Gemini (4-level: Base -> Version -> Grade -> Models)
@@ -524,6 +637,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
     if (grouping === 'provider_family') {
       return buildOpenRouterTree(processedModels);
+    }
+    if (grouping === 'ollama_tag_family') {
+      return buildOllamaTree(processedModels);
     }
     if (grouping === 'gemini_family') {
       return buildGeminiTree(processedModels);
