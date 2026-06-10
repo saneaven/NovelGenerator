@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { ChatMessage, ToolCallMetadata } from '../../types/chat';
 import type { McpSelectionAudit } from '../../types/mcp';
-import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
+import type { ThreadInfo, ThreadMessage, ThreadStatus, ThreadToolCall } from '../../types/thread';
 import { resolveRunMessageDisplay } from '../../types/thread';
 import { threadService } from '../../api/threadService';
 import { DefaultDisplayProcessor } from '../../agent/processors/DisplayProcessor';
 import { runMessageTranslation } from '../../agent/messageTranslation';
+import { useAgentUIStore } from '../../store/agentUIStore';
 import { useThreadStore } from '../../store/threadStore';
 import { alert as showAlert, confirm } from '../../store/dialogStore';
 import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
@@ -42,7 +44,18 @@ interface UseThreadMessageRowsOptions {
   sourceLanguage: string;
   secondaryLanguage?: string;
   messageLanguageView: Record<string, 'primary' | 'secondary' | undefined>;
+  onMessageTranslationComplete?: (messageId: string) => void;
 }
+
+interface ActiveMessageTranslationRun {
+  sourceMessageId: string;
+  targetLanguage: string;
+  hadTargetLanguageAtStart: boolean;
+  journeyId?: string;
+  journeyThreadId?: string;
+}
+
+const EMPTY_ACTIVE_JOURNEY_THREADS: Record<string, ThreadInfo | undefined> = {};
 
 function toToolCallMetadata(toolCall: ThreadToolCall): ToolCallMetadata {
   return {
@@ -99,6 +112,10 @@ function uniqueMessageIds(toolCalls: ThreadToolCall[]): string[] {
   return ids;
 }
 
+function isTerminalMessageTranslationStatus(status: ThreadStatus): boolean {
+  return status === 'error' || status === 'canceled' || status === 'done';
+}
+
 export function useThreadMessageRows({
   threadId,
   projectId,
@@ -108,13 +125,39 @@ export function useThreadMessageRows({
   sourceLanguage,
   secondaryLanguage,
   messageLanguageView,
+  onMessageTranslationComplete,
 }: UseThreadMessageRowsOptions) {
   const { t } = useTranslation();
   const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [editingSaving, setEditingSaving] = useState(false);
-  const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, boolean>>({});
+  const [translatingByMessageId, setTranslatingByMessageId] = useState<Record<string, ActiveMessageTranslationRun | undefined>>({});
+
+  const messagesById = useMemo(() => {
+    const next: Record<string, ThreadMessage | undefined> = {};
+    for (const message of messages) {
+      next[message.id] = message;
+    }
+    return next;
+  }, [messages]);
+
+  const activeJourneyThreadIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of Object.values(translatingByMessageId)) {
+      if (run?.journeyThreadId) ids.add(run.journeyThreadId);
+    }
+    return [...ids];
+  }, [translatingByMessageId]);
+
+  const activeJourneyThreads = useThreadStore(useShallow((state) => {
+    if (activeJourneyThreadIds.length === 0) return EMPTY_ACTIVE_JOURNEY_THREADS;
+    const next: Record<string, ThreadInfo | undefined> = {};
+    for (const journeyThreadId of activeJourneyThreadIds) {
+      next[journeyThreadId] = state.threadsById[journeyThreadId];
+    }
+    return next;
+  }));
 
   useEffect(() => {
     setEditingMessageId(null);
@@ -124,22 +167,89 @@ export function useThreadMessageRows({
   }, [threadId, sourceLanguage, secondaryLanguage]);
 
   useEffect(() => {
-    if (!secondaryLanguage) return;
+    if (!secondaryLanguage) setTranslatingByMessageId({});
+  }, [secondaryLanguage]);
+
+  const showTranslationErrorToast = useCallback((message: string) => {
+    useAgentUIStore.getState().showPreflightToast(projectId, {
+      type: 'error',
+      message,
+    });
+  }, [projectId]);
+
+  const buildTranslationFailedMessage = useCallback((errorMessage?: string | null) => {
+    const baseMessage = t('agent.messageTranslationFailed');
+    const trimmedError = typeof errorMessage === 'string' ? errorMessage.trim() : '';
+    return trimmedError ? `${baseMessage}: ${trimmedError}` : baseMessage;
+  }, [t]);
+
+  useEffect(() => {
+    const completedMessageIds = new Set<string>();
+    const successfulMessageIds = new Set<string>();
+    const failureMessages: string[] = [];
+
+    for (const [messageId, run] of Object.entries(translatingByMessageId)) {
+      if (!run) continue;
+
+      const message = messagesById[run.sourceMessageId];
+      if (!message) {
+        completedMessageIds.add(messageId);
+        continue;
+      }
+
+      const hasTargetLanguageData = Boolean(message.data[run.targetLanguage]);
+      if (!run.hadTargetLanguageAtStart && hasTargetLanguageData) {
+        completedMessageIds.add(messageId);
+        successfulMessageIds.add(messageId);
+        continue;
+      }
+
+      if (!run.journeyThreadId) continue;
+      const journeyThread = activeJourneyThreads[run.journeyThreadId];
+      if (!journeyThread || !isTerminalMessageTranslationStatus(journeyThread.status)) continue;
+
+      completedMessageIds.add(messageId);
+      if (journeyThread.status === 'canceled') {
+        failureMessages.push(t('agent.messageTranslationCanceled'));
+      } else if (journeyThread.status === 'error') {
+        failureMessages.push(buildTranslationFailedMessage(journeyThread.lastError));
+      } else if (!hasTargetLanguageData) {
+        failureMessages.push(buildTranslationFailedMessage());
+      } else {
+        successfulMessageIds.add(messageId);
+      }
+    }
+
+    if (completedMessageIds.size === 0) return;
+
     setTranslatingByMessageId((prev) => {
       let changed = false;
-      const next: Record<string, boolean> = {};
-      for (const [messageId, isTranslating] of Object.entries(prev)) {
-        if (!isTranslating) continue;
-        const message = messages.find((item) => item.id === messageId);
-        if (message?.data[secondaryLanguage]) {
-          changed = true;
-          continue;
-        }
-        next[messageId] = true;
+      const next = { ...prev };
+      for (const messageId of completedMessageIds) {
+        if (!next[messageId]) continue;
+        delete next[messageId];
+        changed = true;
       }
       return changed ? next : prev;
     });
-  }, [messages, secondaryLanguage]);
+
+    const latestFailureMessage = failureMessages[failureMessages.length - 1];
+    if (latestFailureMessage) {
+      showTranslationErrorToast(latestFailureMessage);
+    }
+
+    for (const messageId of successfulMessageIds) {
+      onMessageTranslationComplete?.(messageId);
+    }
+  }, [
+    activeJourneyThreads,
+    buildTranslationFailedMessage,
+    messagesById,
+    onMessageTranslationComplete,
+    showTranslationErrorToast,
+    t,
+    translatingByMessageId,
+  ]);
 
   const orderedMessages = useMemo(
     () => [...messages].sort((a, b) => {
@@ -301,12 +411,19 @@ export function useThreadMessageRows({
         alreadyTranslating = true;
         return prev;
       }
-      return { ...prev, [message.id]: true };
+      return {
+        ...prev,
+        [message.id]: {
+          sourceMessageId: message.id,
+          targetLanguage: secondaryLanguage,
+          hadTargetLanguageAtStart: Boolean(message.data[secondaryLanguage]),
+        },
+      };
     });
     if (alreadyTranslating) return;
 
     try {
-      await runMessageTranslation({
+      const result = await runMessageTranslation({
         projectId,
         sourceThreadId: threadId,
         sourceMessageId: message.id,
@@ -315,13 +432,32 @@ export function useThreadMessageRows({
         targetLanguage: secondaryLanguage,
         sourceContent: text,
       });
+      setTranslatingByMessageId((prev) => {
+        const existing = prev[message.id];
+        if (!existing || existing.targetLanguage !== secondaryLanguage) return prev;
+        return {
+          ...prev,
+          [message.id]: {
+            ...existing,
+            journeyId: result.journeyId,
+            journeyThreadId: result.journeyThreadId,
+          },
+        };
+      });
     } catch (error: any) {
-      showAlert({ title: 'Translation Failed', message: error?.message ?? 'Failed to translate message.' });
-      setTranslatingByMessageId((prev) => ({ ...prev, [message.id]: false }));
+      showTranslationErrorToast(buildTranslationFailedMessage(error?.message));
+      setTranslatingByMessageId((prev) => {
+        if (!prev[message.id]) return prev;
+        const next = { ...prev };
+        delete next[message.id];
+        return next;
+      });
     }
   }, [
+    buildTranslationFailedMessage,
     projectId,
     secondaryLanguage,
+    showTranslationErrorToast,
     sourceLanguage,
     threadId,
   ]);

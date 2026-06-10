@@ -1342,6 +1342,8 @@
     "switchToLanguage": "{{language}}(으)로 전환",
     "translateTo": "{{language}}(으)로 번역",
     "refreshTranslation": "{{language}} 번역 새로고침",
+    "messageTranslationFailed": "메시지 번역에 실패했습니다",
+    "messageTranslationCanceled": "메시지 번역이 취소되었습니다",
     "sidebar": {
       "createAgent": "새 에이전트 만들기",
       "closeSidebar": "사이드바 닫기",

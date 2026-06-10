@@ -107,6 +107,13 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   const liveView = useThreadLiveViewState(threadId);
   const isMessageRunActive = isLiveStatus(thread?.status) || liveView?.noticeKind === 'preexisting_live_run';
 
+  const handleMessageTranslationComplete = React.useCallback((messageId: string) => {
+    setMessageLanguageView((prev) => ({
+      ...prev,
+      [messageId]: 'secondary',
+    }));
+  }, []);
+
   const {
     rows,
     editingMessageId,
@@ -125,6 +132,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     sourceLanguage,
     secondaryLanguage,
     messageLanguageView,
+    onMessageTranslationComplete: handleMessageTranslationComplete,
   });
 
   const {

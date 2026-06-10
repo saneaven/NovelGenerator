@@ -1342,6 +1342,8 @@
     "switchToLanguage": "Switch to {{language}}",
     "translateTo": "Translate to {{language}}",
     "refreshTranslation": "Refresh {{language}}",
+    "messageTranslationFailed": "Message translation failed",
+    "messageTranslationCanceled": "Message translation was canceled",
     "sidebar": {
       "createAgent": "Create new agent",
       "closeSidebar": "Close sidebar",

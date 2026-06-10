@@ -24,6 +24,18 @@ export type AgentPreflightToast = {
   message: string;
 };
 
+const DEFAULT_PREFLIGHT_TOAST_DURATION_MS = 4000;
+const preflightToastTimeouts: Record<string, number | undefined> = {};
+
+function clearPreflightToastTimer(projectId: string): void {
+  const timeoutId = preflightToastTimeouts[projectId];
+  if (timeoutId === undefined) return;
+  if (typeof window !== 'undefined') {
+    window.clearTimeout(timeoutId);
+  }
+  delete preflightToastTimeouts[projectId];
+}
+
 export function makeProjectAgentKey(projectId: string, agentId: string): string {
   return `${projectId}:${agentId}`;
 }
@@ -88,6 +100,7 @@ interface AgentUIActions {
 
   // Preflight toast
   setPreflightToast: (projectId: string, toast: AgentPreflightToast | null) => void;
+  showPreflightToast: (projectId: string, toast: AgentPreflightToast, durationMs?: number) => void;
   getPreflightToast: (projectId: string) => AgentPreflightToast | null;
 
   // Agent run mode
@@ -247,12 +260,34 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
 
   // Preflight toast
   setPreflightToast: (projectId: string, toast: AgentPreflightToast | null) => {
+    clearPreflightToastTimer(projectId);
     set((state) => ({
       preflightToastByProject: {
         ...state.preflightToastByProject,
         [projectId]: toast ?? undefined,
       },
     }));
+  },
+
+  showPreflightToast: (projectId: string, toast: AgentPreflightToast, durationMs = DEFAULT_PREFLIGHT_TOAST_DURATION_MS) => {
+    clearPreflightToastTimer(projectId);
+    set((state) => ({
+      preflightToastByProject: {
+        ...state.preflightToastByProject,
+        [projectId]: toast,
+      },
+    }));
+
+    if (durationMs <= 0 || typeof window === 'undefined') return;
+    preflightToastTimeouts[projectId] = window.setTimeout(() => {
+      delete preflightToastTimeouts[projectId];
+      set((state) => ({
+        preflightToastByProject: {
+          ...state.preflightToastByProject,
+          [projectId]: undefined,
+        },
+      }));
+    }, durationMs);
   },
 
   getPreflightToast: (projectId: string) => {
@@ -280,6 +315,7 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
 
   // Reset project state
   resetProjectState: (projectId: string) => {
+    clearPreflightToastTimer(projectId);
     set((state) => {
       const projectPrefix = `${projectId}:`;
       const nextLoadingByProjectAgent = { ...state.loadingByProjectAgent };
