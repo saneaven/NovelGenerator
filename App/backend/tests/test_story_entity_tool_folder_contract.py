@@ -456,7 +456,9 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     assert date_props["year"]["minimum"] == 1
     assert "maximum" not in date_props["year"]
     assert date_props["month"] == {"type": "integer", "minimum": 1, "maximum": 12}
-    assert date_props["day"] == {"type": "integer", "minimum": 1, "maximum": 30}
+    assert date_props["day"]["minimum"] == 1
+    assert date_props["day"]["maximum"] == 31
+    assert "year/month" in date_props["day"]["description"]
     assert date_props["hour"] == {"type": "integer", "minimum": 1, "maximum": 24}
     assert date_props["minute"] == {"type": "integer", "minimum": 1, "maximum": 60}
 
@@ -650,16 +652,82 @@ def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:
                 "name": "Coronation",
                 "description": "",
                 "content": "",
-                "startDate": {"year": 1, "month": 1},
-                "endDate": {"year": 1, "month": 2},
+                "startDate": {"year": 1, "month": 1, "day": 1},
+                "endDate": {"year": 1, "month": 2, "day": 1},
                 "tags": [],
             },
             _execution_context(),
         )
     )
 
-    assert captured["start_date"] == {"year": 1, "month": 1}
-    assert captured["end_date"] == {"year": 1, "month": 2}
+    assert captured["start_date"] == {"year": 1, "month": 1, "day": 1}
+    assert captured["end_date"] == {"year": 1, "month": 2, "day": 1}
+
+
+def test_timeline_event_tools_reject_invalid_gregorian_dates(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    feature = TimelineFeatureModule()
+
+    create_binding = _binding_by_name(feature, _module_context(), "create_timeline_event")
+    create_result = asyncio.run(
+        create_binding.validate(
+            {
+                "trackId": str(uuid4()),
+                "name": "Impossible date",
+                "description": "",
+                "content": "",
+                "startDate": {"year": 2025, "month": 2, "day": 29},
+            },
+            _validation_context(),
+        )
+    )
+    assert create_result.valid is False
+    assert "Invalid startDate" in str(create_result.reason)
+
+    replace_binding = _binding_by_name(feature, _module_context(), "replace_timeline_event")
+    replace_result = asyncio.run(
+        replace_binding.validate(
+            {
+                "id": str(uuid4()),
+                "startDate": {"year": 2025, "month": 4, "day": 31},
+            },
+            _validation_context(),
+        )
+    )
+    assert replace_result.valid is False
+    assert "Invalid startDate" in str(replace_result.reason)
+
+    patch_binding = _binding_by_name(feature, _module_context(), "patch_timeline_event")
+    patch_result = asyncio.run(
+        patch_binding.validate(
+            {
+                "id": str(uuid4()),
+                "field": "description",
+                "old": "old",
+                "new": "new",
+                "endDate": {"year": 2025, "month": 2, "day": 29},
+            },
+            _validation_context(),
+        )
+    )
+    assert patch_result.valid is False
+    assert "Invalid endDate" in str(patch_result.reason)
+
+    range_result = asyncio.run(
+        create_binding.validate(
+            {
+                "trackId": str(uuid4()),
+                "name": "Backwards range",
+                "description": "",
+                "content": "",
+                "startDate": {"year": 2025, "month": 3, "day": 1},
+                "endDate": {"year": 2025, "month": 2, "day": 28},
+            },
+            _validation_context(),
+        )
+    )
+    assert range_result.valid is False
+    assert "endDate cannot be before startDate" in str(range_result.reason)
 
 
 def test_validate_patch_timeline_event_reads_markdown_projection(monkeypatch) -> None:
@@ -764,7 +832,7 @@ def test_timeline_patch_group_uses_object_patch_batch(monkeypatch) -> None:
         "old": "old text",
         "new": "new text",
         "trackId": str(uuid4()),
-        "startDate": {"year": 1},
+        "startDate": {"year": 1, "month": 1, "day": 1},
         "endDate": None,
         "tags": ["war"],
     }
@@ -781,7 +849,7 @@ def test_timeline_patch_group_uses_object_patch_batch(monkeypatch) -> None:
     assert captured["replace_fields"] == {}
     assert captured["metadata"] == {
         "track_id": event_args["trackId"],
-        "start_date": {"year": 1},
+        "start_date": {"year": 1, "month": 1, "day": 1},
         "end_date": None,
         "tags": ["war"],
     }

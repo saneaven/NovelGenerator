@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +16,7 @@ class CalendarUnitSchema(BaseModel):
 class CalendarConfigSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    mode: Literal["fixed", "gregorian"] | None = None
     units: list[CalendarUnitSchema]
 
 

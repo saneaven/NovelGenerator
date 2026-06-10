@@ -21,7 +21,7 @@ from .shared import filter_allowed_specs, is_non_journey, is_translation_journey
 from ....models.db_models import Timeline, TimelineEvent, TimelineEventLink, TimelineTrack
 from ....services.object_service import object_service
 from ....services.timeline_service import ALLOWED_LINK_TYPES, _UNSET, timeline_service
-from ....utils.timeline_calendar import default_calendar
+from ....utils.timeline_calendar import default_calendar, is_gregorian_calendar, to_base_units, validate_date
 
 
 _ID = {"type": "string", "description": "Object ID"}
@@ -39,6 +39,29 @@ def _date_schema(db, project_id) -> dict[str, Any]:
     units = calendar.get("units")
     if not units:
         units = default_calendar()["units"]
+
+    if is_gregorian_calendar(calendar):
+        return {
+            "type": "object",
+            "description": (
+                "Gregorian date object. Required: year, month, day. "
+                "hour/minute default to 1 when omitted. day must be a real valid day for the given year/month; "
+                "the server validates leap years and month lengths."
+            ),
+            "properties": {
+                "year": {"type": "integer", "minimum": 1},
+                "month": {"type": "integer", "minimum": 1, "maximum": 12},
+                "day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31,
+                    "description": "Must be valid for year/month, including leap-year February.",
+                },
+                "hour": {"type": "integer", "minimum": 1, "maximum": 24},
+                "minute": {"type": "integer", "minimum": 1, "maximum": 60},
+            },
+            "required": ["year", "month", "day"],
+        }
 
     properties: dict[str, Any] = {}
     desc_parts: list[str] = []
@@ -64,6 +87,81 @@ def _date_schema(db, project_id) -> dict[str, Any]:
         "properties": properties,
         "required": list(properties.keys())[:1],
     }
+
+
+def _calendar_for_track_id(db, *, project_id: UUID, track_id: UUID) -> dict[str, Any]:
+    if not hasattr(db, "query"):
+        return default_calendar()
+    timeline = (
+        db.query(Timeline)
+        .join(TimelineTrack, TimelineTrack.timeline_id == Timeline.id)
+        .filter(TimelineTrack.id == track_id, Timeline.project_id == project_id)
+        .first()
+    )
+    if timeline is None:
+        raise ValueError("Timeline track not found")
+    return timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar()
+
+
+def _timeline_for_event_id(db, *, project_id: UUID, event_id: UUID) -> Timeline | None:
+    if not hasattr(db, "query"):
+        return None
+    return (
+        db.query(Timeline)
+        .join(TimelineTrack, TimelineTrack.timeline_id == Timeline.id)
+        .join(TimelineEvent, TimelineEvent.track_id == TimelineTrack.id)
+        .filter(TimelineEvent.id == event_id, Timeline.project_id == project_id)
+        .first()
+    )
+
+
+def _event_row_for_validation(db, *, project_id: UUID, event_id: UUID) -> TimelineEvent | None:
+    if not hasattr(db, "query"):
+        return None
+    return (
+        db.query(TimelineEvent)
+        .join(TimelineTrack, TimelineTrack.id == TimelineEvent.track_id)
+        .join(Timeline, Timeline.id == TimelineTrack.timeline_id)
+        .filter(TimelineEvent.id == event_id, Timeline.project_id == project_id)
+        .first()
+    )
+
+
+def _calendar_for_event_update(
+    db,
+    *,
+    project_id: UUID,
+    event_id: UUID | None,
+    track_id: UUID | None,
+) -> dict[str, Any]:
+    if track_id is not None:
+        return _calendar_for_track_id(db, project_id=project_id, track_id=track_id)
+    if event_id is None:
+        return default_calendar()
+    timeline = _timeline_for_event_id(db, project_id=project_id, event_id=event_id)
+    if timeline is None:
+        if hasattr(db, "query"):
+            raise ValueError("timeline_event not found")
+        return default_calendar()
+    return timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar()
+
+
+def _validate_tool_event_dates(
+    *,
+    calendar: dict[str, Any],
+    start_date: Any,
+    end_date: Any,
+    validate_start: bool,
+    validate_end: bool,
+) -> None:
+    if validate_start and not validate_date(start_date, calendar):
+        raise ValueError("Invalid startDate for calendar")
+    if validate_end and end_date is not None and not validate_date(end_date, calendar):
+        raise ValueError("Invalid endDate for calendar")
+    if isinstance(start_date, dict) and isinstance(end_date, dict):
+        if validate_date(start_date, calendar) and validate_date(end_date, calendar):
+            if to_base_units(end_date, calendar) < to_base_units(start_date, calendar):
+                raise ValueError("endDate cannot be before startDate")
 
 
 def _safe_target_id(args: dict[str, Any], *keys: str) -> str | None:
@@ -221,17 +319,36 @@ def _validate_track_parent(
         pending.extend(children_by_parent.get(current, []))
 
 
-def _validate_event_metadata_args(args: dict[str, Any]) -> None:
+def _validate_event_metadata_args(args: dict[str, Any], ctx, *, event_id: UUID | None = None) -> None:
+    track_id: UUID | None = None
     if "trackId" in args:
         if _clean_optional_id(args.get("trackId")) is None:
             raise ValueError("trackId is required")
-        to_uuid(args.get("trackId"), "trackId")
+        track_id = to_uuid(args.get("trackId"), "trackId")
     if "startDate" in args and not isinstance(args.get("startDate"), dict):
         raise ValueError("startDate must be an object")
     if "endDate" in args and args.get("endDate") is not None and not isinstance(args.get("endDate"), dict):
         raise ValueError("endDate must be an object or null")
     if "tags" in args and not isinstance(args.get("tags"), list):
         raise ValueError("tags must be an array")
+
+    if "startDate" in args or "endDate" in args:
+        calendar = _calendar_for_event_update(
+            ctx.db,
+            project_id=ctx.project_id,
+            event_id=event_id,
+            track_id=track_id,
+        )
+        event_row = _event_row_for_validation(ctx.db, project_id=ctx.project_id, event_id=event_id) if event_id else None
+        start_date = args.get("startDate") if "startDate" in args else getattr(event_row, "start_date", None)
+        end_date = args.get("endDate") if "endDate" in args else getattr(event_row, "end_date", None)
+        _validate_tool_event_dates(
+            calendar=calendar,
+            start_date=start_date,
+            end_date=end_date,
+            validate_start="startDate" in args,
+            validate_end="endDate" in args,
+        )
 
 
 def _projection_text(data: dict[str, Any], key: str) -> str:
@@ -836,13 +953,22 @@ class TimelineFeatureModule(ToolFeatureModule):
         )
 
     async def _validate_create_timeline_event(self, args, ctx):
-        _ = ctx
         try:
-            to_uuid(args.get("trackId"), "trackId")
+            track_id = to_uuid(args.get("trackId"), "trackId")
             if not str(args.get("name") or "").strip():
                 raise ValueError("name is required")
             if not isinstance(args.get("startDate"), dict):
                 raise ValueError("startDate must be an object")
+            if "endDate" in args and args.get("endDate") is not None and not isinstance(args.get("endDate"), dict):
+                raise ValueError("endDate must be an object or null")
+            calendar = _calendar_for_track_id(ctx.db, project_id=ctx.project_id, track_id=track_id)
+            _validate_tool_event_dates(
+                calendar=calendar,
+                start_date=args.get("startDate"),
+                end_date=args.get("endDate"),
+                validate_start=True,
+                validate_end="endDate" in args,
+            )
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_create_timeline_event", str(exc))
@@ -935,7 +1061,7 @@ class TimelineFeatureModule(ToolFeatureModule):
             event_id = to_uuid(args.get("id"), "id")
             if not _has_any_event_replace_field(args):
                 raise ValueError("replace_timeline_event requires at least one of trackId, name, description, content, startDate, endDate, or tags")
-            _validate_event_metadata_args(args)
+            _validate_event_metadata_args(args, ctx, event_id=event_id)
             read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
@@ -952,12 +1078,13 @@ class TimelineFeatureModule(ToolFeatureModule):
             field = args.get("field")
             if field not in {"name", "description", "content"}:
                 raise ValueError("field must be one of name|description|content")
-            _validate_event_metadata_args(args)
+            event_id = to_uuid(args.get("id"), "id")
+            _validate_event_metadata_args(args, ctx, event_id=event_id)
             current = read_runtime_object(
                 ctx.db,
                 project_id=ctx.project_id,
                 object_type="timeline_event",
-                object_id=to_uuid(args.get("id"), "id"),
+                object_id=event_id,
                 language=ctx.language,
             )
             patch_object_field(

@@ -1,9 +1,10 @@
 import type { CalendarConfig, CalendarUnit, TimelineDate } from '../types/timeline';
 
 export const DEFAULT_CALENDAR: CalendarConfig = {
+  mode: 'gregorian',
   units: [
     { name: 'year', label: 'Year', count: 12 },
-    { name: 'month', label: 'Month', count: 30 },
+    { name: 'month', label: 'Month', count: 31 },
     { name: 'day', label: 'Day', count: 24 },
     { name: 'hour', label: 'Hour', count: 60 },
     { name: 'minute', label: 'Minute' },
@@ -12,8 +13,17 @@ export const DEFAULT_CALENDAR: CalendarConfig = {
 
 export function defaultCalendar(): CalendarConfig {
   return {
+    mode: DEFAULT_CALENDAR.mode,
     units: DEFAULT_CALENDAR.units.map((unit) => ({ ...unit })),
   };
+}
+
+export function calendarMode(value: CalendarConfig | CalendarUnit[]): 'fixed' | 'gregorian' {
+  return !Array.isArray(value) && value.mode === 'gregorian' ? 'gregorian' : 'fixed';
+}
+
+export function isGregorianCalendar(value: CalendarConfig | CalendarUnit[]): boolean {
+  return calendarMode(value) === 'gregorian';
 }
 
 function coerceUnits(value: CalendarConfig | CalendarUnit[]): CalendarUnit[] {
@@ -42,7 +52,134 @@ function unitMultiplier(units: CalendarUnit[], index: number): number {
   return multiplier;
 }
 
+export function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+export function daysInMonth(year: number, month: number): number {
+  if (month === 2) return isLeapYear(year) ? 29 : 28;
+  if ([4, 6, 9, 11].includes(month)) return 30;
+  return 31;
+}
+
+function daysBeforeYear(year: number): number {
+  const previous = year - 1;
+  return (previous * 365) + Math.floor(previous / 4) - Math.floor(previous / 100) + Math.floor(previous / 400);
+}
+
+function daysBeforeMonth(year: number, month: number): number {
+  let total = 0;
+  for (let cursor = 1; cursor < month; cursor += 1) {
+    total += daysInMonth(year, cursor);
+  }
+  return total;
+}
+
+function gregorianPart(
+  dateValue: Record<string, unknown>,
+  name: string,
+  options: { required: boolean; defaultValue?: number },
+): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(dateValue, name)) {
+    return options.required ? undefined : options.defaultValue ?? 1;
+  }
+  const raw = dateValue[name];
+  return Number.isInteger(raw) ? Number(raw) : undefined;
+}
+
+function validateGregorianDate(dateValue: unknown): dateValue is TimelineDate {
+  if (!dateValue || typeof dateValue !== 'object' || Array.isArray(dateValue)) return false;
+  const raw = dateValue as Record<string, unknown>;
+  const year = gregorianPart(raw, 'year', { required: true });
+  const month = gregorianPart(raw, 'month', { required: true });
+  const day = gregorianPart(raw, 'day', { required: true });
+  const hour = gregorianPart(raw, 'hour', { required: false, defaultValue: 1 });
+  const minute = gregorianPart(raw, 'minute', { required: false, defaultValue: 1 });
+  if ([year, month, day, hour, minute].some((value) => value === undefined)) return false;
+  if (year! < 1 || month! < 1 || month! > 12 || day! < 1) return false;
+  if (day! > daysInMonth(year!, month!)) return false;
+  if (hour! < 1 || hour! > 24 || minute! < 1 || minute! > 60) return false;
+  return true;
+}
+
+function gregorianToBaseUnits(dateValue: TimelineDate): number {
+  if (!validateGregorianDate(dateValue)) {
+    throw new Error('Invalid timeline date');
+  }
+  const year = Number(dateValue.year);
+  const month = Number(dateValue.month);
+  const day = Number(dateValue.day);
+  const hour = Number(dateValue.hour ?? 1);
+  const minute = Number(dateValue.minute ?? 1);
+  const days = daysBeforeYear(year) + daysBeforeMonth(year, month) + day - 1;
+  return (days * 24 * 60) + ((hour - 1) * 60) + (minute - 1);
+}
+
+function yearFromDayPosition(dayPosition: number): number {
+  let low = 1;
+  let high = Math.max(2, Math.floor(dayPosition / 365) + 2);
+  while (daysBeforeYear(high + 1) <= dayPosition) {
+    high *= 2;
+  }
+  while (low < high) {
+    const mid = Math.floor((low + high + 1) / 2);
+    if (daysBeforeYear(mid) <= dayPosition) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return low;
+}
+
+function gregorianFromBaseUnits(position: number): TimelineDate {
+  const remaining = Math.max(Math.trunc(position || 0), 0);
+  const dayPosition = Math.floor(remaining / (24 * 60));
+  const minuteOfDay = remaining % (24 * 60);
+  const year = yearFromDayPosition(dayPosition);
+  let dayOfYear = dayPosition - daysBeforeYear(year);
+  let month = 1;
+  while (dayOfYear >= daysInMonth(year, month)) {
+    dayOfYear -= daysInMonth(year, month);
+    month += 1;
+  }
+  const hourOffset = Math.floor(minuteOfDay / 60);
+  const minuteOffset = minuteOfDay % 60;
+  return {
+    year,
+    month,
+    day: dayOfYear + 1,
+    hour: hourOffset + 1,
+    minute: minuteOffset + 1,
+  };
+}
+
+export function dateUnitMax(calendar: CalendarConfig, dateValue: TimelineDate, unitName: string): number | undefined {
+  if (isGregorianCalendar(calendar)) {
+    if (unitName === 'month') return 12;
+    if (unitName === 'day') return daysInMonth(Number(dateValue.year ?? 1), Number(dateValue.month ?? 1));
+    if (unitName === 'hour') return 24;
+    if (unitName === 'minute') return 60;
+    return undefined;
+  }
+  return calendar.units.find((unit) => unit.name === unitName)?.count;
+}
+
+export function clampTimelineDate(dateValue: TimelineDate, calendar: CalendarConfig): TimelineDate {
+  if (!isGregorianCalendar(calendar)) return dateValue;
+  const year = Math.max(1, Math.trunc(Number(dateValue.year ?? 1)));
+  const month = Math.min(12, Math.max(1, Math.trunc(Number(dateValue.month ?? 1))));
+  const day = Math.min(
+    daysInMonth(year, month),
+    Math.max(1, Math.trunc(Number(dateValue.day ?? 1))),
+  );
+  const hour = Math.min(24, Math.max(1, Math.trunc(Number(dateValue.hour ?? 1))));
+  const minute = Math.min(60, Math.max(1, Math.trunc(Number(dateValue.minute ?? 1))));
+  return { ...dateValue, year, month, day, hour, minute };
+}
+
 export function validateDate(dateValue: unknown, unitsOrCalendar: CalendarConfig | CalendarUnit[]): dateValue is TimelineDate {
+  if (isGregorianCalendar(unitsOrCalendar)) return validateGregorianDate(dateValue);
   if (!dateValue || typeof dateValue !== 'object') return false;
   const units = coerceUnits(unitsOrCalendar);
   return units.every((unit, i) => {
@@ -59,6 +196,7 @@ export function validateDate(dateValue: unknown, unitsOrCalendar: CalendarConfig
 }
 
 export function toBaseUnits(dateValue: TimelineDate, unitsOrCalendar: CalendarConfig | CalendarUnit[]): number {
+  if (isGregorianCalendar(unitsOrCalendar)) return gregorianToBaseUnits(dateValue);
   const units = coerceUnits(unitsOrCalendar);
   if (!validateDate(dateValue, units)) {
     throw new Error('Invalid timeline date');
@@ -70,6 +208,7 @@ export function toBaseUnits(dateValue: TimelineDate, unitsOrCalendar: CalendarCo
 }
 
 export function fromBaseUnits(position: number, unitsOrCalendar: CalendarConfig | CalendarUnit[]): TimelineDate {
+  if (isGregorianCalendar(unitsOrCalendar)) return gregorianFromBaseUnits(position);
   const units = coerceUnits(unitsOrCalendar);
   let remaining = Math.max(Math.trunc(position || 0), 0);
   const result: TimelineDate = {};
@@ -96,6 +235,15 @@ export function migrateDates(
   newUnitsOrCalendar: CalendarConfig | CalendarUnit[],
   dates: Array<TimelineDate | null | undefined>,
 ): { dates: Array<TimelineDate | null>; warnings: string[] } {
+  if (calendarMode(oldUnitsOrCalendar) !== calendarMode(newUnitsOrCalendar)) {
+    return {
+      dates: dates.map((dateValue) => (
+        dateValue ? fromBaseUnits(toBaseUnits(dateValue, oldUnitsOrCalendar), newUnitsOrCalendar) : null
+      )),
+      warnings: [],
+    };
+  }
+
   const oldUnits = coerceUnits(oldUnitsOrCalendar);
   const newUnits = coerceUnits(newUnitsOrCalendar);
 

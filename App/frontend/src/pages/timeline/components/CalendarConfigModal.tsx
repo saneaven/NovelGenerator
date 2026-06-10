@@ -72,19 +72,21 @@ const CalendarConfigModal: React.FC<CalendarConfigModalProps> = ({
     if (units.length < 2) return;
     setIsSaving(true);
     try {
-      await updateCalendar(projectId, { units }, displayLanguage);
+      const nextCalendar: CalendarConfig = calendar.mode ? { mode: calendar.mode, units } : { units };
+      await updateCalendar(projectId, nextCalendar, displayLanguage);
       onClose();
     } finally {
       setIsSaving(false);
     }
-  }, [units, projectId, displayLanguage, updateCalendar, onClose]);
+  }, [units, calendar.mode, projectId, displayLanguage, updateCalendar, onClose]);
 
   // Preview: format a sample date
   const samplePreview = (() => {
     try {
       if (units.length === 0) return '';
-      const sampleDate = fromBaseUnits(42, units);
-      return formatDate(sampleDate, units);
+      const previewCalendar: CalendarConfig = calendar.mode ? { mode: calendar.mode, units } : { units };
+      const sampleDate = fromBaseUnits(42, previewCalendar);
+      return formatDate(sampleDate, previewCalendar);
     } catch {
       return 'Invalid configuration';
     }

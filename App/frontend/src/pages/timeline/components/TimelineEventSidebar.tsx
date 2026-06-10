@@ -12,6 +12,7 @@ import type {
   TimelineEvent,
   TimelineTrack,
 } from '../../../types/timeline';
+import { clampTimelineDate, dateUnitMax } from '../../../utils/timelineCalendar';
 import './TimelineEventSidebar.css';
 
 interface TimelineEventSidebarProps {
@@ -73,8 +74,8 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
       setName((data.name as string) || '');
       setDescription((data.description as string) || '');
       setContent(normalizeDoc(data.content));
-      setStartDate({ ...event.startDate });
-      setEndDate(event.endDate ? { ...event.endDate } : null);
+      setStartDate(clampTimelineDate({ ...event.startDate }, calendar));
+      setEndDate(event.endDate ? clampTimelineDate({ ...event.endDate }, calendar) : null);
       setHasEndDate(!!event.endDate);
       setTags([...event.tags]);
       setTrackId(event.trackId);
@@ -82,26 +83,26 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
       setName('');
       setDescription('');
       setContent(emptyDoc());
-      setStartDate({ ...createForTrack.date });
+      setStartDate(clampTimelineDate({ ...createForTrack.date }, calendar));
       setEndDate(null);
       setHasEndDate(false);
       setTags([]);
       setTrackId(createForTrack.track.id);
     }
-  }, [event, createForTrack, displayLanguage]);
+  }, [event, createForTrack, displayLanguage, calendar]);
 
   const leafTracks = collectLeafTracks(tracks, displayLanguage);
 
   const updateDateUnit = useCallback((target: 'start' | 'end', unitName: string, value: number | undefined) => {
     if (target === 'start') {
-      setStartDate((prev) => ({ ...prev, [unitName]: value ?? 1 }));
+      setStartDate((prev) => clampTimelineDate({ ...prev, [unitName]: value ?? 1 }, calendar));
       return;
     }
     setEndDate((prev) => {
       if (!prev) return prev;
-      return { ...prev, [unitName]: value ?? 1 };
+      return clampTimelineDate({ ...prev, [unitName]: value ?? 1 }, calendar);
     });
-  }, []);
+  }, [calendar]);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) return;
@@ -214,7 +215,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
                   value={startDate[unit.name] ?? 1}
                   onValueChange={(v) => updateDateUnit('start', unit.name, v)}
                   min={1}
-                  max={unit.count}
+                  max={dateUnitMax(calendar, startDate, unit.name)}
                 />
               </div>
             ))}
@@ -241,7 +242,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
                     value={endDate[unit.name] ?? 1}
                     onValueChange={(v) => updateDateUnit('end', unit.name, v)}
                     min={1}
-                    max={unit.count}
+                    max={dateUnitMax(calendar, endDate, unit.name)}
                   />
                 </div>
               ))}

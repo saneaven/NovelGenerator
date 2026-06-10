@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import type { CalendarConfig, CalendarUnit, TimelineDate, TimelineEvent } from '../../../types/timeline';
-import { toBaseUnits, fromBaseUnits } from '../../../utils/timelineCalendar';
+import { toBaseUnits, fromBaseUnits, isGregorianCalendar } from '../../../utils/timelineCalendar';
 import type { TimelineViewport } from './useTimelineLayout';
 
 export interface RulerTick {
@@ -12,6 +12,15 @@ export interface RulerTick {
 
 const MIN_TICK_SPACING = 60; // px between minor ticks
 const MAX_TICK_SPACING = 200;
+const GREGORIAN_TICK_UNITS = [
+  { unit: 'minute', approxBase: 1 },
+  { unit: 'hour', approxBase: 60 },
+  { unit: 'day', approxBase: 24 * 60 },
+  { unit: 'month', approxBase: 30 * 24 * 60 },
+  { unit: 'year', approxBase: 365 * 24 * 60 },
+] as const;
+
+type GregorianTickUnit = typeof GREGORIAN_TICK_UNITS[number]['unit'];
 
 /**
  * Determine which calendar unit level to use for minor ticks,
@@ -53,6 +62,105 @@ function pickTickUnit(units: CalendarUnit[], scale: number): { majorIdx: number;
   return { majorIdx: 0, minorIdx: 0, minorStep: 1 };
 }
 
+function pickGregorianTickUnit(scale: number): { unit: GregorianTickUnit; step: number } {
+  for (const candidate of GREGORIAN_TICK_UNITS) {
+    const pixelsPerTick = candidate.approxBase / scale;
+    if (pixelsPerTick >= MIN_TICK_SPACING && pixelsPerTick <= MAX_TICK_SPACING) {
+      return { unit: candidate.unit, step: 1 };
+    }
+    if (pixelsPerTick < MIN_TICK_SPACING) {
+      for (const step of [2, 5, 10, 20, 50, 100]) {
+        if (pixelsPerTick * step >= MIN_TICK_SPACING) {
+          return { unit: candidate.unit, step };
+        }
+      }
+    }
+  }
+  return { unit: 'year', step: 1 };
+}
+
+function addGregorianMonths(date: TimelineDate, delta: number): TimelineDate {
+  const year = Number(date.year ?? 1);
+  const month = Number(date.month ?? 1);
+  const totalMonths = ((year - 1) * 12) + (month - 1) + delta;
+  const nextYear = Math.floor(Math.max(0, totalMonths) / 12) + 1;
+  const nextMonth = (Math.max(0, totalMonths) % 12) + 1;
+  return { year: nextYear, month: nextMonth, day: 1, hour: 1, minute: 1 };
+}
+
+function addGregorianYears(date: TimelineDate, delta: number): TimelineDate {
+  return {
+    year: Math.max(1, Number(date.year ?? 1) + delta),
+    month: 1,
+    day: 1,
+    hour: 1,
+    minute: 1,
+  };
+}
+
+function gregorianRulerTicks(
+  calendar: CalendarConfig,
+  viewport: TimelineViewport,
+  originBase: number,
+): RulerTick[] {
+  const { unit, step } = pickGregorianTickUnit(viewport.scale);
+  const visibleStartBase = viewport.scrollOffset;
+  const visibleEndBase = viewport.scrollOffset + viewport.viewportWidth * viewport.scale;
+  const visStartPx = (visibleStartBase - originBase) / viewport.scale;
+  const visEndPx = (visibleEndBase - originBase) / viewport.scale;
+  const ticks: RulerTick[] = [];
+
+  const pushTick = (basePos: number, level: RulerTick['level'], label: string) => {
+    const px = (basePos - originBase) / viewport.scale;
+    if (px < visStartPx - 100 || px > visEndPx + 100) return;
+    ticks.push({ position: px, basePosition: basePos, label, level });
+  };
+
+  if (unit === 'month' || unit === 'year') {
+    const visibleDate = fromBaseUnits(Math.max(0, Math.floor(visibleStartBase)), calendar);
+    let cursor = unit === 'month'
+      ? addGregorianMonths({ ...visibleDate, day: 1, hour: 1, minute: 1 }, -step)
+      : addGregorianYears({ ...visibleDate, month: 1, day: 1, hour: 1, minute: 1 }, -step);
+
+    for (let guard = 0; guard < 500; guard += 1) {
+      const basePos = toBaseUnits(cursor, calendar);
+      if (basePos > visibleEndBase + (400 * viewport.scale)) break;
+      const isMajor = unit === 'year' || Number(cursor.month ?? 1) === 1;
+      const label = isMajor ? `Year ${cursor.year ?? 1}` : `M${cursor.month ?? 1}`;
+      pushTick(basePos, isMajor ? 'major' : 'minor', label);
+      cursor = unit === 'month' ? addGregorianMonths(cursor, step) : addGregorianYears(cursor, step);
+    }
+    return ticks;
+  }
+
+  const baseByUnit: Record<'minute' | 'hour' | 'day', number> = {
+    minute: 1,
+    hour: 60,
+    day: 24 * 60,
+  };
+  const stepBase = baseByUnit[unit] * step;
+  const startTick = Math.floor(Math.max(0, visibleStartBase) / stepBase) - 1;
+  const endTick = Math.ceil(visibleEndBase / stepBase) + 1;
+
+  for (let i = startTick; i <= endTick; i += 1) {
+    const basePos = i * stepBase;
+    if (basePos < 0) continue;
+    const date = fromBaseUnits(basePos, calendar);
+    if (unit === 'day') {
+      const isMajor = Number(date.day ?? 1) === 1;
+      pushTick(basePos, isMajor ? 'major' : 'minor', isMajor ? `M${date.month ?? 1}` : `D${date.day ?? 1}`);
+    } else if (unit === 'hour') {
+      const isMajor = Number(date.hour ?? 1) === 1;
+      pushTick(basePos, isMajor ? 'major' : 'minor', isMajor ? `D${date.day ?? 1}` : `H${date.hour ?? 1}`);
+    } else {
+      const isMajor = Number(date.minute ?? 1) === 1;
+      pushTick(basePos, isMajor ? 'major' : 'minor', isMajor ? `H${date.hour ?? 1}` : `m${date.minute ?? 1}`);
+    }
+  }
+
+  return ticks;
+}
+
 export function useTimelinePositioning(
   calendar: CalendarConfig,
   viewport: TimelineViewport,
@@ -67,10 +175,10 @@ export function useTimelinePositioning(
   // the browser handles horizontal scroll.
   const dateToPixel = useCallback(
     (date: TimelineDate): number => {
-      const base = toBaseUnits(date, units);
+      const base = toBaseUnits(date, calendar);
       return (base - originBase) / viewport.scale;
     },
-    [units, originBase, viewport.scale],
+    [calendar, originBase, viewport.scale],
   );
 
   const pixelToBaseUnits = useCallback(
@@ -85,9 +193,9 @@ export function useTimelinePositioning(
   const pixelToDate = useCallback(
     (px: number): TimelineDate => {
       const base = pixelToBaseUnits(px);
-      return fromBaseUnits(Math.max(0, Math.round(base)), units);
+      return fromBaseUnits(Math.max(0, Math.round(base)), calendar);
     },
-    [pixelToBaseUnits, units],
+    [pixelToBaseUnits, calendar],
   );
 
   const eventLeft = useCallback(
@@ -119,6 +227,9 @@ export function useTimelinePositioning(
 
   const rulerTicks = useMemo((): RulerTick[] => {
     if (units.length === 0) return [];
+    if (isGregorianCalendar(calendar)) {
+      return gregorianRulerTicks(calendar, viewport, originBase);
+    }
 
     const { majorIdx, minorIdx, minorStep } = pickTickUnit(units, viewport.scale);
     const ticks: RulerTick[] = [];
@@ -165,7 +276,7 @@ export function useTimelinePositioning(
       const isMajor = majorIdx !== minorIdx && basePos % majorStepBase === 0 && !seenMajor.has(majorValue);
       if (isMajor) seenMajor.add(majorValue);
 
-      const date = fromBaseUnits(Math.max(0, basePos), units);
+      const date = fromBaseUnits(Math.max(0, basePos), calendar);
       const label = isMajor
         ? `${units[majorIdx].label} ${date[units[majorIdx].name] ?? 1}`
         : `${units[minorIdx].label.charAt(0)}${date[units[minorIdx].name] ?? 1}`;
@@ -179,7 +290,7 @@ export function useTimelinePositioning(
     }
 
     return ticks;
-  }, [units, originBase, viewport.scrollOffset, viewport.scale, viewport.viewportWidth]);
+  }, [calendar, units, originBase, viewport]);
 
   return {
     dateToPixel,

@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+
 os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -594,6 +596,60 @@ def test_timeline_event_metadata_update_changes_track_dates_and_tags(monkeypatch
         }
     ]
     assert flush_calls == [True]
+
+
+def test_timeline_event_metadata_update_rejects_invalid_gregorian_date() -> None:
+    project_id = uuid4()
+    track_id = uuid4()
+    timeline_id = uuid4()
+    event = SimpleNamespace(
+        id=uuid4(),
+        track_id=track_id,
+        start_date={"year": 2025, "month": 1, "day": 1},
+        end_date=None,
+        tags=[],
+    )
+    track = SimpleNamespace(id=track_id, timeline_id=timeline_id)
+    timeline = SimpleNamespace(
+        id=timeline_id,
+        project_id=project_id,
+        calendar={
+            "mode": "gregorian",
+            "units": [
+                {"name": "year", "label": "Year", "count": 12},
+                {"name": "month", "label": "Month", "count": 31},
+                {"name": "day", "label": "Day", "count": 24},
+                {"name": "hour", "label": "Hour", "count": 60},
+                {"name": "minute", "label": "Minute"},
+            ],
+        },
+    )
+    db = FakeSession()
+    query_count = {"count": 0}
+
+    def fake_query(model: object):
+        db.queried_models.append(model)
+        query_count["count"] += 1
+        if query_count["count"] == 1:
+            return FakeFirstQuery(track)
+        if query_count["count"] == 2:
+            return FakeFirstQuery(timeline)
+        return FakeFirstQuery(None)
+
+    db.query = fake_query
+    db.flush = lambda: (_ for _ in ()).throw(AssertionError("flush should not be called"))
+
+    with pytest.raises(object_service_module.HTTPException) as exc:
+        object_service_module._handle_metadata_update(
+            db,
+            "timeline_event",
+            event.id,
+            event,
+            {"start_date": {"year": 2025, "month": 2, "day": 29}},
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Invalid start_date for calendar"
 
 
 def _patch_timeline_write_side_effects(monkeypatch, *, serialize_event: bool = False) -> None:

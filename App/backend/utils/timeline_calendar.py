@@ -6,6 +6,17 @@ from typing import Any, Iterable
 
 
 DEFAULT_CALENDAR = {
+    "mode": "gregorian",
+    "units": [
+        {"name": "year", "label": "Year", "count": 12},
+        {"name": "month", "label": "Month", "count": 31},
+        {"name": "day", "label": "Day", "count": 24},
+        {"name": "hour", "label": "Hour", "count": 60},
+        {"name": "minute", "label": "Minute"},
+    ]
+}
+
+FIXED_DEFAULT_CALENDAR = {
     "units": [
         {"name": "year", "label": "Year", "count": 12},
         {"name": "month", "label": "Month", "count": 30},
@@ -20,6 +31,16 @@ DEFAULT_CALENDAR_JSON = json.dumps(DEFAULT_CALENDAR, ensure_ascii=True)
 
 def default_calendar() -> dict[str, Any]:
     return deepcopy(DEFAULT_CALENDAR)
+
+
+def calendar_mode(value: dict[str, Any] | Iterable[dict[str, Any]]) -> str:
+    if isinstance(value, dict) and value.get("mode") == "gregorian":
+        return "gregorian"
+    return "fixed"
+
+
+def is_gregorian_calendar(value: dict[str, Any] | Iterable[dict[str, Any]]) -> bool:
+    return calendar_mode(value) == "gregorian"
 
 
 def _coerce_units(value: dict[str, Any] | Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -61,7 +82,113 @@ def _coerce_units(value: dict[str, Any] | Iterable[dict[str, Any]]) -> list[dict
 
 
 def normalize_calendar(value: dict[str, Any] | Iterable[dict[str, Any]]) -> dict[str, Any]:
+    if calendar_mode(value) == "gregorian":
+        return default_calendar()
     return {"units": _coerce_units(value)}
+
+
+def is_leap_year(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def days_in_month(year: int, month: int) -> int:
+    if month == 2:
+        return 29 if is_leap_year(year) else 28
+    if month in {4, 6, 9, 11}:
+        return 30
+    return 31
+
+
+def _days_before_year(year: int) -> int:
+    previous = year - 1
+    return previous * 365 + previous // 4 - previous // 100 + previous // 400
+
+
+def _days_before_month(year: int, month: int) -> int:
+    total = 0
+    for cursor in range(1, month):
+        total += days_in_month(year, cursor)
+    return total
+
+
+def _coerce_gregorian_part(
+    date_value: dict[str, Any],
+    name: str,
+    *,
+    required: bool,
+    default: int = 1,
+) -> int | None:
+    if name not in date_value:
+        return None if required else default
+    raw = date_value.get(name)
+    if not isinstance(raw, int):
+        return None
+    return raw
+
+
+def _validate_gregorian_date(date_value: Any) -> bool:
+    if not isinstance(date_value, dict):
+        return False
+    year = _coerce_gregorian_part(date_value, "year", required=True)
+    month = _coerce_gregorian_part(date_value, "month", required=True)
+    day = _coerce_gregorian_part(date_value, "day", required=True)
+    hour = _coerce_gregorian_part(date_value, "hour", required=False)
+    minute = _coerce_gregorian_part(date_value, "minute", required=False)
+    if None in (year, month, day, hour, minute):
+        return False
+    assert year is not None and month is not None and day is not None and hour is not None and minute is not None
+    if year < 1 or month < 1 or month > 12 or day < 1:
+        return False
+    if day > days_in_month(year, month):
+        return False
+    if hour < 1 or hour > 24 or minute < 1 or minute > 60:
+        return False
+    return True
+
+
+def _gregorian_to_base_units(date_value: dict[str, Any]) -> int:
+    if not _validate_gregorian_date(date_value):
+        raise ValueError("Invalid timeline date")
+    year = int(date_value["year"])
+    month = int(date_value["month"])
+    day = int(date_value["day"])
+    hour = int(date_value.get("hour", 1))
+    minute = int(date_value.get("minute", 1))
+    days = _days_before_year(year) + _days_before_month(year, month) + day - 1
+    return days * 24 * 60 + (hour - 1) * 60 + (minute - 1)
+
+
+def _year_from_day_position(day_position: int) -> int:
+    low = 1
+    high = max(2, day_position // 365 + 2)
+    while _days_before_year(high + 1) <= day_position:
+        high *= 2
+    while low < high:
+        mid = (low + high + 1) // 2
+        if _days_before_year(mid) <= day_position:
+            low = mid
+        else:
+            high = mid - 1
+    return low
+
+
+def _gregorian_from_base_units(position: int) -> dict[str, int]:
+    remaining = max(int(position or 0), 0)
+    day_position, minute_of_day = divmod(remaining, 24 * 60)
+    year = _year_from_day_position(day_position)
+    day_of_year = day_position - _days_before_year(year)
+    month = 1
+    while day_of_year >= days_in_month(year, month):
+        day_of_year -= days_in_month(year, month)
+        month += 1
+    hour_offset, minute_offset = divmod(minute_of_day, 60)
+    return {
+        "year": year,
+        "month": month,
+        "day": day_of_year + 1,
+        "hour": hour_offset + 1,
+        "minute": minute_offset + 1,
+    }
 
 
 def _unit_multiplier(units: list[dict[str, Any]], index: int) -> int:
@@ -75,6 +202,8 @@ def _unit_multiplier(units: list[dict[str, Any]], index: int) -> int:
 
 
 def validate_date(date_value: Any, units_or_calendar: dict[str, Any] | Iterable[dict[str, Any]]) -> bool:
+    if is_gregorian_calendar(units_or_calendar):
+        return _validate_gregorian_date(date_value)
     if not isinstance(date_value, dict):
         return False
     try:
@@ -96,6 +225,8 @@ def validate_date(date_value: Any, units_or_calendar: dict[str, Any] | Iterable[
 
 
 def to_base_units(date_value: dict[str, Any], units_or_calendar: dict[str, Any] | Iterable[dict[str, Any]]) -> int:
+    if is_gregorian_calendar(units_or_calendar):
+        return _gregorian_to_base_units(date_value)
     units = _coerce_units(units_or_calendar)
     if not validate_date(date_value, units):
         raise ValueError("Invalid timeline date")
@@ -107,6 +238,8 @@ def to_base_units(date_value: dict[str, Any], units_or_calendar: dict[str, Any] 
 
 
 def from_base_units(position: int, units_or_calendar: dict[str, Any] | Iterable[dict[str, Any]]) -> dict[str, int]:
+    if is_gregorian_calendar(units_or_calendar):
+        return _gregorian_from_base_units(position)
     units = _coerce_units(units_or_calendar)
     remaining = max(int(position or 0), 0)
     date_value: dict[str, int] = {}
@@ -138,6 +271,17 @@ def migrate_dates(
     new_units_or_calendar: dict[str, Any] | Iterable[dict[str, Any]],
     dates: Iterable[dict[str, Any] | None],
 ) -> tuple[list[dict[str, int] | None], list[str]]:
+    if calendar_mode(old_units_or_calendar) != calendar_mode(new_units_or_calendar):
+        migrated: list[dict[str, int] | None] = []
+        for date_value in dates:
+            if date_value is None:
+                migrated.append(None)
+                continue
+            if not isinstance(date_value, dict):
+                raise ValueError("Timeline date payload must be an object")
+            migrated.append(from_base_units(to_base_units(date_value, old_units_or_calendar), new_units_or_calendar))
+        return migrated, []
+
     old_units = _coerce_units(old_units_or_calendar)
     new_units = _coerce_units(new_units_or_calendar)
 

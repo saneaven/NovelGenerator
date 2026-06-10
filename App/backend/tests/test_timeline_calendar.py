@@ -4,6 +4,8 @@ import importlib
 
 from App.backend.utils.timeline_calendar import (
     DEFAULT_CALENDAR,
+    FIXED_DEFAULT_CALENDAR,
+    days_in_month,
     format_date,
     from_base_units,
     migrate_dates,
@@ -14,13 +16,24 @@ from App.backend.utils.timeline_calendar import (
 
 def test_timeline_dates_are_one_based() -> None:
     assert validate_date({"year": 1, "month": 1, "day": 1, "hour": 1, "minute": 1}, DEFAULT_CALENDAR)
-    assert validate_date({"year": 999, "month": 12, "day": 30, "hour": 24, "minute": 60}, DEFAULT_CALENDAR)
+    assert validate_date({"year": 999, "month": 12, "day": 31, "hour": 24, "minute": 60}, DEFAULT_CALENDAR)
+    assert validate_date({"year": 2024, "month": 2, "day": 29}, DEFAULT_CALENDAR)
 
     assert not validate_date({"year": 0, "month": 1, "day": 1, "hour": 1, "minute": 1}, DEFAULT_CALENDAR)
     assert not validate_date({"year": 1, "month": 13, "day": 1, "hour": 1, "minute": 1}, DEFAULT_CALENDAR)
-    assert not validate_date({"year": 1, "month": 1, "day": 31, "hour": 1, "minute": 1}, DEFAULT_CALENDAR)
+    assert not validate_date({"year": 2025, "month": 2, "day": 29}, DEFAULT_CALENDAR)
+    assert not validate_date({"year": 2025, "month": 4, "day": 31}, DEFAULT_CALENDAR)
+    assert not validate_date({"year": 1, "month": 1}, DEFAULT_CALENDAR)
     assert not validate_date({"year": 1, "month": 1, "day": 1, "hour": 25, "minute": 1}, DEFAULT_CALENDAR)
     assert not validate_date({"year": 1, "month": 1, "day": 1, "hour": 1, "minute": 61}, DEFAULT_CALENDAR)
+    assert days_in_month(2024, 2) == 29
+    assert days_in_month(2025, 2) == 28
+
+
+def test_missing_mode_calendar_keeps_fixed_month_lengths() -> None:
+    assert validate_date({"year": 1, "month": 1, "day": 30, "hour": 24, "minute": 60}, FIXED_DEFAULT_CALENDAR)
+    assert not validate_date({"year": 1, "month": 1, "day": 31, "hour": 1, "minute": 1}, FIXED_DEFAULT_CALENDAR)
+    assert validate_date({"year": 1, "month": 1}, FIXED_DEFAULT_CALENDAR)
 
 
 def test_timeline_base_units_are_zero_origin_with_one_based_dates() -> None:
@@ -33,6 +46,13 @@ def test_timeline_base_units_are_zero_origin_with_one_based_dates() -> None:
     assert from_base_units(60, DEFAULT_CALENDAR) == {"year": 1, "month": 1, "day": 1, "hour": 2, "minute": 1}
     assert from_base_units(1440, DEFAULT_CALENDAR) == {"year": 1, "month": 1, "day": 2, "hour": 1, "minute": 1}
     assert format_date({"year": 1, "month": 1}, DEFAULT_CALENDAR) == "Year 1 / Month 1 / Day 1 / Hour 1 / Minute 1"
+
+    leap_day = {"year": 2024, "month": 2, "day": 29, "hour": 24, "minute": 60}
+    assert from_base_units(to_base_units(leap_day, DEFAULT_CALENDAR), DEFAULT_CALENDAR) == leap_day
+    assert (
+        to_base_units({"year": 2024, "month": 3, "day": 1}, DEFAULT_CALENDAR)
+        - to_base_units({"year": 2024, "month": 2, "day": 28}, DEFAULT_CALENDAR)
+    ) == 2 * 24 * 60
 
 
 def test_migrate_dates_uses_one_based_defaults_and_carry() -> None:
@@ -57,7 +77,7 @@ def test_minute_base_default_migration_matches_runtime_default() -> None:
     migration = importlib.import_module("App.backend.alembic.versions.0022_timeline_minute_base")
 
     assert len(migration.revision) <= 32
-    assert migration.NEW_DEFAULT_CALENDAR == DEFAULT_CALENDAR
+    assert migration.NEW_DEFAULT_CALENDAR == FIXED_DEFAULT_CALENDAR
     assert migration.OLD_DEFAULT_CALENDAR["units"][-1] == {"name": "hour", "label": "Hour"}
     assert migration.NEW_DEFAULT_CALENDAR["units"][-2] == {"name": "hour", "label": "Hour", "count": 60}
     assert migration.NEW_DEFAULT_CALENDAR["units"][-1] == {"name": "minute", "label": "Minute"}
@@ -84,3 +104,18 @@ def test_minute_base_default_migration_rewrites_exact_default_only(monkeypatch) 
         "old_calendar": migration.OLD_DEFAULT_CALENDAR_JSON,
         "new_calendar": migration.NEW_DEFAULT_CALENDAR_JSON,
     }
+
+
+def test_gregorian_default_migration_changes_server_default_only(monkeypatch) -> None:
+    migration = importlib.import_module("App.backend.alembic.versions.0023_timeline_gregorian_default")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(migration, "_set_calendar_default", lambda calendar_json: captured.setdefault("calendar_json", calendar_json))
+
+    migration.upgrade()
+
+    assert len(migration.revision) <= 32
+    assert migration.OLD_DEFAULT_CALENDAR == FIXED_DEFAULT_CALENDAR
+    assert migration.NEW_DEFAULT_CALENDAR == DEFAULT_CALENDAR
+    assert captured["calendar_json"] == migration.NEW_DEFAULT_CALENDAR_JSON
+    assert not hasattr(migration, "_rewrite_exact_calendar")

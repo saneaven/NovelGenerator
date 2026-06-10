@@ -9,6 +9,7 @@ export interface CalendarUnit {
 }
 
 export interface CalendarConfig {
+  mode?: 'fixed' | 'gregorian';
   units: CalendarUnit[];
 }
 

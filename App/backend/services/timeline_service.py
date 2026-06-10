@@ -202,12 +202,11 @@ def _validate_event_dates(
     end_date: dict[str, Any] | None,
     calendar: dict[str, Any],
 ) -> None:
-    units = calendar.get("units", [])
-    if not validate_date(start_date, units):
+    if not validate_date(start_date, calendar):
         raise HTTPException(status_code=400, detail="Invalid start_date for calendar")
-    if end_date is not None and not validate_date(end_date, units):
+    if end_date is not None and not validate_date(end_date, calendar):
         raise HTTPException(status_code=400, detail="Invalid end_date for calendar")
-    if end_date is not None and to_base_units(end_date, units) < to_base_units(start_date, units):
+    if end_date is not None and to_base_units(end_date, calendar) < to_base_units(start_date, calendar):
         raise HTTPException(status_code=400, detail="end_date cannot be before start_date")
 
 

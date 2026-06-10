@@ -108,6 +108,7 @@ export interface PromptProjectTimeline {
   id: string;
   projectId: string;
   calendar: {
+    mode?: 'fixed' | 'gregorian';
     units: Array<{
       name: string;
       label?: string;
@@ -379,7 +380,7 @@ function buildTimeline(ids: PromptProjectSkeletonIds): PromptProjectTimeline {
     name: '[ Placeholder for timeline event name ]',
     description: '[ Placeholder for timeline event description ]',
     content: '[ Placeholder for timeline event content ]',
-    startDate: { year: 1, month: 1 },
+    startDate: { year: 1, month: 1, day: 1, hour: 1, minute: 1 },
     endDate: null,
     tags: ['[ Placeholder timeline tag ]'],
     formattedDate: '[ Placeholder formatted timeline date ]',
@@ -401,9 +402,13 @@ function buildTimeline(ids: PromptProjectSkeletonIds): PromptProjectTimeline {
     id: '[ placeholder-timeline-id ]',
     projectId: '[ placeholder-project-id ]',
     calendar: {
+      mode: 'gregorian',
       units: [
-        { name: 'year', label: 'Year' },
-        { name: 'month', label: 'Month', count: 12 },
+        { name: 'year', label: 'Year', count: 12 },
+        { name: 'month', label: 'Month', count: 31 },
+        { name: 'day', label: 'Day', count: 24 },
+        { name: 'hour', label: 'Hour', count: 60 },
+        { name: 'minute', label: 'Minute' },
       ],
     },
     tracks: [
