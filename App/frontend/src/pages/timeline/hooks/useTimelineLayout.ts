@@ -216,7 +216,7 @@ export function useTimelineLayout(calendar: CalendarConfig, tracks: TimelineTrac
   /** Human-readable label for current zoom level. */
   const zoomLabel = (() => {
     const s = viewport.scale;
-    if (s <= 0.1) return 'Hour';
+    if (s <= 0.1) return 'Minute';
     if (s <= 1) return 'Day';
     if (s <= 10) return 'Month';
     if (s <= 100) return 'Year';

@@ -5,7 +5,8 @@ export const DEFAULT_CALENDAR: CalendarConfig = {
     { name: 'year', label: 'Year', count: 12 },
     { name: 'month', label: 'Month', count: 30 },
     { name: 'day', label: 'Day', count: 24 },
-    { name: 'hour', label: 'Hour' },
+    { name: 'hour', label: 'Hour', count: 60 },
+    { name: 'minute', label: 'Minute' },
   ],
 };
 

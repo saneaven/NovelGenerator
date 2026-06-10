@@ -458,6 +458,7 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     assert date_props["month"] == {"type": "integer", "minimum": 1, "maximum": 12}
     assert date_props["day"] == {"type": "integer", "minimum": 1, "maximum": 30}
     assert date_props["hour"] == {"type": "integer", "minimum": 1, "maximum": 24}
+    assert date_props["minute"] == {"type": "integer", "minimum": 1, "maximum": 60}
 
     for tool_name in ("patch_timeline_track", "patch_timeline_event"):
         params = specs[tool_name].parameters
