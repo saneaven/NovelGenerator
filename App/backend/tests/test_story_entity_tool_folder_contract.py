@@ -438,11 +438,19 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     specs = {binding.spec.name: binding.spec for binding in TimelineFeatureModule().list_bindings(_module_context())}
 
     assert "read_timeline" not in specs
+    assert "create_timeline_event_link" not in specs
     assert specs["read_timeline_track"].description == "Read a single timeline track with fields plus child track and event IDs."
     assert specs["read_timeline_event"].description == "Read a single timeline event with fields, dates, tags, and link IDs."
 
     assert specs["replace_timeline_track"].parameters["required"] == ["id"]
     assert specs["replace_timeline_event"].parameters["required"] == ["id"]
+
+    create_event_params = specs["create_timeline_event"].parameters
+    assert create_event_params["required"] == ["trackId", "name", "description", "content", "startDate"]
+    create_event_links = create_event_params["properties"]["links"]
+    assert create_event_links["type"] == "array"
+    assert create_event_links["items"]["required"] == ["objectType", "objectId"]
+    assert create_event_links["items"]["properties"]["objectType"]["enum"] == ["outline", "story_entity"]
 
     replace_track_props = specs["replace_timeline_track"].parameters["properties"]
     assert replace_track_props["parentId"]["type"] == ["string", "null"]
@@ -637,6 +645,7 @@ def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:
     feature = TimelineFeatureModule()
     binding = _binding_by_name(feature, _module_context(), "create_timeline_event")
     track_id = uuid4()
+    object_id = uuid4()
     captured: dict[str, object] = {}
 
     def _fake_create_event(_db, **kwargs):
@@ -655,6 +664,7 @@ def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:
                 "startDate": {"year": 1, "month": 1, "day": 1},
                 "endDate": {"year": 1, "month": 2, "day": 1},
                 "tags": [],
+                "links": [{"objectType": "outline", "objectId": str(object_id)}],
             },
             _execution_context(),
         )
@@ -662,6 +672,28 @@ def test_create_timeline_event_persists_one_based_dates(monkeypatch) -> None:
 
     assert captured["start_date"] == {"year": 1, "month": 1, "day": 1}
     assert captured["end_date"] == {"year": 1, "month": 2, "day": 1}
+    assert captured["links"] == [{"object_type": "outline", "object_id": object_id}]
+
+
+def test_create_timeline_event_rejects_invalid_create_links(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+    binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "create_timeline_event")
+    result = asyncio.run(
+        binding.validate(
+            {
+                "trackId": str(uuid4()),
+                "name": "Coronation",
+                "description": "",
+                "content": "",
+                "startDate": {"year": 1, "month": 1, "day": 1},
+                "links": [{"objectType": "manuscript", "objectId": str(uuid4())}],
+            },
+            _validation_context(),
+        )
+    )
+
+    assert result.valid is False
+    assert "links.objectType must be outline or story_entity" in str(result.reason)
 
 
 def test_timeline_event_tools_reject_invalid_gregorian_dates(monkeypatch) -> None:

@@ -856,6 +856,104 @@ def test_timeline_event_create_and_content_update_queue_semantic_index(monkeypat
     }
 
 
+def test_timeline_event_create_persists_links_and_deduplicates(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4())
+    timeline = SimpleNamespace(id=track.timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    outline_id = uuid4()
+    entity_id = uuid4()
+    captured_links: list[object] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch, serialize_event=True)
+    monkeypatch.setattr(timeline_service_module, "_track_query", lambda *_args, **_kwargs: FakeFirstQuery(track))
+    monkeypatch.setattr(timeline_service_module, "queue_semantic_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(timeline_service_module, "resolve_project_id_for_object", lambda *_args, **_kwargs: project_id)
+
+    def _fake_serialize_event(event, **kwargs):
+        captured_links.extend(kwargs["links_by_event_id"].get(event.id, []))
+        return {"id": str(event.id), "links": [timeline_service_module._serialize_link(link) for link in captured_links]}
+
+    monkeypatch.setattr(timeline_service_module, "_serialize_event", _fake_serialize_event)
+
+    db = FakeTimelineSession({timeline_service_module.Timeline: timeline})
+    result = service.create_event(
+        db,
+        project_id=project_id,
+        track_id=track.id,
+        language="English",
+        name="Event",
+        description="Summary",
+        content="Event body",
+        start_date={"year": 1},
+        end_date=None,
+        tags=[],
+        user_request="test",
+        user_id=user_id,
+        links=[
+            {"object_type": "outline", "object_id": str(outline_id)},
+            {"object_type": "outline", "object_id": str(outline_id)},
+            {"object_type": "story_entity", "object_id": entity_id},
+        ],
+    )
+
+    created_event = db.added[0]
+    assert result["id"] == str(created_event.id)
+    assert len(captured_links) == 2
+    assert [(link.object_type, link.object_id, link.event_id) for link in captured_links] == [
+        ("outline", outline_id, created_event.id),
+        ("story_entity", entity_id, created_event.id),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("links", "resolver"),
+    [
+        ([{"object_type": "outline", "object_id": "not-a-uuid"}], lambda *_args, **_kwargs: uuid4()),
+        ([{"object_type": "manuscript", "object_id": str(uuid4())}], lambda *_args, **_kwargs: uuid4()),
+        ([{"object_type": "outline", "object_id": str(uuid4())}], lambda *_args, **_kwargs: uuid4()),
+        (
+            [{"object_type": "outline", "object_id": str(uuid4())}],
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                timeline_service_module.HTTPException(status_code=404, detail="outline not found")
+            ),
+        ),
+    ],
+)
+def test_timeline_event_create_rejects_invalid_links_before_insert(monkeypatch, links, resolver) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4())
+    timeline = SimpleNamespace(id=track.timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch, serialize_event=True)
+    monkeypatch.setattr(timeline_service_module, "_track_query", lambda *_args, **_kwargs: FakeFirstQuery(track))
+    monkeypatch.setattr(timeline_service_module, "resolve_project_id_for_object", resolver)
+
+    db = FakeTimelineSession({timeline_service_module.Timeline: timeline})
+    with pytest.raises(timeline_service_module.HTTPException):
+        service.create_event(
+            db,
+            project_id=project_id,
+            track_id=track.id,
+            language="English",
+            name="Event",
+            description="Summary",
+            content="Event body",
+            start_date={"year": 1},
+            end_date=None,
+            tags=[],
+            user_request="test",
+            user_id=user_id,
+            links=links,
+        )
+
+    assert db.added == []
+    assert db.flush_calls == 0
+
+
 def test_timeline_event_metadata_only_update_does_not_queue_semantic_index(monkeypatch) -> None:
     project_id = uuid4()
     user_id = uuid4()

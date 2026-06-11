@@ -9,7 +9,7 @@ import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { pickExistingKeys, pickValues, resolveObjectTitle } from './helpers';
 import { useTimelineLookup } from './timelineCardData';
-import { isTimelineEventLink, isTimelineObjectType, renderTimelineBody, renderTimelineLink } from './timelineCardRender';
+import { isTimelineObjectType, renderTimelineBody } from './timelineCardRender';
 
 function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
   switch (objectType) {
@@ -26,7 +26,7 @@ function createFieldKeysForObjectType(objectType: ObjectCardProps['operation']['
     case 'timeline_track':
       return ['name', 'description', 'content', 'parentId', 'position', 'color'];
     case 'timeline_event':
-      return ['trackId', 'name', 'description', 'content', 'startDate', 'endDate', 'tags'];
+      return ['trackId', 'name', 'description', 'content', 'startDate', 'endDate', 'tags', 'links'];
     default:
       return pickExistingKeys({} as Record<string, unknown>);
   }
@@ -58,9 +58,6 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (isTimelineObjectType(operation.objectType)) {
-      if (isTimelineEventLink(operation.toolName)) {
-        return renderTimelineLink({ operation, mode: 'create', lookup: timelineLookup, language });
-      }
       return renderTimelineBody({
         operation,
         mode: 'create',

@@ -30,6 +30,19 @@ _POSITION = {"type": "integer", "description": "Zero-based sibling position"}
 _PARENT_ID = {"type": ["string", "null"], "description": "Parent track ID or null"}
 _COLOR = {"type": ["string", "null"], "description": "Optional track color"}
 _TAGS = {"type": "array", "items": {"type": "string"}}
+_EVENT_LINKS = {
+    "type": "array",
+    "description": "Optional links to attach while creating the event.",
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "objectType": {"type": "string", "enum": sorted(ALLOWED_LINK_TYPES)},
+            "objectId": _ID,
+        },
+        "required": ["objectType", "objectId"],
+    },
+}
 _PATCH_FIELD = {"type": "string", "enum": ["name", "description", "content"]}
 
 
@@ -249,6 +262,27 @@ def _has_any_track_replace_field(args: dict[str, Any]) -> bool:
 
 def _has_any_event_replace_field(args: dict[str, Any]) -> bool:
     return any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags"))
+
+
+def _normalize_event_link_args(args: dict[str, Any]) -> list[dict[str, Any]]:
+    if "links" not in args:
+        return []
+    raw_links = args.get("links")
+    if raw_links is None:
+        return []
+    if not isinstance(raw_links, list):
+        raise ValueError("links must be an array")
+
+    links: list[dict[str, Any]] = []
+    for index, raw_link in enumerate(raw_links):
+        if not isinstance(raw_link, dict):
+            raise ValueError("links entries must be objects")
+        object_type = str(raw_link.get("objectType") or "")
+        if object_type not in ALLOWED_LINK_TYPES:
+            raise ValueError("links.objectType must be outline or story_entity")
+        object_id = to_uuid(raw_link.get("objectId"), f"links[{index}].objectId")
+        links.append({"object_type": object_type, "object_id": object_id})
+    return links
 
 
 def _metadata(item) -> dict[str, Any] | None:
@@ -473,6 +507,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                         "startDate": date,
                         "endDate": {**date, "nullable": True},
                         "tags": _TAGS,
+                        "links": _EVENT_LINKS,
                     },
                     ["trackId", "name", "description", "content", "startDate"],
                 ),
@@ -559,19 +594,6 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 description="Delete a timeline event.",
                 parameters=obj_schema({"id": _ID}, ["id"]),
                 auto_approve_category="delete",
-            ),
-            ToolSpec(
-                name="create_timeline_event_link",
-                description="Link a timeline event to an outline or story entity.",
-                parameters=obj_schema(
-                    {
-                        "id": _ID,
-                        "objectType": {"type": "string", "enum": sorted(ALLOWED_LINK_TYPES)},
-                        "objectId": _ID,
-                    },
-                    ["id", "objectType", "objectId"],
-                ),
-                auto_approve_category="write",
             ),
             ToolSpec(
                 name="delete_timeline_event_link",
@@ -753,14 +775,6 @@ class TimelineFeatureModule(ToolFeatureModule):
                 validate=self._validate_delete_timeline_event,
                 execute=self._execute_delete_timeline_event,
                 build_persisted_meta=_persisted_meta(category="delete", op="delete", target_kind="timeline_event"),
-            )
-            add_binding(
-                spec_map=normal_specs_by_name,
-                name="create_timeline_event_link",
-                meta=ToolBindingMeta(feature_key="timeline", category="write", op="create", target_kind="timeline_event"),
-                validate=self._validate_create_timeline_event_link,
-                execute=self._execute_create_timeline_event_link,
-                build_persisted_meta=_persisted_meta(category="write", op="create", target_kind="timeline_event", grouped=True),
             )
             add_binding(
                 spec_map=normal_specs_by_name,
@@ -969,11 +983,13 @@ class TimelineFeatureModule(ToolFeatureModule):
                 validate_start=True,
                 validate_end="endDate" in args,
             )
+            _normalize_event_link_args(args)
             return valid_result()
         except ValueError as exc:
             return invalid_result("validate_create_timeline_event", str(exc))
 
     async def _execute_create_timeline_event(self, args, ctx):
+        links = _normalize_event_link_args(args)
         result = timeline_service.create_event(
             ctx.db,
             project_id=ctx.project_id,
@@ -988,6 +1004,7 @@ class TimelineFeatureModule(ToolFeatureModule):
             tags=list(args.get("tags") or []),
             user_request="tool:create_timeline_event",
             user_id=ctx.user_id,
+            links=links,
         )
         return ToolExecutionOutcome(
             lifecycle="applied",
@@ -1143,47 +1160,6 @@ class TimelineFeatureModule(ToolFeatureModule):
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result("Deleted timeline event", object_id=str(event_id), object_type="timeline_event"),
-        )
-
-    async def _validate_create_timeline_event_link(self, args, ctx):
-        try:
-            event_id = to_uuid(args.get("id"), "id")
-            object_type = str(args.get("objectType") or "")
-            if object_type not in ALLOWED_LINK_TYPES:
-                raise ValueError("objectType must be outline or story_entity")
-            to_uuid(args.get("objectId"), "objectId")
-            event = object_service.get_object(
-                ctx.db,
-                object_type="timeline_event",
-                object_id=event_id,
-                project_id=ctx.project_id,
-                language=ctx.language,
-            )
-            if event is None:
-                raise ValueError("timeline_event not found")
-            return valid_result()
-        except ValueError as exc:
-            return invalid_result("validate_create_timeline_event_link", str(exc))
-
-    async def _execute_create_timeline_event_link(self, args, ctx):
-        event_id = to_uuid(args.get("id"), "id")
-        object_id = to_uuid(args.get("objectId"), "objectId")
-        link = timeline_service.link_event(
-            ctx.db,
-            project_id=ctx.project_id,
-            event_id=event_id,
-            object_type=str(args.get("objectType") or ""),
-            object_id=object_id,
-            user_id=ctx.user_id,
-        )
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=make_result(
-                "Linked timeline event",
-                object_id=str(event_id),
-                object_type="timeline_event",
-                data={"linkId": link["id"]},
-            ),
         )
 
     async def _validate_delete_timeline_event_link(self, args, ctx):

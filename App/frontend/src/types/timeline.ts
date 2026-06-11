@@ -122,6 +122,7 @@ export interface TimelineEventCreateRequest {
   startDate: TimelineDate;
   endDate?: TimelineDate | null;
   tags?: string[];
+  links?: TimelineEventLinkRequest[];
   userRequest?: string;
 }
 

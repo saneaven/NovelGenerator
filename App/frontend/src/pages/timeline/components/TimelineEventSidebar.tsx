@@ -1,17 +1,23 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Close, Trash } from '../../../components/icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Close, Plus, Trash } from '../../../components/icons';
 import { RichTextEditor } from '../../../components/RichTextEditor';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { NumberInput } from '../../../components/ui/NumberInput';
 import { StringChipInput } from '../../../components/ui/StringChipInput';
+import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
+import { useObjectPickerData } from '../../../components/ObjectPicker/useObjectPickerData';
+import type { ObjectPickerGroup, ObjectPickerItem } from '../../../components/ObjectPicker/types';
 import { useTimelineStore } from '../../../store/timelineStore';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type {
   CalendarConfig,
   TimelineDate,
   TimelineEvent,
+  TimelineEventLinkRequest,
   TimelineTrack,
 } from '../../../types/timeline';
+import { getAnyObjectTypeLabel } from '../../../types/timeline';
+import type { AnyObjectType } from '../../../types/unifiedObject';
 import { clampTimelineDate, dateUnitMax } from '../../../utils/timelineCalendar';
 import './TimelineEventSidebar.css';
 
@@ -41,6 +47,34 @@ function collectLeafTracks(tracks: TimelineTrack[], lang: string): { id: string;
   return result;
 }
 
+const LINKABLE_TYPES = new Set<string>(['story_entity', 'outline']);
+
+function filterLinkGroups(groups: ObjectPickerGroup[]): ObjectPickerGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => LINKABLE_TYPES.has(item.type)),
+      childGroups: group.childGroups ? filterLinkGroups(group.childGroups) : undefined,
+    }))
+    .filter((group) => group.items.length > 0 || (group.childGroups?.length ?? 0) > 0);
+}
+
+function collectLinkItems(groups: ObjectPickerGroup[]): Map<string, ObjectPickerItem> {
+  const items = new Map<string, ObjectPickerItem>();
+  const walk = (list: ObjectPickerGroup[]) => {
+    for (const group of list) {
+      for (const item of group.items) {
+        items.set(item.id, item);
+      }
+      if (group.childGroups) {
+        walk(group.childGroups);
+      }
+    }
+  };
+  walk(groups);
+  return items;
+}
+
 const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   projectId,
   event,
@@ -53,8 +87,17 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   const createEventAction = useTimelineStore((s) => s.createEvent);
   const updateEventAction = useTimelineStore((s) => s.updateEvent);
   const deleteEventAction = useTimelineStore((s) => s.deleteEvent);
+  const createEventLinkAction = useTimelineStore((s) => s.createEventLink);
+  const deleteEventLinkAction = useTimelineStore((s) => s.deleteEventLink);
+  const { groups: objectPickerGroups } = useObjectPickerData({
+    projectId,
+    language: displayLanguage,
+    mode: 'all',
+  });
 
   const isCreating = event === null;
+  const linkGroups = useMemo(() => filterLinkGroups(objectPickerGroups), [objectPickerGroups]);
+  const linkItems = useMemo(() => collectLinkItems(linkGroups), [linkGroups]);
 
   // Form state
   const [name, setName] = useState('');
@@ -66,6 +109,8 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [trackId, setTrackId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [draftLinks, setDraftLinks] = useState<TimelineEventLinkRequest[]>([]);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
 
   // Initialize form
   useEffect(() => {
@@ -79,6 +124,8 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
       setHasEndDate(!!event.endDate);
       setTags([...event.tags]);
       setTrackId(event.trackId);
+      setDraftLinks([]);
+      setShowLinkPicker(false);
     } else if (createForTrack) {
       setName('');
       setDescription('');
@@ -88,6 +135,8 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
       setHasEndDate(false);
       setTags([]);
       setTrackId(createForTrack.track.id);
+      setDraftLinks([]);
+      setShowLinkPicker(false);
     }
   }, [event, createForTrack, displayLanguage, calendar]);
 
@@ -118,6 +167,7 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
           startDate,
           endDate: hasEndDate ? endDate : null,
           tags,
+          links: draftLinks,
         }, displayLanguage);
         // After creation, the store refetches. We close create mode.
         onClose();
@@ -136,7 +186,40 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [isCreating, name, description, content, startDate, endDate, hasEndDate, tags, trackId, projectId, displayLanguage, event, createEventAction, updateEventAction, onClose]);
+  }, [isCreating, name, description, content, startDate, endDate, hasEndDate, tags, draftLinks, trackId, projectId, displayLanguage, event, createEventAction, updateEventAction, onClose]);
+
+  const handlePickLink = useCallback(
+    async (ids: string[] | string) => {
+      const objectId = Array.isArray(ids) ? ids[0] : ids;
+      if (!objectId) return;
+      const target = linkItems.get(objectId);
+      if (!target || !LINKABLE_TYPES.has(target.type)) return;
+
+      setShowLinkPicker(false);
+      if (isCreating) {
+        setDraftLinks((prev) => {
+          if (prev.some((link) => link.objectType === target.type && link.objectId === objectId)) {
+            return prev;
+          }
+          return [...prev, { objectType: target.type, objectId }];
+        });
+        return;
+      }
+
+      if (!event) return;
+      await createEventLinkAction(
+        projectId,
+        event.id,
+        { objectType: target.type, objectId },
+        displayLanguage,
+      );
+    },
+    [isCreating, event, linkItems, projectId, displayLanguage, createEventLinkAction],
+  );
+
+  const handleRemoveDraftLink = useCallback((link: TimelineEventLinkRequest) => {
+    setDraftLinks((prev) => prev.filter((entry) => entry.objectType !== link.objectType || entry.objectId !== link.objectId));
+  }, []);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -281,6 +364,79 @@ const TimelineEventSidebar: React.FC<TimelineEventSidebarProps> = ({
             placeholder="Add tags..."
             ariaLabel="Event tags"
           />
+        </div>
+
+        {/* Links */}
+        <div className="timeline-event-sidebar__field">
+          <label className="timeline-event-sidebar__label">Links</label>
+          <div className="timeline-event-sidebar__links">
+            {isCreating ? (
+              draftLinks.map((link) => (
+                <span key={`${link.objectType}:${link.objectId}`} className="timeline-event-sidebar__link-chip">
+                  <span className="timeline-event-sidebar__link-type">
+                    {getAnyObjectTypeLabel(link.objectType as AnyObjectType)}
+                  </span>
+                  <span className="timeline-event-sidebar__link-name">
+                    {linkItems.get(link.objectId)?.name ?? 'Unknown'}
+                  </span>
+                  <button
+                    type="button"
+                    className="timeline-event-sidebar__link-remove"
+                    onClick={() => handleRemoveDraftLink(link)}
+                    title="Remove link"
+                  >
+                    <Close size="xs" />
+                  </button>
+                </span>
+              ))
+            ) : (
+              event?.links.map((link) => (
+                <span key={link.id} className="timeline-event-sidebar__link-chip">
+                  <span className="timeline-event-sidebar__link-type">
+                    {getAnyObjectTypeLabel(link.objectType as AnyObjectType)}
+                  </span>
+                  <span className="timeline-event-sidebar__link-name">
+                    {linkItems.get(link.objectId)?.name ?? 'Unknown'}
+                  </span>
+                  <button
+                    type="button"
+                    className="timeline-event-sidebar__link-remove"
+                    onClick={() => {
+                      void deleteEventLinkAction(projectId, link.eventId, link.id, displayLanguage);
+                    }}
+                    title="Remove link"
+                  >
+                    <Close size="xs" />
+                  </button>
+                </span>
+              ))
+            )}
+            <button
+              type="button"
+              className="timeline-event-sidebar__link-add"
+              onClick={() => setShowLinkPicker((prev) => !prev)}
+            >
+              <Plus size="xs" />
+              Add link
+            </button>
+          </div>
+          {showLinkPicker && (
+            <div className="timeline-event-sidebar__link-picker">
+              <ObjectPicker
+                mode="all"
+                selectionMode="single"
+                selectedIds=""
+                onChange={(ids) => {
+                  void handlePickLink(ids);
+                }}
+                projectId={projectId}
+                language={displayLanguage}
+                customGroups={linkGroups}
+                showPreview={false}
+                maxHeight={240}
+              />
+            </div>
+          )}
         </div>
       </div>
 

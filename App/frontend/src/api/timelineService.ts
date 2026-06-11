@@ -179,6 +179,10 @@ function serializeEventCreate(request: TimelineEventCreateRequest) {
     start_date: request.startDate,
     end_date: request.endDate ?? null,
     tags: request.tags ?? [],
+    links: (request.links ?? []).map((link) => ({
+      object_type: link.objectType,
+      object_id: link.objectId,
+    })),
     user_request: request.userRequest ?? 'Timeline Event Creation',
   };
 }

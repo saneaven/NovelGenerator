@@ -54,6 +54,13 @@ class TimelineTrackMoveRequest(BaseModel):
     position: int | None = None
 
 
+class TimelineEventLinkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    object_type: str
+    object_id: str
+
+
 class TimelineEventCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -66,6 +73,7 @@ class TimelineEventCreate(BaseModel):
     start_date: dict[str, int]
     end_date: dict[str, int] | None = None
     tags: list[str] = Field(default_factory=list)
+    links: list[TimelineEventLinkCreate] = Field(default_factory=list)
     user_request: str = "Timeline Event Creation"
 
 
@@ -85,11 +93,8 @@ class TimelineEventUpdate(BaseModel):
     create_new_version: bool = True
 
 
-class TimelineEventLinkRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    object_type: str
-    object_id: str
+class TimelineEventLinkRequest(TimelineEventLinkCreate):
+    pass
 
 
 class TimelineEventLinkResponse(BaseModel):

@@ -11,7 +11,7 @@ import {
   type TimelineLookup,
 } from './timelineCardData';
 
-const EVENT_LINK_TOOLS = new Set(['create_timeline_event_link', 'delete_timeline_event_link']);
+const EVENT_LINK_TOOLS = new Set(['delete_timeline_event_link']);
 
 export function isTimelineObjectType(objectType: string): boolean {
   return objectType === 'timeline_track' || objectType === 'timeline_event';
@@ -39,12 +39,14 @@ function asLinkRefs(value: unknown): TimelineLinkReference[] {
   return value.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
-    const linkId = asString(record.linkId) ?? asString(record.id);
+    const objectType = asString(record.objectType);
+    const objectId = asString(record.objectId);
+    const linkId = asString(record.linkId) ?? asString(record.id) ?? (objectType && objectId ? `${objectType}:${objectId}` : undefined);
     if (!linkId) return [];
     return [{
       linkId,
-      objectType: asString(record.objectType),
-      objectId: asString(record.objectId),
+      objectType,
+      objectId,
     }];
   });
 }

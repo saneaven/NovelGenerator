@@ -236,6 +236,7 @@ async def create_event(
             start_date=request.start_date,
             end_date=request.end_date,
             tags=request.tags,
+            links=[link.model_dump() for link in request.links],
             user_request=request.user_request,
             user_id=current_user.id,
         )

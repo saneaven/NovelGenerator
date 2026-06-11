@@ -34,7 +34,6 @@ const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
   create_outline: { category: 'create', objectType: 'outline' },
   create_timeline_track: { category: 'create', objectType: 'timeline_track' },
   create_timeline_event: { category: 'create', objectType: 'timeline_event' },
-  create_timeline_event_link: { category: 'create', objectType: 'timeline_event' },
   replace_story_entity: { category: 'replace', objectType: 'story_entity', storyEntityKindFromArgs: true },
   replace_story_entity_folder: { category: 'replace', objectType: 'story_entity_folder' },
   replace_basic_info: { category: 'replace', objectType: 'basic_info' },

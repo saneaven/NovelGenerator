@@ -405,6 +405,73 @@ def _serialize_link(link: TimelineEventLink) -> dict[str, Any]:
     }
 
 
+def _link_value(link: Any, snake_key: str, camel_key: str) -> Any:
+    if isinstance(link, dict):
+        if snake_key in link:
+            return link.get(snake_key)
+        return link.get(camel_key)
+    if hasattr(link, snake_key):
+        return getattr(link, snake_key)
+    return getattr(link, camel_key, None)
+
+
+def _coerce_link_uuid(value: Any, field_name: str) -> UUID:
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+
+
+def _validate_link_target(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    user_id: UUID,
+) -> tuple[str, UUID]:
+    if object_type not in ALLOWED_LINK_TYPES:
+        raise HTTPException(status_code=400, detail=f"Cannot link to object type: {object_type}")
+
+    linked_project_id = resolve_project_id_for_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        user_id=user_id,
+    )
+    if linked_project_id != project_id:
+        raise HTTPException(status_code=400, detail="Cannot link objects across projects")
+    return object_type, object_id
+
+
+def _normalize_create_event_links(
+    db: Session,
+    *,
+    project_id: UUID,
+    links: Iterable[Any] | None,
+    user_id: UUID,
+) -> list[tuple[str, UUID]]:
+    normalized: list[tuple[str, UUID]] = []
+    seen: set[tuple[str, UUID]] = set()
+    for link in links or []:
+        object_type = str(_link_value(link, "object_type", "objectType") or "")
+        object_id = _coerce_link_uuid(_link_value(link, "object_id", "objectId"), "object_id")
+        target = _validate_link_target(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+            user_id=user_id,
+        )
+        if target in seen:
+            continue
+        seen.add(target)
+        normalized.append(target)
+    return normalized
+
+
 def _serialize_event(
     event: TimelineEvent,
     *,
@@ -1108,6 +1175,7 @@ class TimelineService:
         tags: list[str] | None,
         user_request: str,
         user_id: UUID,
+        links: Iterable[Any] | None = None,
     ) -> dict[str, Any]:
         track = _track_query(db, project_id).filter(TimelineTrack.id == track_id).first()
         if track is None:
@@ -1118,6 +1186,12 @@ class TimelineService:
 
         calendar = timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar()
         _validate_event_dates(start_date=start_date, end_date=end_date, calendar=calendar)
+        link_targets = _normalize_create_event_links(
+            db,
+            project_id=project_id,
+            links=links,
+            user_id=user_id,
+        )
 
         event = TimelineEvent(
             id=uuid4(),
@@ -1128,6 +1202,18 @@ class TimelineService:
         )
         db.add(event)
         db.flush()
+        link_rows: list[TimelineEventLink] = []
+        for object_type, object_id in link_targets:
+            link = TimelineEventLink(
+                id=uuid4(),
+                event_id=event.id,
+                object_type=object_type,
+                object_id=object_id,
+            )
+            db.add(link)
+            link_rows.append(link)
+        if link_rows:
+            db.flush()
 
         version = _create_or_update_version(
             db,
@@ -1173,7 +1259,7 @@ class TimelineService:
             event,
             language=language,
             version_map={event.id: _version_entry_for_parent(db, version, language=language)},
-            links_by_event_id={},
+            links_by_event_id={event.id: link_rows},
         )
 
     def update_event(
@@ -1378,21 +1464,17 @@ class TimelineService:
         object_id: UUID,
         user_id: UUID,
     ) -> dict[str, Any]:
-        if object_type not in ALLOWED_LINK_TYPES:
-            raise HTTPException(status_code=400, detail=f"Cannot link to object type: {object_type}")
-
         event = _event_query(db, project_id).filter(TimelineEvent.id == event_id).first()
         if event is None:
             raise HTTPException(status_code=404, detail="Timeline event not found")
 
-        linked_project_id = resolve_project_id_for_object(
+        object_type, object_id = _validate_link_target(
             db,
+            project_id=project_id,
             object_type=object_type,
             object_id=object_id,
             user_id=user_id,
         )
-        if linked_project_id != project_id:
-            raise HTTPException(status_code=400, detail="Cannot link objects across projects")
 
         existing = (
             db.query(TimelineEventLink)

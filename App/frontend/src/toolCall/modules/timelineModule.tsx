@@ -13,7 +13,6 @@ const TOOL_NAMES = [
   'read_timeline_event',
   'create_timeline_track',
   'create_timeline_event',
-  'create_timeline_event_link',
   'patch_timeline_track',
   'patch_timeline_event',
   'delete_timeline_track',
