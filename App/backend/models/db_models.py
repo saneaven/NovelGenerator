@@ -734,7 +734,7 @@ class TimelineTrack(Base):
     timeline_id = Column(UUID(as_uuid=True), ForeignKey("timelines.id", ondelete="CASCADE"), nullable=False, index=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("timeline_tracks.id", ondelete="CASCADE"), nullable=True, index=True)
     position = Column(Integer, nullable=False, default=0)
-    color = Column(String(20), nullable=True)
+    color = Column(String(32), nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

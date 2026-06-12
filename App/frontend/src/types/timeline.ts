@@ -47,7 +47,8 @@ export interface TimelineTrack {
   timelineId: string;
   parentId?: string | null;
   position: number;
-  color?: string | null;
+  /** canonical oklch string, assigned server-side when not chosen manually */
+  color: string;
   createdAt: string | null;
   updatedAt: string | null;
   data: Record<string, Record<string, unknown>>;
@@ -94,6 +95,7 @@ export interface TimelineTrackCreateRequest {
   content?: TipTapDoc;
   parentId?: string | null;
   position?: number;
+  /** null/omitted = server assigns an automatic color */
   color?: string | null;
   userRequest?: string;
 }
@@ -103,7 +105,8 @@ export interface TimelineTrackUpdateRequest {
   name?: string;
   description?: string;
   content?: TipTapDoc;
-  color?: string | null;
+  /** omitted = keep current color; cannot be cleared */
+  color?: string;
   userRequest?: string;
   createNewVersion?: boolean;
 }

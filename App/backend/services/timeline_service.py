@@ -40,6 +40,11 @@ from ..utils.timeline_calendar import (
     to_base_units,
     validate_date,
 )
+from ..utils.timeline_colors import (
+    child_track_color,
+    normalize_track_color,
+    root_track_color,
+)
 from .object_version_language_service import (
     create_version_with_language,
     latest_payload_with_fallback,
@@ -855,12 +860,36 @@ class TimelineService:
             if parent is None:
                 raise HTTPException(status_code=404, detail="Parent track not found")
 
+        normalized_color = normalize_track_color(color)
+        if normalized_color is None:
+            if parent_id is None:
+                sibling_colors = [
+                    row[0]
+                    for row in db.query(TimelineTrack.color)
+                    .filter(
+                        TimelineTrack.timeline_id == timeline.id,
+                        TimelineTrack.parent_id.is_(None),
+                    )
+                    .all()
+                ]
+                normalized_color = root_track_color(sibling_colors)
+            else:
+                sibling_count = (
+                    db.query(TimelineTrack)
+                    .filter(
+                        TimelineTrack.timeline_id == timeline.id,
+                        TimelineTrack.parent_id == parent_id,
+                    )
+                    .count()
+                )
+                normalized_color = child_track_color(parent.color, sibling_count)
+
         track = TimelineTrack(
             id=uuid4(),
             timeline_id=timeline.id,
             parent_id=parent_id,
             position=0,
-            color=(str(color).strip() or None) if color is not None else None,
+            color=normalized_color,
         )
         db.add(track)
         db.flush()
@@ -947,7 +976,9 @@ class TimelineService:
         has_version_change = name is not None or description is not None or content is not _UNSET
 
         if color is not _UNSET:
-            track.color = str(color).strip() or None
+            normalized_color = normalize_track_color(color)
+            if normalized_color is not None:
+                track.color = normalized_color
 
         version_row: ObjectVersion | None = None
         if has_version_change:

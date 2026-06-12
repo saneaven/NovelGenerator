@@ -3,9 +3,11 @@ import { timelineService } from '../api/timelineService';
 import type {
   CalendarConfig,
   FullTimeline,
+  TimelineEvent,
   TimelineEventCreateRequest,
   TimelineEventLinkRequest,
   TimelineEventUpdateRequest,
+  TimelineTrack,
   TimelineTrackCreateRequest,
   TimelineTrackMoveRequest,
   TimelineTrackUpdateRequest,
@@ -22,11 +24,11 @@ interface TimelineStore {
   fetchTimeline: (projectId: string, language: string, options?: { force?: boolean }) => Promise<void>;
   setTagFilter: (tags: string[]) => void;
   updateCalendar: (projectId: string, calendar: CalendarConfig, language: string) => Promise<void>;
-  createTrack: (projectId: string, request: TimelineTrackCreateRequest, language: string) => Promise<void>;
+  createTrack: (projectId: string, request: TimelineTrackCreateRequest, language: string) => Promise<TimelineTrack>;
   updateTrack: (projectId: string, trackId: string, request: TimelineTrackUpdateRequest, language: string) => Promise<void>;
   moveTrack: (projectId: string, trackId: string, request: TimelineTrackMoveRequest, language: string) => Promise<void>;
   deleteTrack: (projectId: string, trackId: string, language: string) => Promise<void>;
-  createEvent: (projectId: string, request: TimelineEventCreateRequest, language: string) => Promise<void>;
+  createEvent: (projectId: string, request: TimelineEventCreateRequest, language: string) => Promise<TimelineEvent>;
   updateEvent: (projectId: string, eventId: string, request: TimelineEventUpdateRequest, language: string) => Promise<void>;
   deleteEvent: (projectId: string, eventId: string, language: string) => Promise<void>;
   createEventLink: (projectId: string, eventId: string, request: TimelineEventLinkRequest, language: string) => Promise<void>;
@@ -43,7 +45,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   loadedLanguage: null,
 
   fetchTimeline: async (projectId, language, options) => {
-    const { timeline, loadedProjectId, loadedLanguage, activeTagFilter } = get();
+    const { timeline, loadedProjectId, loadedLanguage } = get();
     if (!options?.force && timeline && loadedProjectId === projectId && loadedLanguage === language) {
       return;
     }
@@ -54,7 +56,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     });
 
     try {
-      const nextTimeline = await timelineService.getTimeline(projectId, language, activeTagFilter.length > 0 ? activeTagFilter : undefined);
+      // Tag filtering happens client-side in the layout engine: the full event set
+      // is needed for the filter UI's tag list, and filter changes must not refetch.
+      const nextTimeline = await timelineService.getTimeline(projectId, language);
       set({
         timeline: nextTimeline,
         isLoading: false,
@@ -80,8 +84,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   },
 
   createTrack: async (projectId, request, language) => {
-    await timelineService.createTrack(projectId, request);
+    const created = await timelineService.createTrack(projectId, request);
     await get().fetchTimeline(projectId, language, { force: true });
+    return created;
   },
 
   updateTrack: async (projectId, trackId, request, language) => {
@@ -100,8 +105,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   },
 
   createEvent: async (projectId, request, language) => {
-    await timelineService.createEvent(projectId, request);
+    const created = await timelineService.createEvent(projectId, request);
     await get().fetchTimeline(projectId, language, { force: true });
+    return created;
   },
 
   updateEvent: async (projectId, eventId, request, language) => {

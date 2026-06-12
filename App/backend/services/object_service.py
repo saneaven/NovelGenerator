@@ -34,6 +34,7 @@ from ..services.deletion_service import (
     delete_semantic_sources_bulk,
 )
 from ..utils.timeline_calendar import default_calendar
+from ..utils.timeline_colors import normalize_track_color
 from ..utils.story_entities import STORY_ENTITY_FOLDER_TYPE, STORY_ENTITY_TYPE, require_story_entity_kind
 from .basic_info_utils import normalize_basic_info_data
 from .rich_text import (
@@ -558,9 +559,10 @@ def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj:
             )
 
         if "color" in metadata:
-            color = metadata.get("color")
-            obj.color = (str(color).strip() or None) if color is not None else None
-            db.flush()
+            normalized_color = normalize_track_color(metadata.get("color"))
+            if normalized_color is not None:
+                obj.color = normalized_color
+                db.flush()
         return
 
     if object_type == "timeline_event":

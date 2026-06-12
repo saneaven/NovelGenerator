@@ -153,15 +153,15 @@
     "saveError": "Failed to save settings to server. Changes are saved locally.",
     "savedSuccessfully": "Settings saved",
     "openNavigation": "Open navigation menu",
-	    "tabs": {
-	      "profile": "Profile",
-	      "language": "Language",
-	      "general": "General",
-	      "credentials": "Credentials",
-	      "searchMemory": "Search & Memory",
-	      "theme": "Theme",
-	      "imageGen": "Image Generation",
-	      "advanced": "Advanced",
+    "tabs": {
+      "profile": "Profile",
+      "language": "Language",
+      "general": "General",
+      "credentials": "Credentials",
+      "searchMemory": "Search & Memory",
+      "theme": "Theme",
+      "imageGen": "Image Generation",
+      "advanced": "Advanced",
       "prompts": "Prompts & Templates"
     },
     "llmCache": {
@@ -1610,6 +1610,158 @@
       "addRow": "Add Row",
       "addColumn": "Add Column",
       "deleteTable": "Delete Table"
+    }
+  },
+  "timeline": {
+    "loading": "Loading timeline...",
+    "newEvent": "New Event",
+    "newTrack": "New track",
+    "calendarSettings": "Calendar",
+    "jumpToDate": "Jump to date",
+    "jumpToStart": "Jump to start",
+    "jumpToEnd": "Jump to end",
+    "hiddenTracks_one": "{{count}} track hidden",
+    "hiddenTracks_other": "{{count}} tracks hidden",
+    "showAll": "Show all",
+    "break": {
+      "yearsLater_one": "{{count}} year later",
+      "yearsLater_other": "{{count}} years later",
+      "unitsLater_one": "{{count}} {{unit}} later",
+      "unitsLater_other": "{{count}} {{unit}} later",
+      "continues": "{{name}} continues",
+      "continuesMore_one": "+{{count}} more",
+      "continuesMore_other": "+{{count}} more"
+    },
+    "card": {
+      "expand": "Expand event",
+      "collapse": "Collapse event",
+      "untitled": "Untitled event",
+      "until": "until {{date}}",
+      "endsMarker": "{{name}} · ends",
+      "ongoingCount_one": "+{{count}} ongoing",
+      "ongoingCount_other": "+{{count}} ongoing",
+      "showAllCluster": "Show all ({{count}})",
+      "links": "Links",
+      "hasNotes": "Has notes",
+      "addAtThisTime": "Add event at this time"
+    },
+    "duration": {
+      "year_one": "{{count}} year",
+      "year_other": "{{count}} years",
+      "month_one": "{{count}} month",
+      "month_other": "{{count}} months",
+      "day_one": "{{count}} day",
+      "day_other": "{{count}} days",
+      "hour_one": "{{count}} hour",
+      "hour_other": "{{count}} hours",
+      "minute_one": "{{count}} minute",
+      "minute_other": "{{count}} minutes",
+      "unit_one": "{{count}} {{unit}}",
+      "unit_other": "{{count}} {{unit}}"
+    },
+    "empty": {
+      "noTracksTitle": "No tracks yet",
+      "noTracksBody": "Create a track to start placing events on your timeline.",
+      "createFirstTrack": "Create a track",
+      "noEventsTitle": "No events yet",
+      "noEventsBody": "Everything that happens in your story flows here in one chronological stream.",
+      "createFirstEvent": "Create first event",
+      "manageTracks": "Manage tracks",
+      "allHiddenTitle": "All events are hidden",
+      "allHiddenBody": "Show at least one track to see events.",
+      "noMatchesTitle": "No events match the current filters",
+      "clearFilters": "Clear filters",
+      "needTrackForEvent": "Create a track first — events live inside tracks."
+    },
+    "tree": {
+      "title": "Tracks",
+      "subtitle": "Show, hide and organize",
+      "addChild": "Add child track",
+      "addEvent": "Add event",
+      "edit": "Edit track",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moveTo": "Move to...",
+      "topLevel": "Top level",
+      "delete": "Delete track",
+      "hide": "Show or hide {{name}}",
+      "hiddenByParent": "Hidden by parent track",
+      "cannotNestUnderLeafWithEvents": "This track has events and cannot contain sub-tracks",
+      "eventCount_one": "{{count}} event",
+      "eventCount_other": "{{count}} events",
+      "visibleSummary": "{{visible}} of {{total}} events shown",
+      "deleteConfirmTitle": "Delete track",
+      "deleteConfirmBody": "Delete \"{{name}}\"? {{children}} sub-tracks and {{events}} events will be deleted.",
+      "untitled": "Untitled track"
+    },
+    "filter": {
+      "button": "Filter",
+      "buttonCount": "Filter ({{count}})",
+      "searchTags": "Search tags...",
+      "clearAll": "Clear all",
+      "noTags": "No tags yet — add tags to events to filter by them."
+    },
+    "eventModal": {
+      "createTitle": "New Event",
+      "editTitle": "Edit Event",
+      "name": "Name",
+      "namePlaceholder": "Event name",
+      "track": "Track",
+      "trackPlaceholder": "Select a track",
+      "startDate": "Start date",
+      "hasEndDate": "Has end date",
+      "endDate": "End date",
+      "tags": "Tags",
+      "description": "Description",
+      "descriptionPlaceholder": "Short summary shown on the card...",
+      "content": "Notes",
+      "links": "Linked objects",
+      "addLink": "Add link",
+      "deleteEvent": "Delete event",
+      "deleteConfirmTitle": "Delete event",
+      "deleteConfirmBody": "Delete \"{{name}}\"? This cannot be undone.",
+      "discardTitle": "Discard changes",
+      "discardBody": "You have unsaved changes. Discard them?",
+      "errors": {
+        "nameRequired": "Name is required",
+        "trackRequired": "Choose a track",
+        "invalidDate": "Invalid date for this calendar",
+        "endBeforeStart": "End date must not be before the start date",
+        "saveFailed": "Could not save. {{message}}"
+      }
+    },
+    "trackModal": {
+      "createTitle": "New Track",
+      "editTitle": "Edit Track",
+      "name": "Name",
+      "namePlaceholder": "Track name",
+      "color": "Color",
+      "colorAuto": "Auto",
+      "colorCustom": "Custom color",
+      "inside": "Inside: {{parent}}",
+      "description": "Description",
+      "content": "Notes"
+    },
+    "calendarModal": {
+      "title": "Calendar Configuration",
+      "migrationWarning": "Changing the calendar structure will migrate all existing event dates. Some precision may be lost if units are removed.",
+      "unitName": "Name",
+      "unitLabel": "Label",
+      "unitContains": "Contains",
+      "baseUnit": "base unit",
+      "addUnit": "Add Unit",
+      "sample": "Sample:",
+      "invalid": "Invalid configuration"
+    },
+    "jumpModal": {
+      "title": "Jump to date",
+      "go": "Go"
+    },
+    "fab": {
+      "addEvent": "Add event"
+    },
+    "warnings": {
+      "dismiss": "Dismiss"
     }
   }
 }

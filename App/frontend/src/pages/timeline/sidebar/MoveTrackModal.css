@@ -1,0 +1,49 @@
+.tl-move-track {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.tl-move-track__option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+  padding: var(--spacing-xs) var(--spacing-md);
+  padding-left: calc(var(--spacing-md) + var(--tl-tree-depth, 0) * var(--spacing-lg));
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-md);
+  background: none;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.tl-move-track__option:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.tl-move-track__option--selected {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary-soft);
+}
+
+.tl-move-track__option:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.tl-move-track__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}

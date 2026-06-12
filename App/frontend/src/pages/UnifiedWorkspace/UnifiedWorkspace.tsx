@@ -27,7 +27,7 @@ import StoryEntityPanel from '../workspace/components/StoryEntityPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
 import WorkspaceConfigPanel from './components/WorkspaceConfigPanel';
-import TimelinePanel from '../timeline/TimelinePanel';
+import TimelinePage from '../timeline/TimelinePage';
 import EntityFolderSidebar from '../../components/StoryEntityExplorer/EntityFolderSidebar';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
@@ -484,7 +484,7 @@ const UnifiedWorkspace: React.FC = () => {
         onTranslateAllClick={() => setShowTranslateModal(true)}
         onSettingsClick={() => setIsSettingsOpen(true)}
         mobileSubtitle={getMobileSubtitle()}
-        showHamburger={currentSubPage !== 'config' && currentSubPage !== 'timeline'}
+        showHamburger={currentSubPage !== 'config'}
         onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', getSidebarType(currentSubPage))}
         showSaveIndicator={currentSubPage === 'novel-editor'}
         saveStatus={
@@ -540,7 +540,7 @@ const UnifiedWorkspace: React.FC = () => {
         )}
 
         {currentSubPage === 'timeline' && (
-          <TimelinePanel
+          <TimelinePage
             globalDisplayLanguage={currentDisplayLanguage}
           />
         )}

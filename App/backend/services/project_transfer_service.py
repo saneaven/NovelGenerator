@@ -42,6 +42,7 @@ from ..services.ownership import require_owned_project
 from ..services.rich_text import get_rich_text_fields, normalize_tree
 from ..services.rich_text_image_ref_service import rebuild_rich_text_refs_for_object
 from ..services.object_version_language_service import earliest_provenance_from_rows, payload_map_from_rows
+from ..utils.timeline_colors import backfill_missing_colors
 from ..services.storage_service import storage_service
 from ..services.storage_usage_service import (
     StorageQuotaExceededError,
@@ -1307,6 +1308,7 @@ class ProjectTransferService:
             )
 
             # Tracks first (parents remap within timeline_track ids; self-refs resolve at flush).
+            track_rows: list[TimelineTrack] = []
             for item in track_items:
                 export_id = str(item.get("id") or "")
                 new_id = object_id_map.get((TIMELINE_TRACK_TYPE, export_id))
@@ -1319,7 +1321,7 @@ class ProjectTransferService:
                     if parent_export_id
                     else None
                 )
-                db.add(
+                track_rows.append(
                     TimelineTrack(
                         id=new_id,
                         timeline_id=new_timeline_id,
@@ -1330,6 +1332,15 @@ class ProjectTransferService:
                         updated_at=meta_dt(meta, "updated_at"),
                     )
                 )
+            # color is NOT NULL: tracks without a valid oklch color get one assigned.
+            color_fixes = backfill_missing_colors(
+                (row.id, row.parent_id, row.position, row.color) for row in track_rows
+            )
+            for row in track_rows:
+                fixed = color_fixes.get(row.id)
+                if fixed is not None:
+                    row.color = fixed
+                db.add(row)
 
             # Events after tracks (track_id remap; start_date is NOT NULL).
             for item in event_items:

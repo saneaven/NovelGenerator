@@ -1,6 +1,6 @@
 import React from 'react';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
-import { getTrackColors, presetSwatch } from '../../../pages/timeline/timelineColors';
+import { getTrackColors } from '../../../pages/timeline/timelineColors';
 import type { TimelineDisplayMode } from './TimelineTrackDisplay';
 import './TimelineDisplays.css';
 
@@ -86,7 +86,7 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
         <div className="tl-card__meta-row">
           <span className="tl-chip tl-chip--color">
             {trackColor && (
-              <span className="tl-chip__swatch" style={{ background: presetSwatch(trackColor) }} aria-hidden />
+              <span className="tl-chip__swatch" style={{ background: trackColor }} aria-hidden />
             )}
             {trackLabel}
           </span>

@@ -230,6 +230,180 @@ export function formatDate(dateValue: TimelineDate, unitsOrCalendar: CalendarCon
   return units.map((unit) => `${unit.label} ${Number(dateValue[unit.name] ?? 1)}`).join(' / ');
 }
 
+export function compareTimelineDates(
+  a: TimelineDate,
+  b: TimelineDate,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): number {
+  return toBaseUnits(a, unitsOrCalendar) - toBaseUnits(b, unitsOrCalendar);
+}
+
+/** Base units in one top calendar unit. Gregorian uses the mean year (spacing math only — never for break counting). */
+export function baseUnitsPerTopUnit(unitsOrCalendar: CalendarConfig | CalendarUnit[]): number {
+  if (isGregorianCalendar(unitsOrCalendar)) return 365.2425 * 24 * 60;
+  const units = coerceUnits(unitsOrCalendar);
+  if (units.length === 1) return 1;
+  return unitMultiplier(units, 0);
+}
+
+function lexLess(a: number[], b: number[]): boolean {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+/**
+ * Whole top calendar units elapsed between a and b (a <= b expected; never negative).
+ * Gregorian counts whole years by date-component comparison (leap-exact; a Dec→Jan
+ * boundary is 0 years), with the anniversary day clamped for Feb-29 starts.
+ */
+export function wholeTopUnitsBetween(
+  a: TimelineDate,
+  b: TimelineDate,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): number {
+  if (!isGregorianCalendar(unitsOrCalendar)) {
+    const units = coerceUnits(unitsOrCalendar);
+    const delta = toBaseUnits(b, units) - toBaseUnits(a, units);
+    if (units.length === 1) return Math.max(delta, 0);
+    return Math.max(Math.floor(delta / unitMultiplier(units, 0)), 0);
+  }
+  let n = Number(b.year) - Number(a.year);
+  const aDay = Math.min(Number(a.day ?? 1), daysInMonth(Number(b.year), Number(a.month ?? 1)));
+  const aKey = [Number(a.month ?? 1), aDay, Number(a.hour ?? 1), Number(a.minute ?? 1)];
+  const bKey = [Number(b.month ?? 1), Number(b.day ?? 1), Number(b.hour ?? 1), Number(b.minute ?? 1)];
+  if (lexLess(bKey, aKey)) n -= 1;
+  return Math.max(n, 0);
+}
+
+export interface AnchorLabelPart {
+  text: string;
+  /** absolute unit index (0 = top unit) — drives the per-line type scale */
+  rank: number;
+}
+
+export interface AnchorLabel {
+  /** changed units, highest first — one line each in the gutter */
+  parts: AnchorLabelPart[];
+  /** rank of the highest changed unit — drives row/node hierarchy */
+  rank: number;
+}
+
+interface LabelGroup {
+  text: string;
+  differs: boolean;
+  isDefault: boolean;
+}
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+function buildLabelGroups(
+  dateValue: TimelineDate,
+  prevDate: TimelineDate | null,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): LabelGroup[] {
+  const part = (d: TimelineDate, name: string) => Number(d[name] ?? 1);
+  if (isGregorianCalendar(unitsOrCalendar)) {
+    const diff = (name: string) => prevDate !== null && part(dateValue, name) !== part(prevDate, name);
+    return [
+      { text: `Y${part(dateValue, 'year')}`, differs: diff('year'), isDefault: part(dateValue, 'year') === 1 },
+      { text: `M${part(dateValue, 'month')}`, differs: diff('month'), isDefault: part(dateValue, 'month') === 1 },
+      { text: `D${part(dateValue, 'day')}`, differs: diff('day'), isDefault: part(dateValue, 'day') === 1 },
+      {
+        // hour+minute form one atomic clock token (1-based units → 0-based clock)
+        text: `${pad2(part(dateValue, 'hour') - 1)}:${pad2(part(dateValue, 'minute') - 1)}`,
+        differs: diff('hour') || diff('minute'),
+        isDefault: part(dateValue, 'hour') === 1 && part(dateValue, 'minute') === 1,
+      },
+    ];
+  }
+  const units = coerceUnits(unitsOrCalendar);
+  return units.map((unit) => ({
+    text: `${unit.label || unit.name} ${part(dateValue, unit.name)}`,
+    differs: prevDate !== null && part(dateValue, unit.name) !== part(prevDate, unit.name),
+    isDefault: part(dateValue, unit.name) === 1,
+  }));
+}
+
+/**
+ * Anchor gutter label: one part per unit from the highest changed unit (top unit for
+ * the first anchor) down to the lowest changed unit, so near-coincident anchors stay
+ * distinguishable. With no previous anchor, trailing all-default (value 1) units are
+ * trimmed instead.
+ */
+export function formatAnchorLabel(
+  dateValue: TimelineDate,
+  prevDate: TimelineDate | null,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): AnchorLabel {
+  const groups = buildLabelGroups(dateValue, prevDate, unitsOrCalendar);
+  let start: number;
+  let end: number;
+  if (prevDate === null) {
+    start = 0;
+    end = groups.length - 1;
+    while (end > start && groups[end].isDefault) end -= 1;
+  } else {
+    start = groups.findIndex((group) => group.differs);
+    if (start === -1) {
+      // identical dates should not occur between distinct anchors; show the terminal group
+      start = groups.length - 1;
+      end = start;
+    } else {
+      end = groups.length - 1;
+      while (end > start && !groups[end].differs) end -= 1;
+    }
+  }
+  return {
+    parts: groups.slice(start, end + 1).map((group, i) => ({ text: group.text, rank: start + i })),
+    rank: start,
+  };
+}
+
+export interface DurationPart {
+  unitName: string;
+  unitLabel: string;
+  value: number;
+}
+
+/**
+ * Humanized breakdown of a base-unit delta: the top two nonzero units, largest first.
+ * Gregorian uses fixed 365-day years / 30-day months — display approximation only.
+ */
+export function durationBreakdown(
+  deltaBase: number,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): DurationPart[] {
+  if (!Number.isFinite(deltaBase) || deltaBase <= 0) return [];
+  let scale: Array<{ unitName: string; unitLabel: string; multiplier: number }>;
+  if (isGregorianCalendar(unitsOrCalendar)) {
+    scale = [
+      { unitName: 'year', unitLabel: 'Year', multiplier: 365 * 24 * 60 },
+      { unitName: 'month', unitLabel: 'Month', multiplier: 30 * 24 * 60 },
+      { unitName: 'day', unitLabel: 'Day', multiplier: 24 * 60 },
+      { unitName: 'hour', unitLabel: 'Hour', multiplier: 60 },
+      { unitName: 'minute', unitLabel: 'Minute', multiplier: 1 },
+    ];
+  } else {
+    const units = coerceUnits(unitsOrCalendar);
+    scale = units.map((unit, index) => ({
+      unitName: unit.name,
+      unitLabel: unit.label || unit.name,
+      multiplier: unitMultiplier(units, index),
+    }));
+  }
+  const parts: DurationPart[] = [];
+  let remaining = Math.trunc(deltaBase);
+  for (const { unitName, unitLabel, multiplier } of scale) {
+    const value = Math.floor(remaining / multiplier);
+    remaining -= value * multiplier;
+    if (value > 0) parts.push({ unitName, unitLabel, value });
+    if (parts.length === 2) break;
+  }
+  return parts;
+}
+
 export function migrateDates(
   oldUnitsOrCalendar: CalendarConfig | CalendarUnit[],
   newUnitsOrCalendar: CalendarConfig | CalendarUnit[],

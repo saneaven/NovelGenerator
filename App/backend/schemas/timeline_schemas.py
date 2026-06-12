@@ -110,7 +110,7 @@ class TimelineTrackResponse(BaseModel):
     timeline_id: str
     parent_id: str | None = None
     position: int
-    color: str | None = None
+    color: str
     created_at: str | None = None
     updated_at: str | None = None
     data: dict[str, Any]

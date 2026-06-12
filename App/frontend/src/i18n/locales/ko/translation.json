@@ -153,12 +153,12 @@
     "saveError": "서버에 설정을 저장하지 못했습니다. 변경 사항은 로컬에 저장되었습니다.",
     "savedSuccessfully": "설정이 저장되었습니다",
     "openNavigation": "탐색 메뉴 열기",
-	    "tabs": {
-	      "searchMemory": "검색 & 메모리",
-	      "profile": "프로필",
-	      "language": "언어",
-	      "general": "일반",
-	      "credentials": "자격 증명",
+    "tabs": {
+      "searchMemory": "검색 & 메모리",
+      "profile": "프로필",
+      "language": "언어",
+      "general": "일반",
+      "credentials": "자격 증명",
       "theme": "테마",
       "imageGen": "이미지 생성",
       "advanced": "고급",
@@ -1610,6 +1610,146 @@
       "addRow": "행 추가",
       "addColumn": "열 추가",
       "deleteTable": "표 삭제"
+    }
+  },
+  "timeline": {
+    "loading": "타임라인 로딩 중...",
+    "newEvent": "새 이벤트",
+    "newTrack": "새 트랙",
+    "calendarSettings": "달력",
+    "jumpToDate": "날짜로 이동",
+    "jumpToStart": "처음으로",
+    "jumpToEnd": "끝으로",
+    "hiddenTracks_other": "트랙 {{count}}개 숨김",
+    "showAll": "모두 표시",
+    "break": {
+      "yearsLater_other": "{{count}}년 후",
+      "unitsLater_other": "{{count}} {{unit}} 후",
+      "continues": "{{name}} 계속",
+      "continuesMore_other": "+{{count}}개 더"
+    },
+    "card": {
+      "expand": "이벤트 펼치기",
+      "collapse": "이벤트 접기",
+      "untitled": "제목 없는 이벤트",
+      "until": "{{date}}까지",
+      "endsMarker": "{{name}} · 종료",
+      "ongoingCount_other": "진행 중 +{{count}}",
+      "showAllCluster": "모두 보기 ({{count}})",
+      "links": "링크",
+      "hasNotes": "노트 있음",
+      "addAtThisTime": "이 시점에 이벤트 추가"
+    },
+    "duration": {
+      "year_other": "{{count}}년",
+      "month_other": "{{count}}개월",
+      "day_other": "{{count}}일",
+      "hour_other": "{{count}}시간",
+      "minute_other": "{{count}}분",
+      "unit_other": "{{count}} {{unit}}"
+    },
+    "empty": {
+      "noTracksTitle": "트랙이 없습니다",
+      "noTracksBody": "트랙을 만들어 타임라인에 이벤트를 배치해 보세요.",
+      "createFirstTrack": "트랙 만들기",
+      "noEventsTitle": "이벤트가 없습니다",
+      "noEventsBody": "이야기에서 일어나는 모든 일이 하나의 연대기 흐름으로 모입니다.",
+      "createFirstEvent": "첫 이벤트 만들기",
+      "manageTracks": "트랙 관리",
+      "allHiddenTitle": "모든 이벤트가 숨겨져 있습니다",
+      "allHiddenBody": "이벤트를 보려면 트랙을 하나 이상 표시하세요.",
+      "noMatchesTitle": "필터와 일치하는 이벤트가 없습니다",
+      "clearFilters": "필터 지우기",
+      "needTrackForEvent": "먼저 트랙을 만드세요. 이벤트는 트랙 안에 만들어집니다."
+    },
+    "tree": {
+      "title": "트랙",
+      "subtitle": "표시·숨김 및 정리",
+      "addChild": "하위 트랙 추가",
+      "addEvent": "이벤트 추가",
+      "edit": "트랙 편집",
+      "moveUp": "위로 이동",
+      "moveDown": "아래로 이동",
+      "moveTo": "이동...",
+      "topLevel": "최상위",
+      "delete": "트랙 삭제",
+      "hide": "{{name}} 표시/숨김",
+      "hiddenByParent": "상위 트랙에 의해 숨겨짐",
+      "cannotNestUnderLeafWithEvents": "이벤트가 있는 트랙에는 하위 트랙을 만들 수 없습니다",
+      "eventCount_other": "이벤트 {{count}}개",
+      "visibleSummary": "{{total}}개 중 {{visible}}개 이벤트 표시 중",
+      "deleteConfirmTitle": "트랙 삭제",
+      "deleteConfirmBody": "\"{{name}}\"을(를) 삭제할까요? 하위 트랙 {{children}}개와 이벤트 {{events}}개가 삭제됩니다.",
+      "untitled": "제목 없는 트랙"
+    },
+    "filter": {
+      "button": "필터",
+      "buttonCount": "필터 ({{count}})",
+      "searchTags": "태그 검색...",
+      "clearAll": "모두 지우기",
+      "noTags": "태그가 없습니다. 이벤트에 태그를 추가하면 필터링할 수 있습니다."
+    },
+    "eventModal": {
+      "createTitle": "새 이벤트",
+      "editTitle": "이벤트 편집",
+      "name": "이름",
+      "namePlaceholder": "이벤트 이름",
+      "track": "트랙",
+      "trackPlaceholder": "트랙 선택",
+      "startDate": "시작 날짜",
+      "hasEndDate": "종료 날짜 있음",
+      "endDate": "종료 날짜",
+      "tags": "태그",
+      "description": "설명",
+      "descriptionPlaceholder": "카드에 표시될 짧은 요약...",
+      "content": "노트",
+      "links": "연결된 객체",
+      "addLink": "링크 추가",
+      "deleteEvent": "이벤트 삭제",
+      "deleteConfirmTitle": "이벤트 삭제",
+      "deleteConfirmBody": "\"{{name}}\"을(를) 삭제할까요? 되돌릴 수 없습니다.",
+      "discardTitle": "변경사항 취소",
+      "discardBody": "저장하지 않은 변경사항이 있습니다. 취소할까요?",
+      "errors": {
+        "nameRequired": "이름은 필수입니다",
+        "trackRequired": "트랙을 선택하세요",
+        "invalidDate": "이 달력에 맞지 않는 날짜입니다",
+        "endBeforeStart": "종료 날짜는 시작 날짜보다 빠를 수 없습니다",
+        "saveFailed": "저장하지 못했습니다. {{message}}"
+      }
+    },
+    "trackModal": {
+      "createTitle": "새 트랙",
+      "editTitle": "트랙 편집",
+      "name": "이름",
+      "namePlaceholder": "트랙 이름",
+      "color": "색상",
+      "colorAuto": "자동",
+      "colorCustom": "직접 선택",
+      "inside": "위치: {{parent}}",
+      "description": "설명",
+      "content": "노트"
+    },
+    "calendarModal": {
+      "title": "달력 설정",
+      "migrationWarning": "달력 구조를 변경하면 기존 이벤트 날짜가 모두 마이그레이션됩니다. 단위를 제거하면 일부 정밀도가 손실될 수 있습니다.",
+      "unitName": "이름",
+      "unitLabel": "라벨",
+      "unitContains": "포함",
+      "baseUnit": "기본 단위",
+      "addUnit": "단위 추가",
+      "sample": "예시:",
+      "invalid": "잘못된 설정"
+    },
+    "jumpModal": {
+      "title": "날짜로 이동",
+      "go": "이동"
+    },
+    "fab": {
+      "addEvent": "이벤트 추가"
+    },
+    "warnings": {
+      "dismiss": "닫기"
     }
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
-import { getTrackColors, presetSwatch } from '../../../pages/timeline/timelineColors';
+import { getTrackColors } from '../../../pages/timeline/timelineColors';
 import './TimelineDisplays.css';
 
 export type TimelineDisplayMode = 'read' | 'create' | 'replace' | 'delete';
@@ -57,8 +57,12 @@ export const TimelineTrackDisplay: React.FC<TimelineTrackDisplayProps> = ({
         <div className="tl-card__meta-row">
           {show('color') && (
             <span className={`tl-chip tl-chip--color${isChanged('color') ? ' tl-card--changed' : ''}`}>
-              <span className="tl-chip__swatch" style={{ background: presetSwatch(color ?? 'neutral') }} aria-hidden />
-              {color ?? 'default'}
+              <span
+                className="tl-chip__swatch"
+                style={{ background: color ?? 'var(--color-border-strong)' }}
+                aria-hidden
+              />
+              {color ?? 'auto'}
             </span>
           )}
           {show('position') && typeof position === 'number' && (

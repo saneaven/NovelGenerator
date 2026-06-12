@@ -64,7 +64,7 @@ type ApiTimelineTrack = {
   timeline_id: string;
   parent_id?: string | null;
   position: number;
-  color?: string | null;
+  color: string;
   created_at: string | null;
   updated_at: string | null;
   data: Record<string, Record<string, unknown>>;
@@ -120,7 +120,7 @@ function normalizeTrack(track: ApiTimelineTrack): TimelineTrack {
     timelineId: track.timeline_id,
     parentId: track.parent_id ?? null,
     position: track.position,
-    color: track.color ?? null,
+    color: track.color,
     createdAt: track.created_at,
     updatedAt: track.updated_at,
     data: track.data ?? {},
@@ -164,7 +164,7 @@ function serializeTrackUpdate(request: TimelineTrackUpdateRequest) {
   if (request.name !== undefined) payload.name = request.name;
   if (request.description !== undefined) payload.description = request.description;
   if (request.content !== undefined) payload.content = request.content;
-  if ('color' in request) payload.color = request.color ?? null;
+  if (request.color !== undefined) payload.color = request.color;
   return payload;
 }
 
