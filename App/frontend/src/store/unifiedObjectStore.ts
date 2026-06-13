@@ -244,13 +244,9 @@ function mergeMarkdownPreviewFromObject(
   const existingObjectPreview = currentPreviews[object.id] ?? {};
   let nextObjectPreview = existingObjectPreview;
   let objectChanged = false;
-  const languages = [
-    object.language_state?.requested_language,
-    object.language_state?.content_language,
-  ].filter((value): value is string => Boolean(value));
-  const uniqueLanguages = [...new Set(languages)];
-  const values = uniqueLanguages.length > 0
-    ? uniqueLanguages.map((language) => [language, object.data] as const)
+  const requestedLanguage = object.language_state?.requested_language;
+  const values = requestedLanguage
+    ? [[requestedLanguage, object.data] as const]
     : [['__default__', object.data] as const];
 
   for (const [language, value] of values) {
@@ -309,10 +305,6 @@ function getRichTextMarkdownFromCache(
   if (!objectPreview) return undefined;
   const exact = objectPreview[language]?.[fieldName];
   if (typeof exact === 'string') return exact;
-  for (const value of Object.values(objectPreview)) {
-    const fallback = value?.[fieldName];
-    if (typeof fallback === 'string') return fallback;
-  }
   return undefined;
 }
 

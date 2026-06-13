@@ -28,7 +28,7 @@ function makeEvent(overrides: Partial<TimelineEvent> & { startDate: TimelineDate
     tags: [],
     createdAt: null,
     updatedAt: null,
-    data: { en: { name: name ?? 'Event', description: 'desc' } },
+    data: { name: name ?? 'Event', description: 'desc' },
     version: { id: null, number: 1, createdAt: null },
     links: [],
     ...rest,
@@ -45,7 +45,7 @@ function makeTrack(overrides: Partial<TimelineTrack> & { name?: string }): Timel
     color: 'oklch(0.680 0.140 250.0)',
     createdAt: null,
     updatedAt: null,
-    data: { en: { name: name ?? 'Track', description: '' } },
+    data: { name: name ?? 'Track', description: '' },
     version: { id: null, number: 1, createdAt: null },
     events: (rest.events ?? []).map((ev) => ({ ...ev, trackId })),
     children: [],
@@ -70,6 +70,40 @@ const anchors = (rows: ReturnType<typeof layout>['rows']) => rows.filter((r): r 
 const breaks = (rows: ReturnType<typeof layout>['rows']) => rows.filter((r): r is BreakRowData => r.kind === 'break');
 
 describe('visibility', () => {
+  it('does not synthesize expanded content from tiptap projection data', () => {
+    const event = makeEvent({
+      startDate: date(1),
+      data: {
+        name: 'Founding Day',
+        description: 'desc',
+        content: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'The bells ring once at dawn.' }],
+            },
+          ],
+        },
+      },
+    });
+    const result = layout({ tracks: [makeTrack({ events: [event] })] });
+    const [anchor] = anchors(result.rows);
+
+    expect(anchor.starts[0].contentMarkdown).toBe('');
+  });
+
+  it('uses resolved markdown projection content for expanded cards', () => {
+    const event = makeEvent({ startDate: date(1), data: { name: 'Founding Day', description: 'desc' } });
+    const result = layout({
+      tracks: [makeTrack({ events: [event] })],
+      resolveContentMarkdown: (candidate) => (candidate.id === event.id ? '**Markdown** body' : undefined),
+    });
+    const [anchor] = anchors(result.rows);
+
+    expect(anchor.starts[0].contentMarkdown).toBe('**Markdown** body');
+  });
+
   it('hides events of hidden tracks and their descendants', () => {
     const leaf = makeTrack({ name: 'Leaf', events: [makeEvent({ startDate: date(1) })] });
     const parent = makeTrack({ name: 'Parent', children: [leaf] });

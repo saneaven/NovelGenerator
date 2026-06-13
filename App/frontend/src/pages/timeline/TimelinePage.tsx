@@ -92,6 +92,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
   const setTagFilter = useTimelineStore((s) => s.setTagFilter);
   const unifiedObjects = useUnifiedObjectStore((s) => s.objects);
+  const getRichTextMarkdown = useUnifiedObjectStore((s) => s.getRichTextMarkdown);
 
   const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[pid]);
   const showAllTracks = useTimelineUiStore((s) => s.showAllTracks);
@@ -132,6 +133,10 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
 
   const hiddenTrackIds = useMemo(() => new Set(hiddenIds ?? []), [hiddenIds]);
   const tagFilter = useMemo(() => new Set(activeTagFilter), [activeTagFilter]);
+  const resolveTimelineEventContent = useCallback(
+    (event: TimelineEvent) => getRichTextMarkdown(event.id, displayLanguage, 'content'),
+    [displayLanguage, getRichTextMarkdown],
+  );
 
   const layout = useTimelineLayout({
     tracks,
@@ -139,6 +144,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
     hiddenTrackIds,
     tagFilter,
     displayLanguage,
+    resolveContentMarkdown: resolveTimelineEventContent,
     isMobile,
   });
 

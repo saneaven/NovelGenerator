@@ -161,7 +161,6 @@ export interface TimelineObjectData {
   name: string;
   description: string;
   content: TipTapDoc | string;
-  content_markdown?: string;
 }
 
 // ============================================================================

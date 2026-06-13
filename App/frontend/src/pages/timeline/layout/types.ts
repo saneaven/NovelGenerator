@@ -49,6 +49,7 @@ export interface LayoutInput {
   /** OR semantics; empty set = no filtering */
   tagFilter: ReadonlySet<string>;
   displayLanguage: string;
+  resolveContentMarkdown?: (event: TimelineEvent) => string | undefined;
   spacing: SpacingConfig;
 }
 

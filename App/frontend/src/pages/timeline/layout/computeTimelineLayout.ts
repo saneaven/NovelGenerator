@@ -21,11 +21,12 @@ import type {
 export function resolveEntityText(
   data: Record<string, unknown> | undefined,
   _displayLanguage: string,
+  contentMarkdown?: string,
 ): { name: string; description: string; contentMarkdown: string } {
   return {
     name: typeof data?.name === 'string' ? data.name : '',
     description: typeof data?.description === 'string' ? data.description : '',
-    contentMarkdown: typeof data?.content_markdown === 'string' ? data.content_markdown : '',
+    contentMarkdown: contentMarkdown ?? '',
   };
 }
 
@@ -34,7 +35,7 @@ const byTrackOrderAndName = (a: VisibleEvent, b: VisibleEvent) => (
 );
 
 export function computeTimelineLayout(input: LayoutInput): TimelineLayout {
-  const { tracks, calendar, hiddenTrackIds, tagFilter, displayLanguage, spacing } = input;
+  const { tracks, calendar, hiddenTrackIds, tagFilter, displayLanguage, resolveContentMarkdown, spacing } = input;
 
   // Step 1 — one DFS: visibility, track paths, colors, tags, event resolution
   const allVisible: VisibleEvent[] = [];
@@ -65,7 +66,11 @@ export function computeTimelineLayout(input: LayoutInput): TimelineLayout {
       if (endBase !== null && endBase < startBase) [startBase, endBase] = [endBase, startBase];
       if (endBase === startBase) endBase = null;
 
-      const { name: eventName, description, contentMarkdown } = resolveEntityText(event.data, displayLanguage);
+      const { name: eventName, description, contentMarkdown } = resolveEntityText(
+        event.data,
+        displayLanguage,
+        resolveContentMarkdown?.(event),
+      );
       allVisible.push({
         event,
         name: eventName,
