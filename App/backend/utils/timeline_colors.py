@@ -3,7 +3,8 @@
 Tracks store a canonical oklch string: ``oklch(0.680 0.140 250.0)``.
 Root tracks get a fixed lightness/chroma with hues spread apart by bisecting
 the largest unused gap on the hue wheel; child tracks derive from their
-parent's color with a small hue fan and progressively darker lightness.
+parent's color, spread within ±CHILD_HUE_MAX° of the parent hue by bisecting
+the largest unused gap in that band, with progressively darker lightness.
 """
 
 from __future__ import annotations
@@ -21,9 +22,7 @@ CHILD_L_STEP = 0.06
 MIN_L = 0.40
 CHILD_C_STEP = 0.015
 MIN_C = 0.08
-CHILD_HUE_BASE = 10.0
-CHILD_HUE_STEP = 5.0
-CHILD_HUE_MAX = 25.0
+CHILD_HUE_MAX = 30.0  # children stay within ±this many degrees of the parent hue
 
 # Hues of near-neutral colors are meaningless; don't let them constrain placement.
 _NEUTRAL_CHROMA_CUTOFF = 0.04
@@ -144,6 +143,36 @@ def next_root_hue(existing_hues: Iterable[float]) -> float:
     return (best_start + best_gap / 2.0) % 360.0
 
 
+def next_child_hue(parent_hue: float, sibling_offsets: Iterable[float]) -> float:
+    """Place a child within ±CHILD_HUE_MAX° of the parent by farthest-point insertion.
+
+    ``sibling_offsets`` are the existing siblings' hues expressed as signed
+    degrees from the parent hue; they are clamped to the band. The new child
+    lands at whichever candidate (a band endpoint, or the midpoint of a gap
+    between adjacent siblings) sits farthest from every existing sibling — the
+    linear, bounded analogue of :func:`next_root_hue`. The first child seeds at
+    the +CHILD_HUE_MAX° edge. Ties prefer the endpoints (+ before −), then
+    midpoints left→right, taking the first maximum so results are deterministic.
+    """
+    span = CHILD_HUE_MAX
+    offsets = sorted({min(max(o, -span), span) for o in sibling_offsets})
+    if not offsets:
+        return (parent_hue + span) % 360.0
+    best_offset = span
+    best_dist = -1.0
+    for candidate in (span, -span):
+        dist = min(abs(candidate - o) for o in offsets)
+        if dist > best_dist:
+            best_dist = dist
+            best_offset = candidate
+    for left, right in zip(offsets, offsets[1:]):
+        dist = (right - left) / 2.0
+        if dist > best_dist:
+            best_dist = dist
+            best_offset = (left + right) / 2.0
+    return (parent_hue + best_offset) % 360.0
+
+
 def _chromatic_hues(colors: Iterable[Any]) -> list[float]:
     hues: list[float] = []
     for color in colors:
@@ -160,19 +189,23 @@ def root_track_color(existing_colors: Iterable[Any]) -> str:
     return format_oklch(ROOT_L, ROOT_C, next_root_hue(_chromatic_hues(existing_colors)))
 
 
-def child_track_color(parent_color: Any, sibling_count: int) -> str:
+def child_track_color(parent_color: Any, sibling_colors: Iterable[Any]) -> str:
     normalized = normalize_track_color(parent_color)
     parsed = parse_oklch(normalized) if normalized is not None else None
     if parsed is None:
         return format_oklch(ROOT_L, ROOT_C, SEED_HUE)
     l, c, h = parsed
-    k = max(sibling_count, 0)
-    offset = min(CHILD_HUE_BASE + CHILD_HUE_STEP * (k // 2), CHILD_HUE_MAX)
-    sign = 1.0 if k % 2 == 0 else -1.0
+    offsets: list[float] = []
+    for sibling in sibling_colors:
+        sibling_norm = normalize_track_color(sibling)
+        sibling_parsed = parse_oklch(sibling_norm) if sibling_norm is not None else None
+        if sibling_parsed is None:
+            continue
+        offsets.append(((sibling_parsed[2] - h + 180.0) % 360.0) - 180.0)
     return format_oklch(
         max(l - CHILD_L_STEP, MIN_L),
         max(c - CHILD_C_STEP, min(c, MIN_C)),
-        (h + sign * offset) % 360.0,
+        next_child_hue(h, offsets),
     )
 
 
@@ -211,16 +244,24 @@ def backfill_missing_colors(
             changes[row_id] = normalized
 
     def walk(parent_id: Any) -> None:
-        for index, (row_id, _parent, _position, color) in enumerate(
-            children.get(parent_id, [])
-        ):
-            if parent_id is not None:
+        siblings = children.get(parent_id, [])
+        if parent_id is not None:
+            # Pass 1: keep valid sibling colors so missing ones avoid their hues.
+            for row_id, _parent, _position, color in siblings:
                 normalized = normalize_track_color(color)
-                if normalized is None:
-                    normalized = child_track_color(effective.get(parent_id), index)
+                if normalized is not None:
+                    effective[row_id] = normalized
+                    if normalized != color:
+                        changes[row_id] = normalized
+            # Pass 2: place each missing sibling in the largest gap of the band.
+            for row_id, _parent, _position, color in siblings:
+                if row_id in effective:
+                    continue
+                placed = [effective[s[0]] for s in siblings if s[0] in effective]
+                normalized = child_track_color(effective.get(parent_id), placed)
                 effective[row_id] = normalized
-                if normalized != color:
-                    changes[row_id] = normalized
+                changes[row_id] = normalized
+        for row_id, _parent, _position, _color in siblings:
             walk(row_id)
 
     walk(None)

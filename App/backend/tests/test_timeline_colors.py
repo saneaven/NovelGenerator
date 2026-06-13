@@ -11,6 +11,7 @@ from App.backend.utils.timeline_colors import (
     child_track_color,
     format_oklch,
     hex_to_oklch,
+    next_child_hue,
     next_root_hue,
     normalize_track_color,
     oklch_to_hex,
@@ -88,35 +89,47 @@ def test_root_track_color_ignores_neutrals_and_invalid() -> None:
     assert parse_oklch(single)[2] == 70.0
 
 
-def test_child_track_color_fan_and_floors() -> None:
+def test_next_child_hue_band_gap_bisection() -> None:
+    # first child seeds at the +CHILD_HUE_MAX edge
+    assert next_child_hue(250.0, []) == 275.0
+    # second child goes to the opposite edge (farthest from the first)
+    assert next_child_hue(250.0, [25.0]) == 225.0
+    # third child bisects the band center
+    assert next_child_hue(250.0, [-25.0, 25.0]) == 250.0
+    # offsets beyond the band are clamped, never escaping ±CHILD_HUE_MAX
+    assert next_child_hue(250.0, [200.0]) == 225.0
+
+
+def test_child_track_color_gap_and_floors() -> None:
     parent = "oklch(0.680 0.140 250.0)"
+    siblings: list[str] = []
     hues = []
-    for k in range(6):
-        child = child_track_color(parent, k)
+    for _ in range(6):
+        child = child_track_color(parent, siblings)
         l, c, h = parse_oklch(child)
         assert math.isclose(l, 0.62)
         assert math.isclose(c, 0.125)
+        # children spread across the band but never escape ±25°
+        assert 225.0 <= h <= 275.0
         hues.append(h)
-    # alternating fan: +10, -10, +15, -15, +20, -20
-    assert hues == [260.0, 240.0, 265.0, 235.0, 270.0, 230.0]
-
-    # hue offset is capped at ±25
-    far = child_track_color(parent, 20)
-    assert parse_oklch(far)[2] in (225.0, 275.0)
+        siblings.append(child)
+    # first child anchors at +25°; the rest fill the band without repeating
+    assert hues[0] == 275.0
+    assert len(set(hues)) == len(hues)
 
     # lightness floors at MIN_L over many generations
     color = parent
     for _ in range(10):
-        color = child_track_color(color, 0)
+        color = child_track_color(color, [])
     assert parse_oklch(color)[0] == MIN_L
 
     # a neutral parent must not produce colorful children
-    neutral_child = child_track_color("oklch(0.550 0.010 0.0)", 0)
+    neutral_child = child_track_color("oklch(0.550 0.010 0.0)", [])
     assert parse_oklch(neutral_child)[1] <= 0.01
 
     # unparseable parent falls back to the seed color family
-    assert child_track_color(None, 0) == format_oklch(ROOT_L, ROOT_C, SEED_HUE)
-    assert child_track_color("garbage", 3) == format_oklch(ROOT_L, ROOT_C, SEED_HUE)
+    assert child_track_color(None, []) == format_oklch(ROOT_L, ROOT_C, SEED_HUE)
+    assert child_track_color("garbage", []) == format_oklch(ROOT_L, ROOT_C, SEED_HUE)
 
 
 def test_backfill_preserves_existing_and_fills_missing() -> None:
@@ -141,7 +154,8 @@ def test_backfill_preserves_existing_and_fills_missing() -> None:
 
     c1 = parse_oklch(changes["c1"])
     assert math.isclose(c1[0], 0.55 - 0.06)
-    assert math.isclose(c1[2], (25.0 + 10.0) % 360.0)
+    # c1 fills the band away from its explicit sibling c2 (parent hue 25 + offset 5)
+    assert math.isclose(c1[2], 0.0)
 
     g1 = parse_oklch(changes["g1"])
     assert g1[0] < c1[0]

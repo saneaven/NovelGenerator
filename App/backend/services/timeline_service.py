@@ -899,15 +899,16 @@ class TimelineService:
                 ]
                 normalized_color = root_track_color(sibling_colors)
             else:
-                sibling_count = (
-                    db.query(TimelineTrack)
+                sibling_colors = [
+                    row[0]
+                    for row in db.query(TimelineTrack.color)
                     .filter(
                         TimelineTrack.timeline_id == timeline.id,
                         TimelineTrack.parent_id == parent_id,
                     )
-                    .count()
-                )
-                normalized_color = child_track_color(parent.color, sibling_count)
+                    .all()
+                ]
+                normalized_color = child_track_color(parent.color, sibling_colors)
 
         track = TimelineTrack(
             id=uuid4(),
