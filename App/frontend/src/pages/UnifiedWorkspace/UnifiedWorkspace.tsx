@@ -69,6 +69,9 @@ const UnifiedWorkspace: React.FC = () => {
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const changeRevision = useUnifiedObjectStore(state => state.changeRevision);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
+  const timelineChangeRevision = useTimelineStore((state) => state.changeRevision);
+  const timelineLoadedProjectId = useTimelineStore((state) => state.loadedProjectId);
+  const timelineLoadedLanguage = useTimelineStore((state) => state.loadedLanguage);
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -173,7 +176,7 @@ const UnifiedWorkspace: React.FC = () => {
   // Calculate count of objects needing translation (not tied to current sub-page)
   useEffect(() => {
     refreshTranslationCount();
-  }, [refreshTranslationCount, changeRevision]);
+  }, [refreshTranslationCount, changeRevision, timelineChangeRevision]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -258,11 +261,12 @@ const UnifiedWorkspace: React.FC = () => {
 
   useEffect(() => {
     if (!projectId) return;
+    if (timelineLoadedProjectId === projectId && timelineLoadedLanguage === currentDisplayLanguage) return;
 
     void fetchTimeline(projectId, currentDisplayLanguage, { force: true }).catch((error) => {
       console.error('Failed to load timeline:', error);
     });
-  }, [currentDisplayLanguage, fetchTimeline, projectId]);
+  }, [currentDisplayLanguage, fetchTimeline, projectId, timelineLoadedLanguage, timelineLoadedProjectId]);
 
   // Build objects for NovelEditor (when in novel-editor mode)
   useEffect(() => {

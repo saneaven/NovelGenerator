@@ -13,6 +13,8 @@ import type {
   TimelineTrackUpdateRequest,
 } from '../types/timeline';
 
+let fetchTimelineRequestSeq = 0;
+
 interface TimelineStore {
   timeline: FullTimeline | null;
   isLoading: boolean;
@@ -20,6 +22,7 @@ interface TimelineStore {
   activeTagFilter: string[];
   loadedProjectId: string | null;
   loadedLanguage: string | null;
+  changeRevision: number;
 
   fetchTimeline: (projectId: string, language: string, options?: { force?: boolean }) => Promise<void>;
   setTagFilter: (tags: string[]) => void;
@@ -43,6 +46,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   activeTagFilter: [],
   loadedProjectId: null,
   loadedLanguage: null,
+  changeRevision: 0,
 
   fetchTimeline: async (projectId, language, options) => {
     const { timeline, loadedProjectId, loadedLanguage } = get();
@@ -50,6 +54,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       return;
     }
 
+    const requestSeq = ++fetchTimelineRequestSeq;
     set({
       isLoading: true,
       error: null,
@@ -59,13 +64,20 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       // Tag filtering happens client-side in the layout engine: the full event set
       // is needed for the filter UI's tag list, and filter changes must not refetch.
       const nextTimeline = await timelineService.getTimeline(projectId, language);
-      set({
+      if (requestSeq !== fetchTimelineRequestSeq) {
+        return;
+      }
+      set((state) => ({
         timeline: nextTimeline,
         isLoading: false,
         loadedProjectId: projectId,
         loadedLanguage: language,
-      });
+        changeRevision: state.changeRevision + 1,
+      }));
     } catch (error) {
+      if (requestSeq !== fetchTimelineRequestSeq) {
+        return;
+      }
       set({
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to load timeline',

@@ -171,7 +171,11 @@ function isAllowedGroupType(groupType: AnyObjectType, typeFilter: AnyObjectType 
   if (groupType === typeFilter) return true;
   return (
     (typeFilter === 'outline' && groupType === 'outline') ||
-    (typeFilter === 'manuscript' && (groupType === 'manuscript' || groupType === 'outline'))
+    (typeFilter === 'manuscript' && (groupType === 'manuscript' || groupType === 'outline')) ||
+    (
+      (typeFilter === 'timeline_track' || typeFilter === 'timeline_event') &&
+      (groupType === 'timeline_track' || groupType === 'timeline_event')
+    )
   );
 }
 
@@ -283,6 +287,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   disabled = false,
   loading: externalLoading,
   customGroups,
+  timelineOverride,
   onLoadComplete,
   selectAllOnLoad = false,
   maxHeight = '400px',
@@ -311,6 +316,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     language,
     mode,
     excludeTypes,
+    timelineOverride,
   });
 
   // Use custom groups if provided, otherwise use fetched groups

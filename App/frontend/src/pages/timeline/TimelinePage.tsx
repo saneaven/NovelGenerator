@@ -84,6 +84,8 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const timeline = useTimelineStore((s) => s.timeline);
   const isLoading = useTimelineStore((s) => s.isLoading);
   const fetchTimeline = useTimelineStore((s) => s.fetchTimeline);
+  const loadedProjectId = useTimelineStore((s) => s.loadedProjectId);
+  const loadedLanguage = useTimelineStore((s) => s.loadedLanguage);
   const deleteEvent = useTimelineStore((s) => s.deleteEvent);
   const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
   const setTagFilter = useTimelineStore((s) => s.setTagFilter);
@@ -100,8 +102,10 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
 
   useEffect(() => {
-    if (pid) void fetchTimeline(pid, displayLanguage).catch(() => undefined);
-  }, [pid, displayLanguage, fetchTimeline]);
+    if (!pid) return;
+    if (loadedProjectId === pid && loadedLanguage === displayLanguage) return;
+    void fetchTimeline(pid, displayLanguage, { force: true }).catch(() => undefined);
+  }, [pid, displayLanguage, fetchTimeline, loadedLanguage, loadedProjectId]);
 
   const calendar = timeline?.calendar ?? DEFAULT_CALENDAR;
   const tracks = useMemo(() => timeline?.tracks ?? [], [timeline]);

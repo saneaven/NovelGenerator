@@ -3,6 +3,7 @@
  */
 
 import type { AnyObjectType, ObjectType, OutlineKind } from '../../types/unifiedObject';
+import type { FullTimeline } from '../../types/timeline';
 
 // ============================================================================
 // OBJECT PICKER TYPES
@@ -75,6 +76,7 @@ export interface ObjectPickerProps {
 
   // Custom data mode - bypass store fetching
   customGroups?: ObjectPickerGroup[];  // If provided, use these instead of fetching from store
+  timelineOverride?: FullTimeline | null; // If provided, use this timeline instead of the global store
 
   // Callbacks
   onLoadComplete?: () => void;
@@ -147,6 +149,7 @@ export interface UseObjectPickerDataOptions {
   language: string;
   mode: ObjectPickerMode;
   excludeTypes?: ObjectType[];
+  timelineOverride?: FullTimeline | null;
 }
 
 /** Result from useObjectPickerData hook */
