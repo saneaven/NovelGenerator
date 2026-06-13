@@ -31,7 +31,6 @@ export interface TimelineStreamHandle {
 interface TimelineStreamProps {
   layout: TimelineLayout;
   calendar: CalendarConfig;
-  displayLanguage: string;
   collapseAt: number;
   linkItems: ReadonlyMap<string, ObjectPickerItem>;
   onEditEvent: (ve: VisibleEvent) => void;
@@ -47,7 +46,6 @@ const CONTENT_VISIBILITY_THRESHOLD = 300;
 const TimelineStream = forwardRef<TimelineStreamHandle, TimelineStreamProps>(({
   layout,
   calendar,
-  displayLanguage,
   collapseAt,
   linkItems,
   onEditEvent,
@@ -226,7 +224,6 @@ const TimelineStream = forwardRef<TimelineStreamHandle, TimelineStreamProps>(({
               key={row.key}
               row={row}
               calendar={calendar}
-              displayLanguage={displayLanguage}
               collapseAt={collapseAt}
               clusterExpanded={expandedClusters.has(row.key)}
               expandedEventId={expandedEventId}

@@ -327,7 +327,6 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
             ref={streamRef}
             layout={layout}
             calendar={calendar}
-            displayLanguage={displayLanguage}
             collapseAt={isMobile ? MOBILE_SPACING.clusterCollapseAt : DESKTOP_SPACING.clusterCollapseAt}
             linkItems={linkItems}
             onEditEvent={(ve) => setEventModal({ mode: 'edit', event: ve.event })}

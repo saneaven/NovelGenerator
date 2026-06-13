@@ -11,7 +11,6 @@ interface EventClusterProps {
   collapseAt: number;
   clusterExpanded: boolean;
   calendar: CalendarConfig;
-  displayLanguage: string;
   expandedEventId: string | null;
   highlightedEventId: string | null;
   linkItems: ReadonlyMap<string, ObjectPickerItem>;
@@ -46,7 +45,6 @@ const EventCluster: React.FC<EventClusterProps> = ({
             expanded={cardProps.expandedEventId === ve.event.id}
             highlighted={cardProps.highlightedEventId === ve.event.id}
             calendar={cardProps.calendar}
-            displayLanguage={cardProps.displayLanguage}
             linkItems={cardProps.linkItems}
             onToggle={cardProps.onToggleEvent}
             onEdit={cardProps.onEditEvent}

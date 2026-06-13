@@ -11,7 +11,6 @@ import EventCluster from './EventCluster';
 interface AnchorRowProps {
   row: AnchorRowData;
   calendar: CalendarConfig;
-  displayLanguage: string;
   collapseAt: number;
   clusterExpanded: boolean;
   expandedEventId: string | null;
@@ -33,7 +32,6 @@ interface AnchorRowProps {
 const AnchorRow: React.FC<AnchorRowProps> = ({
   row,
   calendar,
-  displayLanguage,
   collapseAt,
   clusterExpanded,
   expandedEventId,
@@ -133,7 +131,6 @@ const AnchorRow: React.FC<AnchorRowProps> = ({
             collapseAt={collapseAt}
             clusterExpanded={clusterExpanded}
             calendar={calendar}
-            displayLanguage={displayLanguage}
             expandedEventId={expandedEventId}
             highlightedEventId={highlightedEventId}
             linkItems={linkItems}

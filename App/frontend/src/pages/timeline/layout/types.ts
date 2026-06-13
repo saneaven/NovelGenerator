@@ -12,6 +12,8 @@ export interface VisibleEvent {
   event: TimelineEvent;
   name: string;
   description: string;
+  /** language-resolved rich-text body, server-rendered to markdown ('' when empty) */
+  contentMarkdown: string;
   startBase: number;
   /** null = instant event; otherwise normalized so endBase > startBase */
   endBase: number | null;

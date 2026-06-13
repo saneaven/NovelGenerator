@@ -164,19 +164,29 @@
   color: var(--color-text-muted);
 }
 
+/* Description = short summary: muted, italic lead-in (secondary to content). */
 .tl-card__description {
   margin: 0;
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--line-height-relaxed);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  line-height: var(--line-height-normal);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.tl-card__notes-pip {
-  align-self: flex-start;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+/* Content = the main read-only body: larger, primary reading weight. */
+.tl-card__content {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+/* When both are present, separate the body from the summary lead-in. */
+.tl-card__description + .tl-card__content {
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .tl-card__tags {
@@ -206,11 +216,13 @@
 
 .tl-card__links {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 
 .tl-card__links-label {
+  width: 100%;
   font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -218,36 +230,35 @@
 }
 
 .tl-card__link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  min-height: 44px;
+  gap: var(--spacing-xs);
+  max-width: 100%;
   padding: var(--spacing-xs) var(--spacing-sm);
-  border: none;
-  border-radius: var(--border-radius-md);
-  background: none;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-full);
+  background: var(--color-surface-subtle);
+  font-size: var(--font-size-xs);
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .tl-card__link:hover {
   background: var(--color-surface-hover);
+  border-color: var(--color-border-medium);
 }
 
 .tl-card__link-type {
   flex-shrink: 0;
-  padding: 1px var(--spacing-sm);
-  border-radius: var(--border-radius-sm);
-  background: var(--color-surface-subtle);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-muted);
 }
 
 .tl-card__link-name {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-link);
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

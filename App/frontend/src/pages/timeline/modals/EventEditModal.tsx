@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
-import FormDisclosure from './FormDisclosure';
 import { CustomSelect } from '../../../components/ui/CustomSelect';
 import { StringChipInput } from '../../../components/ui/StringChipInput';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
@@ -30,6 +29,7 @@ import {
 } from '../../../utils/timelineCalendar';
 import { resolveEntityText } from '../layout/computeTimelineLayout';
 import { trackColorProps } from '../timelineColors';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { LINKABLE_TYPES } from './eventLinkUtils';
 import DateFieldsInput from './DateFieldsInput';
 import './TimelineModals.css';
@@ -99,6 +99,10 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   onCreated,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
+  // Story-entity editor pattern: details and content are separate tabs on
+  // mobile; on desktop both are visible (content fills the remaining height).
+  const [activeTab, setActiveTab] = useState<'details' | 'content'>('details');
   const createEvent = useTimelineStore((s) => s.createEvent);
   const updateEvent = useTimelineStore((s) => s.updateEvent);
   const deleteEvent = useTimelineStore((s) => s.deleteEvent);
@@ -191,6 +195,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     const nextErrors = validate();
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
+      setActiveTab('details');
       if (nextErrors.name) nameRef.current?.focus();
       return;
     }
@@ -304,9 +309,9 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     <BaseModal
       isOpen
       onClose={handleClose}
-      title={isCreating ? t('timeline.eventModal.createTitle') : t('timeline.eventModal.editTitle')}
+      showHeader={false}
       size="large"
-      className="tl-event-modal"
+      className="tl-event-modal tl-editor-modal"
       footer={
         <div className="tl-modal-footer tl-modal-footer--split">
           <div>
@@ -325,13 +330,52 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
         </div>
       }
     >
-      <div className="tl-form">
+      <div className="tl-modal-tabs" role="tablist">
+        {isMobile ? (
+          <>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'details'}
+              className={`tl-modal-tab ${activeTab === 'details' ? 'tl-modal-tab--active' : ''}`}
+              onClick={() => setActiveTab('details')}
+            >
+              {t('timeline.eventModal.tabDetails')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'content'}
+              className={`tl-modal-tab ${activeTab === 'content' ? 'tl-modal-tab--active' : ''}`}
+              onClick={() => setActiveTab('content')}
+            >
+              {t('timeline.eventModal.tabContent')}
+            </button>
+          </>
+        ) : (
+          <span className="tl-modal-tab tl-modal-tab--active" role="tab" aria-selected>
+            {isCreating ? t('timeline.eventModal.createTitle') : t('timeline.eventModal.editTitle')}
+          </span>
+        )}
+        <button
+          type="button"
+          className="tl-modal-tabs__close"
+          onClick={handleClose}
+          aria-label={t('common.close')}
+          title={t('common.close')}
+        >
+          <Close size="sm" />
+        </button>
+      </div>
+
+      <div className="tl-form tl-form--editor">
         {saveError && (
           <div className="tl-form__error-banner" role="alert">
             {t('timeline.eventModal.errors.saveFailed', { message: saveError })}
           </div>
         )}
 
+        <div className={`tl-form__details ${isMobile && activeTab !== 'details' ? 'tl-form__section-hidden' : ''}`}>
         <div className="tl-form__field">
           <label className="tl-form__label" htmlFor="tl-event-name">{t('timeline.eventModal.name')}</label>
           <input
@@ -430,10 +474,6 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
           />
         </div>
 
-        <FormDisclosure label={t('timeline.eventModal.content')}>
-          <RichTextEditor initialContent={content} onChange={setContent} />
-        </FormDisclosure>
-
         <div className="tl-form__field">
           <span className="tl-form__label">{t('timeline.eventModal.links')}</span>
           <div className="tl-form__links">
@@ -485,6 +525,12 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
               />
             </div>
           )}
+        </div>
+        </div>
+
+        <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
+          <label className="tl-form__label">{t('timeline.eventModal.content')}</label>
+          <RichTextEditor initialContent={content} onChange={setContent} />
         </div>
       </div>
     </BaseModal>

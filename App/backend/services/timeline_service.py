@@ -53,6 +53,7 @@ from .object_version_language_service import (
     provenance_map_for_versions,
     upsert_version_language,
 )
+from .rich_text import tree_to_markdown
 
 
 TIMELINE_TRACK_TYPE = "timeline_track"
@@ -105,8 +106,6 @@ def _latest_versions_map(
     db: Session,
     object_type: str,
     object_ids: Iterable[UUID],
-    *,
-    language: str | None = None,
 ) -> dict[UUID, tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None]]:
     ids = list({object_id for object_id in object_ids})
     if not ids:
@@ -117,10 +116,12 @@ def _latest_versions_map(
     if not version_ids:
         return {}
 
-    lang_query = db.query(ObjectVersionLanguage).filter(ObjectVersionLanguage.version_id.in_(version_ids))
-    if language:
-        lang_query = lang_query.filter(ObjectVersionLanguage.language == language)
-    lang_rows = lang_query.order_by(ObjectVersionLanguage.created_at.asc()).all()
+    lang_rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id.in_(version_ids))
+        .order_by(ObjectVersionLanguage.created_at.asc())
+        .all()
+    )
     rows_by_version_id: dict[UUID, list[ObjectVersionLanguage]] = {}
     for row in lang_rows:
         rows_by_version_id.setdefault(row.version_id, []).append(row)
@@ -138,6 +139,21 @@ def _latest_versions_map(
     }
 
 
+def _with_content_markdown(payload: Any) -> Any:
+    """Augment a per-language payload with a rendered markdown view of its content.
+
+    The stored `content` is a rich-text tree; the frontend has no tree→markdown
+    converter, so the read-only display (event/track cards) relies on this
+    server-rendered string, mirroring how unified objects expose markdown.
+    """
+    if not isinstance(payload, dict) or "content" not in payload:
+        return payload
+    rendered = tree_to_markdown(payload.get("content")) if payload.get("content") else ""
+    if not rendered:
+        return payload
+    return {**payload, "content_markdown": rendered}
+
+
 def _extract_version_payload(
     version_entry: tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None] | None,
     language: str | None,
@@ -147,13 +163,22 @@ def _extract_version_payload(
 
     version, rows, created_at = version_entry
     if language:
+        # Requested language when present, otherwise the earliest-created row
+        # (the original authoring language), keyed by its actual language so
+        # clients can tell the requested translation is missing.
         data = {
             row.language: row.data
             for row in rows
             if row.language == language and isinstance(row.data, dict)
         }
+        if not data:
+            fallback = next((row for row in rows if isinstance(row.data, dict)), None)
+            if fallback is not None:
+                data = {fallback.language: fallback.data}
     else:
         data = payload_map_from_rows(rows)
+
+    data = {language_key: _with_content_markdown(payload) for language_key, payload in data.items()}
 
     return data, {
         "id": str(version.id),
@@ -165,15 +190,15 @@ def _extract_version_payload(
 def _version_entry_for_parent(
     db: Session,
     version: ObjectVersion | None,
-    *,
-    language: str | None,
 ) -> tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None] | None:
     if version is None:
         return None
-    query = db.query(ObjectVersionLanguage).filter(ObjectVersionLanguage.version_id == version.id)
-    if language:
-        query = query.filter(ObjectVersionLanguage.language == language)
-    rows = query.order_by(ObjectVersionLanguage.created_at.asc()).all()
+    rows = (
+        db.query(ObjectVersionLanguage)
+        .filter(ObjectVersionLanguage.version_id == version.id)
+        .order_by(ObjectVersionLanguage.created_at.asc())
+        .all()
+    )
     provenance = provenance_map_for_versions(db, [version.id]).get(version.id)
     return version, rows, provenance.created_at if provenance is not None else version.created_at
 
@@ -631,8 +656,8 @@ class TimelineService:
                 if tag_filter_set.intersection(_sanitize_tags(event.tags if isinstance(event.tags, list) else []))
             ]
 
-        track_versions = _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id for track in tracks], language=language)
-        event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events], language=language)
+        track_versions = _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id for track in tracks])
+        event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events])
 
         children_by_parent_id: dict[UUID | None, list[TimelineTrack]] = {}
         for track in tracks:
@@ -730,7 +755,7 @@ class TimelineService:
         if track_id is not None:
             query = query.filter(TimelineEvent.track_id == track_id)
         events = query.all()
-        event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events], language=language)
+        event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events])
         links = _event_link_query(db, project_id).all()
         links_by_event_id: dict[UUID, list[TimelineEventLink]] = {}
         for link in links:
@@ -944,7 +969,7 @@ class TimelineService:
         return _serialize_track_tree(
             track,
             language=language,
-            track_versions={track.id: _version_entry_for_parent(db, version, language=language)},
+            track_versions={track.id: _version_entry_for_parent(db, version)},
             events_by_track_id={},
             event_versions={},
             links_by_event_id={},
@@ -1051,9 +1076,9 @@ class TimelineService:
             action="updated",
         )
         latest_map = (
-            {track.id: _version_entry_for_parent(db, version_row, language=language)}
+            {track.id: _version_entry_for_parent(db, version_row)}
             if version_row is not None
-            else _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id], language=language)
+            else _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id])
         )
         return _serialize_track_tree(
             track,
@@ -1088,7 +1113,7 @@ class TimelineService:
             object_id=track.id,
             action="updated",
         )
-        latest_map = _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id], language=language)
+        latest_map = _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id])
         return _serialize_track_tree(
             track,
             language=language,
@@ -1289,7 +1314,7 @@ class TimelineService:
         return _serialize_event(
             event,
             language=language,
-            version_map={event.id: _version_entry_for_parent(db, version, language=language)},
+            version_map={event.id: _version_entry_for_parent(db, version)},
             links_by_event_id={event.id: link_rows},
         )
 
@@ -1421,9 +1446,9 @@ class TimelineService:
             action="updated",
         )
         latest_map = (
-            {event.id: _version_entry_for_parent(db, version_row, language=language)}
+            {event.id: _version_entry_for_parent(db, version_row)}
             if version_row is not None
-            else _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id], language=language)
+            else _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id])
         )
         return _serialize_event(
             event,

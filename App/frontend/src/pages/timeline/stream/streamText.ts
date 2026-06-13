@@ -38,15 +38,3 @@ export function topUnitLabel(date: TimelineDate, calendar: CalendarConfig): stri
   const top = calendar.units[0];
   return `${top.label || top.name} ${Number(date[top.name] ?? 1)}`;
 }
-
-/** True when the event carries non-empty rich-text notes. */
-export function hasNotes(ve: VisibleEvent, displayLanguage: string): boolean {
-  const data = (ve.event.data?.[displayLanguage] ?? Object.values(ve.event.data ?? {})[0] ?? {}) as Record<string, unknown>;
-  const content = data.content as { content?: unknown[] } | undefined;
-  if (!content || !Array.isArray(content.content) || content.content.length === 0) return false;
-  if (content.content.length === 1) {
-    const first = content.content[0] as { content?: unknown[] };
-    if (!first.content || first.content.length === 0) return false;
-  }
-  return true;
-}

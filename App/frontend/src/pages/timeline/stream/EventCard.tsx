@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import TextButton from '../../../components/TextButton/TextButton';
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { ChevronDown, Clock, Edit, Hash, Trash } from '../../../components/icons';
 import type { ObjectPickerItem } from '../../../components/ObjectPicker/types';
 import type { CalendarConfig } from '../../../types/timeline';
@@ -11,14 +12,13 @@ import type { AnyObjectType } from '../../../types/unifiedObject';
 import { formatDate } from '../../../utils/timelineCalendar';
 import type { VisibleEvent } from '../layout/types';
 import { trackColorProps } from '../timelineColors';
-import { hasNotes, spanDuration } from './streamText';
+import { spanDuration } from './streamText';
 import TrackBadge from './TrackBadge';
 import './EventCard.css';
 
 interface EventCardProps {
   ve: VisibleEvent;
   calendar: CalendarConfig;
-  displayLanguage: string;
   expanded: boolean;
   highlighted?: boolean;
   linkItems: ReadonlyMap<string, ObjectPickerItem>;
@@ -35,7 +35,6 @@ const EXPAND_TRANSITION = { duration: 0.24, ease: [0.4, 0, 0.2, 1] as const };
 const EventCard: React.FC<EventCardProps> = ({
   ve,
   calendar,
-  displayLanguage,
   expanded,
   highlighted = false,
   linkItems,
@@ -52,7 +51,7 @@ const EventCard: React.FC<EventCardProps> = ({
 
   const duration = spanDuration(ve, calendar, t);
   const fullPath = ve.trackPath.map((entry) => entry.name || '—').join(' › ');
-  const notes = expanded && hasNotes(ve, displayLanguage);
+  const contentMarkdown = ve.contentMarkdown.trim();
 
   const handleHeaderKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape' && expanded) {
@@ -128,7 +127,12 @@ const EventCard: React.FC<EventCardProps> = ({
               </div>
 
               {description && <p className="tl-card__description">{description}</p>}
-              {notes && <span className="tl-card__notes-pip">◈ {t('timeline.card.hasNotes')}</span>}
+
+              {contentMarkdown && (
+                <MarkdownRenderer className="markdown-content tl-card__content">
+                  {contentMarkdown}
+                </MarkdownRenderer>
+              )}
 
               {event.tags.length > 0 && (
                 <div className="tl-card__tags">

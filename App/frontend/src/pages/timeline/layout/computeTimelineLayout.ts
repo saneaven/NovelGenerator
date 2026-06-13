@@ -21,11 +21,12 @@ import type {
 export function resolveEntityText(
   data: Record<string, Record<string, unknown>> | undefined,
   displayLanguage: string,
-): { name: string; description: string } {
+): { name: string; description: string; contentMarkdown: string } {
   const langData = data?.[displayLanguage] ?? (data ? data[Object.keys(data)[0]] : undefined) ?? {};
   return {
     name: typeof langData.name === 'string' ? langData.name : '',
     description: typeof langData.description === 'string' ? langData.description : '',
+    contentMarkdown: typeof langData.content_markdown === 'string' ? langData.content_markdown : '',
   };
 }
 
@@ -65,11 +66,12 @@ export function computeTimelineLayout(input: LayoutInput): TimelineLayout {
       if (endBase !== null && endBase < startBase) [startBase, endBase] = [endBase, startBase];
       if (endBase === startBase) endBase = null;
 
-      const { name: eventName, description } = resolveEntityText(event.data, displayLanguage);
+      const { name: eventName, description, contentMarkdown } = resolveEntityText(event.data, displayLanguage);
       allVisible.push({
         event,
         name: eventName,
         description,
+        contentMarkdown,
         startBase,
         endBase,
         trackPath: nextPath,

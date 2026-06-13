@@ -278,40 +278,117 @@
   overflow: hidden;
 }
 
-/* plain collapsible form section */
+/* Story-entity-style editor layout (ObjectCardExpanded pattern):
+   compact details section on top + a Content area that fills the
+   remaining height; on mobile the two split into tabs. */
 
-.tl-form__disclosure {
-  border: 1px solid var(--color-border-subtle);
+.tl-editor-modal .base-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+
+/* Header tab strip (mirrors the story-entity ObjectCardExpanded .expanded-tabs). */
+.tl-modal-tabs {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  background: var(--color-surface-subtle);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.tl-modal-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+/* Switchable tabs (mobile Details/Content) split the strip evenly, like the reference. */
+button.tl-modal-tab {
+  flex: 1;
+}
+
+button.tl-modal-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tl-modal-tab--active {
+  color: var(--color-brand-primary);
+  border-bottom-color: var(--color-brand-primary);
+  background: var(--color-surface-base);
+  cursor: default;
+}
+
+.tl-modal-tabs__close {
+  margin-left: auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: var(--spacing-sm);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tl-modal-tabs__close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.tl-form--editor {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-xl);
+}
+
+.tl-form--editor .tl-form__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  flex-shrink: 0;
+}
+
+.tl-form__field--grow {
+  flex: 1;
+  min-height: 320px;
+}
+
+.tl-form__field--grow .rich-text-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-default);
   border-radius: var(--border-radius-md);
+  background: var(--color-surface-elevated);
   overflow: hidden;
 }
 
-.tl-form__disclosure-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  width: 100%;
-  min-height: 40px;
-  padding: 0 var(--spacing-md);
-  border: none;
-  background: var(--color-surface-subtle);
-  text-align: left;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  cursor: pointer;
+.tl-form__field--grow .rich-text-editor .editor-content-wrapper {
+  flex: 1;
+  overflow-y: auto;
 }
 
-.tl-form__disclosure-chevron {
-  transition: transform var(--transition-fast);
-}
-
-.tl-form__disclosure-chevron--open {
-  transform: rotate(90deg);
-}
-
-.tl-form__disclosure-body {
-  padding: var(--spacing-md);
+.tl-form--editor .tl-form__section-hidden {
+  display: none;
 }
 
 /* footers */

@@ -1642,7 +1642,6 @@
       "ongoingCount_other": "+{{count}} ongoing",
       "showAllCluster": "Show all ({{count}})",
       "links": "Links",
-      "hasNotes": "Has notes",
       "addAtThisTime": "Add event at this time"
     },
     "duration": {
@@ -1714,7 +1713,7 @@
       "tags": "Tags",
       "description": "Description",
       "descriptionPlaceholder": "Short summary shown on the card...",
-      "content": "Notes",
+      "content": "Content",
       "links": "Linked objects",
       "addLink": "Add link",
       "deleteEvent": "Delete event",
@@ -1728,7 +1727,9 @@
         "invalidDate": "Invalid date for this calendar",
         "endBeforeStart": "End date must not be before the start date",
         "saveFailed": "Could not save. {{message}}"
-      }
+      },
+      "tabDetails": "Details",
+      "tabContent": "Content"
     },
     "trackModal": {
       "createTitle": "New Track",
@@ -1740,7 +1741,7 @@
       "colorCustom": "Custom color",
       "inside": "Inside: {{parent}}",
       "description": "Description",
-      "content": "Notes"
+      "content": "Content"
     },
     "calendarModal": {
       "title": "Calendar Configuration",

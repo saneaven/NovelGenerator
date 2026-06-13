@@ -288,6 +288,8 @@
     /* 14px */
     --font-size-base: 1rem;
     /* 16px */
+    --font-size-md: 1rem;
+    /* 16px — alias of base; many components reference --font-size-md */
     --font-size-lg: 1.125rem;
     /* 18px */
     --font-size-xl: 1.25rem;

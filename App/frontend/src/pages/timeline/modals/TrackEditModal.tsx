@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
-import FormDisclosure from './FormDisclosure';
+import { Close } from '../../../components/icons';
 import { RichTextEditor } from '../../../components/RichTextEditor';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
@@ -10,6 +10,7 @@ import { useTimelineStore } from '../../../store/timelineStore';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type { TimelineTrack } from '../../../types/timeline';
 import { SWATCH_COLORS, oklchToHex } from '../timelineColors';
+import { useIsMobile } from '../hooks/useIsMobile';
 import './TimelineModals.css';
 
 interface TrackEditModalProps {
@@ -34,6 +35,9 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   onCreated,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
+  // Story-entity editor pattern: details/content tabs on mobile, both visible on desktop.
+  const [activeTab, setActiveTab] = useState<'details' | 'content'>('details');
   const createTrack = useTimelineStore((s) => s.createTrack);
   const updateTrack = useTimelineStore((s) => s.updateTrack);
 
@@ -82,6 +86,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
       setNameError(true);
+      setActiveTab('details');
       return;
     }
     setIsSaving(true);
@@ -114,14 +119,15 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [name, description, content, color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
+  }, [name, description, content, color, initial.color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
 
   return (
     <BaseModal
       isOpen
       onClose={handleClose}
-      title={isCreating ? t('timeline.trackModal.createTitle') : t('timeline.trackModal.editTitle')}
-      size="medium"
+      showHeader={false}
+      size="large"
+      className="tl-editor-modal"
       footer={
         <div className="tl-modal-footer">
           <TextButton variant="secondary" onClick={handleClose}>{t('common.cancel')}</TextButton>
@@ -131,13 +137,52 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
         </div>
       }
     >
-      <div className="tl-form">
+      <div className="tl-modal-tabs" role="tablist">
+        {isMobile ? (
+          <>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'details'}
+              className={`tl-modal-tab ${activeTab === 'details' ? 'tl-modal-tab--active' : ''}`}
+              onClick={() => setActiveTab('details')}
+            >
+              {t('timeline.eventModal.tabDetails')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'content'}
+              className={`tl-modal-tab ${activeTab === 'content' ? 'tl-modal-tab--active' : ''}`}
+              onClick={() => setActiveTab('content')}
+            >
+              {t('timeline.eventModal.tabContent')}
+            </button>
+          </>
+        ) : (
+          <span className="tl-modal-tab tl-modal-tab--active" role="tab" aria-selected>
+            {isCreating ? t('timeline.trackModal.createTitle') : t('timeline.trackModal.editTitle')}
+          </span>
+        )}
+        <button
+          type="button"
+          className="tl-modal-tabs__close"
+          onClick={handleClose}
+          aria-label={t('common.close')}
+          title={t('common.close')}
+        >
+          <Close size="sm" />
+        </button>
+      </div>
+
+      <div className="tl-form tl-form--editor">
         {saveError && (
           <div className="tl-form__error-banner" role="alert">
             {t('timeline.eventModal.errors.saveFailed', { message: saveError })}
           </div>
         )}
 
+        <div className={`tl-form__details ${isMobile && activeTab !== 'details' ? 'tl-form__section-hidden' : ''}`}>
         {isCreating && (
           <div className="tl-form__context">
             {parentId ? t('timeline.trackModal.inside', { parent: parentName ?? '' }) : t('timeline.tree.topLevel')}
@@ -206,9 +251,12 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
           />
         </div>
 
-        <FormDisclosure label={t('timeline.trackModal.content')}>
+        </div>
+
+        <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
+          <label className="tl-form__label">{t('timeline.trackModal.content')}</label>
           <RichTextEditor initialContent={content} onChange={setContent} />
-        </FormDisclosure>
+        </div>
       </div>
     </BaseModal>
   );
