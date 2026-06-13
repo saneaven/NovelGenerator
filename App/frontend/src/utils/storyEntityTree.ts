@@ -111,15 +111,10 @@ export function sortStoryEntityObjects(
 
 export function getStoryEntityObjectName(
   entity: StoryEntityObject,
-  preferredLanguage?: string | null,
-  fallbackLanguage?: string | null,
+  _preferredLanguage?: string | null,
+  _fallbackLanguage?: string | null,
 ): string {
-  const preferred = preferredLanguage ? entity.data[preferredLanguage] : undefined;
-  if (preferred?.name) return preferred.name;
-  const fallback = fallbackLanguage ? entity.data[fallbackLanguage] : undefined;
-  if (fallback?.name) return fallback.name;
-  const firstLanguage = Object.keys(entity.data)[0];
-  return entity.data[firstLanguage]?.name || '';
+  return entity.data?.name || '';
 }
 
 export function buildFolderChildrenMap(

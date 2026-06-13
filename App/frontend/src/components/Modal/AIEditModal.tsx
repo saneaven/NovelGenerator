@@ -82,7 +82,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       // For manuscript, targetId is chapterId - get chapter name
       const chapter = unifiedStore.getObject(targetId) as OutlineObject | null;
       if (chapter?.data) {
-        const langData = chapter.data[mainLanguage] || Object.values(chapter.data)[0];
+        const langData = chapter.data as Record<string, any>;
         return langData?.name || null;
       }
       return null;
@@ -91,7 +91,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     // For other categories, get object name
     const obj = unifiedStore.getObject(targetId);
     if (obj?.data) {
-      const langData = (obj.data as Record<string, any>)[mainLanguage] || Object.values(obj.data)[0];
+      const langData = obj.data as Record<string, any>;
       return langData?.name || langData?.title || null;
     }
     return null;

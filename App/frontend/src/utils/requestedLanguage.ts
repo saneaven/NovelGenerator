@@ -9,35 +9,32 @@ export interface RequestedLanguageState {
   createNewVersion: boolean;
 }
 
-interface ResolveRequestedLanguageStateParams {
-  availableLanguages: string[];
-  requestedLanguage: string;
-  mainLanguage: string;
+export interface BackendLanguageState {
+  requested_language: string;
+  content_language: string | null;
+  fallback_to: string | null;
+  available_languages: string[];
+  has_requested_language: boolean;
+  is_fallback: boolean;
 }
 
 function normalizeLanguages(languages: string[]): string[] {
   return [...new Set(languages.filter((language) => typeof language === 'string' && language.trim().length > 0))];
 }
 
-export function resolveRequestedLanguageState({
-  availableLanguages,
-  requestedLanguage,
-  mainLanguage,
-}: ResolveRequestedLanguageStateParams): RequestedLanguageState {
-  const normalizedLanguages = normalizeLanguages(availableLanguages);
-  const hasRequestedLanguage = normalizedLanguages.includes(requestedLanguage);
-  const viewLanguage = hasRequestedLanguage
-    ? requestedLanguage
-    : normalizedLanguages.includes(mainLanguage)
-      ? mainLanguage
-      : normalizedLanguages[0] ?? requestedLanguage;
+export function requestedLanguageStateFromProjection(
+  languageState: BackendLanguageState | undefined,
+  mainLanguage: string,
+): RequestedLanguageState {
+  const requestedLanguage = languageState?.requested_language || mainLanguage;
+  const viewLanguage = languageState?.content_language || requestedLanguage;
+  const hasRequestedLanguage = Boolean(languageState?.has_requested_language);
   const isMainLanguage = requestedLanguage === mainLanguage;
-
   return {
     requestedLanguage,
     viewLanguage,
     hasRequestedLanguage,
-    isFallbackView: viewLanguage !== requestedLanguage,
+    isFallbackView: Boolean(languageState?.is_fallback),
     canEdit: hasRequestedLanguage,
     isMainLanguage,
     isTranslationView: !isMainLanguage,

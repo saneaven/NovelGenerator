@@ -7,9 +7,11 @@ import { confirm as confirmDialog } from '../../store/dialogStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useTimelineStore } from '../../store/timelineStore';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useTimelineUiStore } from '../../store/timelineUiStore';
 import type { TimelineDate, TimelineEvent, TimelineTrack } from '../../types/timeline';
 import { DEFAULT_CALENDAR } from '../../utils/timelineCalendar';
+import { buildTimelineFromObjects } from '../../utils/timelineView';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useTimelineLayout } from './hooks/useTimelineLayout';
 import { DESKTOP_SPACING, MOBILE_SPACING, type VisibleEvent } from './layout/types';
@@ -81,7 +83,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
-  const timeline = useTimelineStore((s) => s.timeline);
+  const timelineConfig = useTimelineStore((s) => s.configByProject[pid]);
   const isLoading = useTimelineStore((s) => s.isLoading);
   const fetchTimeline = useTimelineStore((s) => s.fetchTimeline);
   const loadedProjectId = useTimelineStore((s) => s.loadedProjectId);
@@ -89,6 +91,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const deleteEvent = useTimelineStore((s) => s.deleteEvent);
   const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
   const setTagFilter = useTimelineStore((s) => s.setTagFilter);
+  const unifiedObjects = useUnifiedObjectStore((s) => s.objects);
 
   const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[pid]);
   const showAllTracks = useTimelineUiStore((s) => s.showAllTracks);
@@ -107,12 +110,15 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
     void fetchTimeline(pid, displayLanguage, { force: true }).catch(() => undefined);
   }, [pid, displayLanguage, fetchTimeline, loadedLanguage, loadedProjectId]);
 
+  const timeline = useMemo(
+    () => buildTimelineFromObjects(pid, unifiedObjects, timelineConfig),
+    [pid, unifiedObjects, timelineConfig],
+  );
   const calendar = timeline?.calendar ?? DEFAULT_CALENDAR;
   const tracks = useMemo(() => timeline?.tracks ?? [], [timeline]);
 
   // drop persisted hidden ids whose tracks were deleted elsewhere
   useEffect(() => {
-    if (!timeline) return;
     const ids = new Set<string>();
     const walk = (list: TimelineTrack[]) => {
       for (const track of list) {
@@ -316,7 +322,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
       />
 
       <div className="timeline-page__body">
-        {isLoading && !timeline ? (
+        {isLoading && !timelineConfig ? (
           <TimelineSkeleton />
         ) : emptyKind ? (
           <TimelineEmptyState

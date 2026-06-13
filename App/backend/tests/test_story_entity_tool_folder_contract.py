@@ -388,11 +388,9 @@ def test_validate_patch_outline_reads_markdown_projection(monkeypatch) -> None:
         return {
             "kind": "chapter",
             "data": {
-                "English": {
-                    "name": "Chapter 1",
-                    "description": "Outline desc",
-                    "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
-                }
+                "name": "Chapter 1",
+                "description": "Outline desc",
+                "content": "**Timeline**: Months 44-46 - daily life as the community rebuilds.",
             },
         }
 
@@ -550,11 +548,9 @@ def test_read_timeline_track_returns_object_projection(monkeypatch) -> None:
         return {
             "metadata": {"parent_id": "parent-1", "position": 2, "color": "#336699"},
             "data": {
-                "English": {
-                    "name": "Era",
-                    "description": "Only this track.",
-                    "content": "Track markdown.",
-                }
+                "name": "Era",
+                "description": "Only this track.",
+                "content": "Track markdown.",
             },
         }
 
@@ -608,11 +604,9 @@ def test_read_timeline_event_returns_object_projection(monkeypatch) -> None:
                 "tags": ["court"],
             },
             "data": {
-                "English": {
-                    "name": "Coronation",
-                    "description": "Single event.",
-                    "content": "Event markdown.",
-                }
+                "name": "Coronation",
+                "description": "Single event.",
+                "content": "Event markdown.",
             },
         }
 
@@ -770,11 +764,9 @@ def test_validate_patch_timeline_event_reads_markdown_projection(monkeypatch) ->
         captured["object_type"] = kwargs.get("object_type")
         return {
             "data": {
-                "English": {
-                    "name": "Founding Day",
-                    "description": "A civic marker.",
-                    "content": "The bells ring once at dawn.",
-                }
+                "name": "Founding Day",
+                "description": "A civic marker.",
+                "content": "The bells ring once at dawn.",
             }
         }
 
@@ -803,11 +795,9 @@ def test_validate_patch_timeline_track_rejects_non_unique_old_text(monkeypatch) 
     def _fake_read_runtime_object(*_args, **_kwargs):
         return {
             "data": {
-                "English": {
-                    "name": "Era",
-                    "description": "repeat repeat",
-                    "content": "Track content.",
-                }
+                "name": "Era",
+                "description": "repeat repeat",
+                "content": "Track content.",
             }
         }
 
@@ -937,7 +927,7 @@ def test_validate_replace_timeline_track_allows_metadata_only(monkeypatch) -> No
     monkeypatch.setattr(
         timeline_module,
         "read_runtime_object",
-        lambda *_args, **_kwargs: {"data": {"English": {"name": "Era", "description": "", "content": ""}}},
+        lambda *_args, **_kwargs: {"data": {"name": "Era", "description": "", "content": ""}},
     )
     binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "replace_timeline_track")
 
@@ -961,7 +951,7 @@ def test_validate_replace_timeline_event_allows_metadata_only(monkeypatch) -> No
     monkeypatch.setattr(
         timeline_module,
         "read_runtime_object",
-        lambda *_args, **_kwargs: {"data": {"English": {"name": "Event", "description": "", "content": ""}}},
+        lambda *_args, **_kwargs: {"data": {"name": "Event", "description": "", "content": ""}},
     )
     binding = _binding_by_name(TimelineFeatureModule(), _module_context(), "replace_timeline_event")
 

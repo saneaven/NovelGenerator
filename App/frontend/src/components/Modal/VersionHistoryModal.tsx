@@ -132,7 +132,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   // Story mode helpers
   const currentObject = mode === 'story' ? store.objects[objectId!] : null;
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const availableLangs = currentObject?.data ? Object.keys(currentObject.data) : [];
+  const availableLangs = currentObject?.language_state?.available_languages ?? [];
   const currentLanguage = availableLangs.includes(mainLanguage)
     ? mainLanguage
     : (availableLangs[0] || 'en');
@@ -145,6 +145,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       outline: 'Outline',
       manuscript: 'Manuscript',
       guidelines: 'Guidelines',
+      timeline_track: 'Timeline Track',
+      timeline_event: 'Timeline Event',
     };
     if (type === 'outline') {
       if (kind === 'act') return 'Act';
@@ -481,9 +483,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       <div className="versions-list">
         {versions.map((version) => {
           const isCurrentVersion = currentObject?.version.id === version.id;
-          // languages from metadata-only response; fall back to data keys for legacy responses
-          const versionLanguages: string[] =
-            version.languages ?? (version.data ? Object.keys(version.data) : []);
+          // languages from metadata-only response.
+          const versionLanguages: string[] = version.languages ?? [];
           const fullData = versionContent[version.id];
           const isExpanded = expandedVersions.has(version.id);
           const isContentLoading = loadingVersionIds.has(version.id);

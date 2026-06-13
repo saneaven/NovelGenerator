@@ -229,21 +229,22 @@ export interface EditCard {
 
 /** All object types including outline structure (for translation and validation) */
 export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
+  basic_info: 'basic_info',
+  guidelines: 'guidelines',
   story_entity_folder: 'story_entity_folder',
   story_entity: 'story_entity',
   outline: 'outline',
+  manuscript: 'manuscript',
+  timeline_track: 'timeline_track',
+  timeline_event: 'timeline_event',
 };
 
-/** Helper to get object data for a language with fallback */
+/** Helper to get object projection data. */
 export function getObjectData(
   object: UnifiedObject,
-  language: string
+  _language: string
 ): Record<string, unknown> {
-  const data = object.data[language];
-  if (data) return data;
-  const availableLanguages = Object.keys(object.data);
-  if (availableLanguages.length > 0) {
-    return object.data[availableLanguages[0]];
-  }
-  return {};
+  return object.data && typeof object.data === 'object' && !Array.isArray(object.data)
+    ? object.data as Record<string, unknown>
+    : {};
 }

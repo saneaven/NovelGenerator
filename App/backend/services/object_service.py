@@ -21,6 +21,7 @@ from ..models.db_models import (
     StoryEntityFolder,
     Timeline,
     TimelineEvent,
+    TimelineEventLink,
     TimelineTrack,
     ObjectAssetLink,
 )
@@ -215,8 +216,41 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["start_date"] = getattr(obj, "start_date", None)
         metadata["end_date"] = getattr(obj, "end_date", None)
         metadata["tags"] = getattr(obj, "tags", None)
+        links = (
+            db.query(TimelineEventLink)
+            .filter(TimelineEventLink.event_id == obj.id)
+            .order_by(TimelineEventLink.created_at.asc(), TimelineEventLink.id.asc())
+            .all()
+        )
+        metadata["links"] = [
+            {
+                "id": str(link.id),
+                "event_id": str(link.event_id),
+                "object_type": str(link.object_type),
+                "object_id": str(link.object_id),
+                "created_at": link.created_at.isoformat() if link.created_at else None,
+            }
+            for link in links
+        ]
 
     return metadata
+
+
+def _language_state(
+    *,
+    requested_language: str,
+    content_language: str | None,
+    available_languages: list[str],
+) -> dict[str, Any]:
+    is_fallback = content_language is not None and content_language != requested_language
+    return {
+        "requested_language": requested_language,
+        "content_language": content_language,
+        "fallback_to": content_language if is_fallback else None,
+        "available_languages": available_languages,
+        "has_requested_language": requested_language in available_languages,
+        "is_fallback": is_fallback,
+    }
 
 
 def _serialize_object(
@@ -225,53 +259,64 @@ def _serialize_object(
     obj: Any,
     language: str | None = None,
     rich_text_format: str = "tiptap",
+    fallback_language: str | None = None,
 ) -> dict[str, Any]:
     storage_type = _canonical_object_type(object_type)
-    if language:
-        latest_result = latest_version_with_language(db, storage_type, obj.id, language)
-        if latest_result is None:
-            data: dict[str, Any] = {}
-            version = {"id": None, "number": 0, "created_at": None}
-        else:
-            latest, lang_row = latest_result
-            if lang_row is not None and isinstance(lang_row.data, dict):
-                data = {
-                    language: _render_language_payload(
-                        object_type=object_type,
-                        data=lang_row.data,
-                        rich_text_format=rich_text_format,
-                    )
-                }
-            else:
-                data = {}
-            provenance = provenance_for_version(db, latest)
-            version = {
-                "id": str(latest.id),
-                "number": latest.version_number,
-                "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
-            }
+    latest = latest_version_with_all_languages(db, storage_type, obj.id)
+    requested_language = str(language or fallback_language or "").strip()
+
+    if latest is None:
+        if not requested_language:
+            requested_language = str(fallback_language or "English")
+        data: dict[str, Any] = {}
+        version = {"id": None, "number": 0, "created_at": None}
+        lang_state = _language_state(
+            requested_language=requested_language,
+            content_language=None,
+            available_languages=[],
+        )
     else:
-        latest = latest_version_with_all_languages(db, storage_type, obj.id)
-        if latest is None:
-            data = {}
-            version = {"id": None, "number": 0, "created_at": None}
+        rows = sorted([
+            row
+            for row in list(latest.languages or [])
+            if isinstance(row.language, str) and isinstance(row.data, dict)
+        ], key=lambda row: (getattr(row, "created_at", None) or datetime.min, str(row.language)))
+        available_languages = [str(row.language) for row in rows]
+        if not requested_language:
+            requested_language = str(fallback_language or (available_languages[0] if available_languages else "English"))
+
+        selected_row = next((row for row in rows if row.language == requested_language), None)
+        if selected_row is None and fallback_language:
+            selected_row = next((row for row in rows if row.language == fallback_language), None)
+        if selected_row is None:
+            selected_row = rows[0] if rows else None
+
+        if selected_row is not None:
+            data = _render_language_payload(
+                object_type=object_type,
+                data=selected_row.data,
+                rich_text_format=rich_text_format,
+            )
+            content_language = str(selected_row.language)
         else:
-            rows = list(latest.languages or [])
-            data = {
-                row.language: _render_language_payload(
-                    object_type=object_type,
-                    data=row.data,
-                    rich_text_format=rich_text_format,
-                )
-                for row in rows
-                if isinstance(row.data, dict)
-            }
-            provenance = earliest_provenance_from_rows(rows, fallback_created_at=latest.created_at)
-            version = {
-                "id": str(latest.id),
-                "number": latest.version_number,
-                "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
-            }
+            data = {}
+            content_language = None
+
+        provenance = (
+            earliest_provenance_from_rows([selected_row], fallback_created_at=latest.created_at)
+            if selected_row is not None
+            else provenance_for_version(db, latest)
+        )
+        version = {
+            "id": str(latest.id),
+            "number": latest.version_number,
+            "created_at": provenance.created_at.isoformat() if provenance.created_at else None,
+        }
+        lang_state = _language_state(
+            requested_language=requested_language,
+            content_language=content_language,
+            available_languages=available_languages,
+        )
 
     if version["id"] is None:
         data: dict[str, Any] = {}
@@ -282,6 +327,7 @@ def _serialize_object(
         "type": object_type,
         "metadata": _get_metadata(db, obj, object_type),
         "data": data,
+        "language_state": lang_state,
         "version": version,
     }
     if object_type in {"outline", STORY_ENTITY_TYPE}:
@@ -911,7 +957,14 @@ class ObjectService:
                 language=language,
                 version_data={"content": empty_doc(), "wordCount": 0},
             )
-        return _serialize_object(db, storage_type, core_obj, language, rich_text_format=rich_text_format)
+        return _serialize_object(
+            db,
+            storage_type,
+            core_obj,
+            language,
+            rich_text_format=rich_text_format,
+            fallback_language=language,
+        )
 
     def update_object(
         self,
@@ -1071,7 +1124,14 @@ class ObjectService:
                 deltas=deltas,
                 enforce_quota=True,
             )
-        return _serialize_object(db, storage_type, obj, rich_text_format=rich_text_format)
+        return _serialize_object(
+            db,
+            storage_type,
+            obj,
+            language,
+            rich_text_format=rich_text_format,
+            fallback_language=language,
+        )
 
     def update_object_structure(
         self,
@@ -1781,12 +1841,20 @@ class ObjectService:
         project_id: UUID,
         language: str | None = None,
         rich_text_format: str = "tiptap",
+        fallback_language: str | None = None,
     ) -> dict[str, Any] | None:
         t = object_type
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:
             return None
-        return _serialize_object(db, _canonical_object_type(t), obj, language, rich_text_format=rich_text_format)
+        return _serialize_object(
+            db,
+            _canonical_object_type(t),
+            obj,
+            language,
+            rich_text_format=rich_text_format,
+            fallback_language=fallback_language,
+        )
 
     def list_objects(
         self,
@@ -1797,6 +1865,7 @@ class ObjectService:
         language: str | None = None,
         kinds: list[str] | None = None,
         rich_text_format: str = "tiptap",
+        fallback_language: str | None = None,
     ) -> list[dict[str, Any]]:
         t = object_type
         storage_type = _canonical_object_type(t)
@@ -1844,7 +1913,17 @@ class ObjectService:
             )
 
         rows = query.all()
-        return [_serialize_object(db, storage_type, row, language, rich_text_format=rich_text_format) for row in rows]
+        return [
+            _serialize_object(
+                db,
+                storage_type,
+                row,
+                language,
+                rich_text_format=rich_text_format,
+                fallback_language=fallback_language,
+            )
+            for row in rows
+        ]
 
     def update_image_prompt(
         self,

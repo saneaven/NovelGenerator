@@ -40,12 +40,10 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     closeSidebar(projectId);
   };
 
-  // Helper to get data with fallback
   const getLocalizedData = <T extends { data: Record<string, any> }>(obj: T, fallback: any) => {
-    if (obj.data[displayLanguage]) return obj.data[displayLanguage];
-    if (obj.data[mainLanguage]) return obj.data[mainLanguage];
-    const available = Object.keys(obj.data);
-    return available.length > 0 ? obj.data[available[0]] : fallback;
+    void displayLanguage;
+    void mainLanguage;
+    return obj.data ?? fallback;
   };
 
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
@@ -71,14 +69,14 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     const loadOutlineData = async () => {
       if (!projectId) return;
       try {
-        await store.listObjects('outline', projectId);
-        await store.listObjects('manuscript', projectId);
+        await store.listObjects('outline', projectId, displayLanguage);
+        await store.listObjects('manuscript', projectId, displayLanguage);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
     };
     loadOutlineData();
-  }, [projectId, store]);
+  }, [displayLanguage, projectId, store]);
 
   // Get outlines for dropdown
   const outlines = useMemo(() => {

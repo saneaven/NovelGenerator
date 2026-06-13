@@ -48,7 +48,7 @@ import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, 
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { Loading } from '../../../components/common/Loading';
-import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
+import { requestedLanguageStateFromProjection, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import './NovelEditorPanel.css';
 
 interface NovelEditorPanelProps {
@@ -99,7 +99,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const { t } = useTranslation();
 
   // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
-  const storeObjects = useUnifiedObjectStore((state) => state.objects);
+  const storeObjects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, globalDisplayLanguage));
   const storeLoading = useUnifiedObjectStore((state) => state.loading);
   const storeErrors = useUnifiedObjectStore((state) => state.errors);
 
@@ -155,7 +155,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (!aiEditSessionId || !aiEditSession) return;
     if (aiEditSession.status === 'success') {
       if (manuscriptId) {
-        fetchObject('manuscript', manuscriptId);
+        fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
       }
       setAiEditSessionId(null);
       return;
@@ -163,7 +163,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (aiEditSession.status === 'error' || aiEditSession.status === 'cancelled') {
       setAiEditSessionId(null);
     }
-  }, [aiEditSessionId, aiEditSession, manuscriptId, fetchObject]);
+  }, [aiEditSessionId, aiEditSession, manuscriptId, fetchObject, globalDisplayLanguage]);
 
   // Get manuscript from store
   const manuscript = manuscriptId
@@ -172,10 +172,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loading = manuscriptId ? (storeLoading[manuscriptId] || false) : false;
   const error = manuscriptId ? (storeErrors[manuscriptId] || null) : null;
 
-  // Get available languages from manuscript data
   const manuscriptLanguages = useMemo(() => {
     if (!manuscript) return [];
-    return Object.keys(manuscript.data);
+    return manuscript.language_state.available_languages;
   }, [manuscript]);
 
   // Computed: Available source languages for translation
@@ -183,11 +182,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return manuscriptLanguages;
   }, [manuscriptLanguages]);
 
-  const languageState = useMemo(() => resolveRequestedLanguageState({
-    availableLanguages: manuscriptLanguages,
-    requestedLanguage: globalDisplayLanguage,
-    mainLanguage: settings.mainLanguage,
-  }), [globalDisplayLanguage, manuscriptLanguages, settings.mainLanguage]);
+  const languageState = useMemo(
+    () => requestedLanguageStateFromProjection(manuscript?.language_state, settings.mainLanguage),
+    [manuscript, settings.mainLanguage],
+  );
   const isMissingTranslation = !languageState.canEdit;
   const effectiveLanguage = languageState.viewLanguage;
   const isFallback = languageState.isFallbackView;
@@ -198,25 +196,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Helper to get manuscript data for a language
   const getManuscriptData = useCallback((lang: string) => {
+    void lang;
     if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
-    const data = manuscript.data[lang];
-    if (data) {
-      const doc = normalizeDoc((data as any).content);
-      const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc);
-      return { doc, wordCount };
-    }
-    // Fallback to first available
-    if (manuscriptLanguages.length > 0) {
-      const fallbackData = manuscript.data[manuscriptLanguages[0]];
-      if (fallbackData) {
-        const doc = normalizeDoc((fallbackData as any).content);
-        const wordCount = typeof (fallbackData as any).wordCount === 'number' ? (fallbackData as any).wordCount : docWordCount(doc);
-        return { doc, wordCount };
-      }
-      return { doc: emptyDoc(), wordCount: 0 };
-    }
-    return { doc: emptyDoc(), wordCount: 0 };
-  }, [manuscript, manuscriptLanguages]);
+    const data = manuscript.data;
+    const nextDoc = normalizeDoc((data as any).content);
+    const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(nextDoc);
+    return { doc: nextDoc, wordCount };
+  }, [manuscript]);
 
 
   // Find existing manuscript
@@ -341,7 +327,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     queueMicrotask(() => {
       // Fetch without language parameter - API returns all languages
       // effectiveLanguage (with fallback logic) will pick the right content
-      fetchObject('manuscript', manuscriptId).catch((err: Error) => {
+      fetchObject('manuscript', manuscriptId, globalDisplayLanguage).catch((err: Error) => {
         console.error('Failed to fetch manuscript:', err);
         setContentIdError(err.message || 'Failed to load manuscript');
       }).finally(() => {
@@ -692,7 +678,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             variant="secondary"
             onClick={() => {
               if (manuscriptId) {
-                fetchObject('manuscript', manuscriptId);
+                fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
               }
             }}
           >
@@ -710,7 +696,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         <p>{error}</p>
         <TextButton
           variant="secondary"
-          onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId)}
+          onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId, globalDisplayLanguage)}
         >
           {t('novelEditor.error.retry')}
         </TextButton>
@@ -962,7 +948,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           onRestoreVersion={() => {
             // Reload manuscript after restore
             if (manuscriptId) {
-              fetchObject('manuscript', manuscriptId);
+              fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
             }
           }}
         />

@@ -27,7 +27,7 @@ import { Loading } from '../common/Loading';
 import type { BasicInfoObject, BasicInfoData } from '../../types/unifiedObject';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
 import {
-  resolveRequestedLanguageState,
+  requestedLanguageStateFromProjection,
   resolveTranslationSourceLanguage,
 } from '../../utils/requestedLanguage';
 
@@ -44,7 +44,7 @@ const EMPTY_BASIC_INFO_DATA: BasicInfoData = {
 
 const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
   const loadingMap = useUnifiedObjectStore((state) => state.loading);
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
@@ -72,22 +72,13 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   // Helper to get data for a specific language
   const getDataForLanguage = useCallback((lang: string): BasicInfoData => {
+    void lang;
     if (!basicInfo) return EMPTY_BASIC_INFO_DATA;
-    const data = basicInfo.data[lang];
-    if (data) return normalizeBasicInfoData(data);
-    const availableLanguages = Object.keys(basicInfo.data);
-    if (availableLanguages.length > 0) {
-      return normalizeBasicInfoData(basicInfo.data[availableLanguages[0]]);
-    }
-    return EMPTY_BASIC_INFO_DATA;
+    return normalizeBasicInfoData(basicInfo.data);
   }, [basicInfo]);
 
   const languageState = useMemo(
-    () => resolveRequestedLanguageState({
-      availableLanguages: basicInfo ? Object.keys(basicInfo.data) : [],
-      requestedLanguage: globalDisplayLanguage,
-      mainLanguage: settings.mainLanguage,
-    }),
+    () => requestedLanguageStateFromProjection(basicInfo?.language_state, settings.mainLanguage),
     [basicInfo, globalDisplayLanguage, settings.mainLanguage],
   );
 
@@ -110,7 +101,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     setInitializationError(null);
 
     try {
-      const existing = await listObjects('basic_info', projectId);
+      const existing = await listObjects('basic_info', projectId, globalDisplayLanguage);
       if (existing.length > 0) {
         setBasicInfoId(existing[0].id);
       } else {
@@ -125,7 +116,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     } finally {
       setInitializing(false);
     }
-  }, [projectId, listObjects]);
+  }, [globalDisplayLanguage, projectId, listObjects]);
 
   useEffect(() => {
     setBasicInfoId(null);
@@ -134,9 +125,9 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   useEffect(() => {
     if (basicInfoId) {
-      fetchObject('basic_info', basicInfoId);
+      fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
     }
-  }, [basicInfoId, fetchObject]);
+  }, [basicInfoId, fetchObject, globalDisplayLanguage]);
 
   useEffect(() => {
     if (currentData && !isEditing) {
@@ -197,7 +188,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const handleRestoreVersion = async () => {
     if (!basicInfoId) return;
     try {
-      await fetchObject('basic_info', basicInfoId);
+      await fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
     } catch (err) {
       console.error('Failed to refresh after restore:', err);
     }
@@ -217,7 +208,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
-  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>Retry</button></div>;
+  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId, globalDisplayLanguage)}>Retry</button></div>;
   if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
   if (initializing && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
   if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
@@ -482,7 +473,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           onClose={() => setShowTranslationModal(false)}
           projectId={projectId}
           preSelectedObjectIds={[basicInfoId]}
-          defaultSourceLanguage={resolveTranslationSourceLanguage(Object.keys(basicInfo.data), settings.mainLanguage)}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(basicInfo.language_state.available_languages, settings.mainLanguage)}
           defaultTargetLanguage={languageState.requestedLanguage}
         />
       )}
@@ -494,7 +485,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           onClose={() => setShowAssetPicker(false)}
           objectType="basic_info"
           objectId={basicInfoId}
-          onAssetChange={() => fetchObject('basic_info', basicInfoId)}
+          onAssetChange={() => fetchObject('basic_info', basicInfoId, globalDisplayLanguage)}
           title="Manage Cover Image"
         />
       )}

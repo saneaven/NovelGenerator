@@ -20,6 +20,12 @@ def _runtime_rich_text_kwargs(object_type: str) -> dict[str, str]:
         return {"rich_text_format": "markdown"}
     return {}
 
+
+def _projected_data(obj: dict[str, Any]) -> dict[str, Any]:
+    data = obj.get("data")
+    return dict(data) if isinstance(data, dict) else {}
+
+
 async def apply_raw_output(
     db: Session,
     *,
@@ -133,14 +139,7 @@ async def apply_raw_output(
         if current is None:
             raise RuntimeError(f"{journey_kind} target object not found")
 
-        data_by_lang = current.get("data", {}) if isinstance(current.get("data"), dict) else {}
-        current_data = data_by_lang.get(run.language) if isinstance(data_by_lang.get(run.language), dict) else {}
-        if not current_data:
-            for entry in data_by_lang.values():
-                if isinstance(entry, dict):
-                    current_data = dict(entry)
-                    break
-        next_data = dict(current_data)
+        next_data = _projected_data(current)
         if category == "basic_info":
             next_data["logline"] = text
         elif category == "guidelines":
@@ -187,20 +186,13 @@ async def apply_raw_output(
             object_type=object_type,
             object_id=object_id,
             project_id=run.project_id,
-            language=None if object_type == "manuscript" else target_language,
+            language=target_language,
             **_runtime_rich_text_kwargs(object_type),
         )
         if current is None:
             raise RuntimeError("objectTranslation target object not found in project")
 
-        data_by_lang = current.get("data", {}) if isinstance(current.get("data"), dict) else {}
-        target_data = data_by_lang.get(target_language) if isinstance(data_by_lang.get(target_language), dict) else {}
-        if not target_data:
-            for entry in data_by_lang.values():
-                if isinstance(entry, dict):
-                    target_data = dict(entry)
-                    break
-        next_data = dict(target_data)
+        next_data = _projected_data(current)
         if object_type == "manuscript":
             next_data = {
                 "content": text,

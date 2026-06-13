@@ -10,7 +10,7 @@ import { TextButton } from '../../../components/TextButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { Close, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Refresh } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
-import { resolveRequestedLanguageState } from '../../../utils/requestedLanguage';
+import { requestedLanguageStateFromProjection } from '../../../utils/requestedLanguage';
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import './OutlineSidebar.css';
 
@@ -86,21 +86,14 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     setShowAddForm(false);
   };
 
-  // Helper to get data with fallback
-  const getLocalizedData = <T extends { data: Record<string, any> }>(obj: T, fallback: any) => {
-    if (obj.data[displayLanguage]) return { data: obj.data[displayLanguage], isFallback: false };
-    if (obj.data[mainLanguage]) return { data: obj.data[mainLanguage], isFallback: true };
-    const available = Object.keys(obj.data);
-    return available.length > 0
-      ? { data: obj.data[available[0]], isFallback: true }
-      : { data: fallback, isFallback: true };
+  // Helper to get projection data.
+  const getLocalizedData = <T extends { data: Record<string, any>; language_state?: { is_fallback?: boolean } }>(obj: T, fallback: any) => {
+    void displayLanguage;
+    void mainLanguage;
+    return { data: obj.data ?? fallback, isFallback: Boolean(obj.language_state?.is_fallback) };
   };
 
-  const getLanguageState = (outline: OutlineObject) => resolveRequestedLanguageState({
-    availableLanguages: Object.keys(outline.data),
-    requestedLanguage: displayLanguage,
-    mainLanguage,
-  });
+  const getLanguageState = (outline: OutlineObject) => requestedLanguageStateFromProjection(outline.language_state, mainLanguage);
 
   // Get outlines from store
   const outlines = useMemo(() => {

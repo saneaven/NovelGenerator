@@ -4,11 +4,11 @@ import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import type { AnyObjectType, TranslationStatus, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
 import { journeyService } from '../../api/journeyService';
-import { timelineService } from '../../api/timelineService';
 import { translationService } from '../../api/unifiedObjectService';
 import { Globe, Swap, Document } from '../icons';
 import { ObjectPicker } from '../ObjectPicker';
@@ -22,6 +22,7 @@ import {
 import { getProjectStoryEntityFolders } from '../../utils/storyEntityTree';
 import { getAnyObjectTypeLabel, type FullTimeline, type TimelineTrack } from '../../types/timeline';
 import { formatDate, toBaseUnits } from '../../utils/timelineCalendar';
+import { buildTimelineFromObjects } from '../../utils/timelineView';
 import {
   buildTranslationStatusByObjectId,
   chooseTargetLanguageByMissingCount,
@@ -47,6 +48,8 @@ interface ProjectObjectToTranslate {
   versionNumber?: number;
 }
 
+const EMPTY_OBJECT_CACHE: Record<string, UnifiedObject<any>> = {};
+
 function objectDisplayLabel(objectType: AnyObjectType, objectKind?: UnifiedObject['kind']): string {
   if (objectType === 'story_entity_folder') {
     return 'Story Entity Folder';
@@ -61,12 +64,6 @@ function objectDisplayLabel(objectType: AnyObjectType, objectKind?: UnifiedObjec
     return 'Outline';
   }
   return getAnyObjectTypeLabel(objectType);
-}
-
-function getTimelineDataForLanguage(data: Record<string, Record<string, unknown>>, language: string): Record<string, any> {
-  if (data[language]) return data[language] as Record<string, any>;
-  const firstLanguage = Object.keys(data)[0];
-  return firstLanguage ? (data[firstLanguage] as Record<string, any>) : {};
 }
 
 function forEachTimelineTrack(
@@ -132,21 +129,38 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Raw output mode
   const [rawMode, setRawMode] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(false);
-  const [sourceTimeline, setSourceTimeline] = useState<FullTimeline | null>(null);
-  const [targetTimeline, setTargetTimeline] = useState<FullTimeline | null>(null);
   const [translationStatuses, setTranslationStatuses] = useState<TranslationStatus[]>([]);
   const [translationStatusReady, setTranslationStatusReady] = useState(false);
 
   const hasInitializedSelectionRef = useRef(false);
   const hasInitializedContextRef = useRef(false);
-  // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
-  const objects = useUnifiedObjectStore(useShallow(state => state.objects));
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const settings = useSettings();
+  // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
+  const sourceProjectionLanguage = sourceLanguage || defaultSourceLanguage || settings.mainLanguage || 'English';
+  const targetProjectionLanguage = targetLanguage || defaultTargetLanguage || '';
+  const objects = useUnifiedObjectStore(useShallow(state => state.getObjectsForProject(projectId, sourceProjectionLanguage)));
+  const targetObjects = useUnifiedObjectStore(useShallow(state => (
+    targetProjectionLanguage ? state.getObjectsForProject(projectId, targetProjectionLanguage) : EMPTY_OBJECT_CACHE
+  )));
+  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
+  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
 
   const projectFolders = useMemo(
     () => getProjectStoryEntityFolders(objects, projectId),
     [objects, projectId],
+  );
+  const targetProjectFolders = useMemo(
+    () => getProjectStoryEntityFolders(targetObjects, projectId),
+    [targetObjects, projectId],
+  );
+  const sourceTimeline = useMemo(
+    () => buildTimelineFromObjects(projectId, objects, timelineConfig),
+    [objects, projectId, timelineConfig],
+  );
+  const targetTimeline = useMemo(
+    () => targetProjectionLanguage ? buildTimelineFromObjects(projectId, targetObjects, timelineConfig) : null,
+    [projectId, targetObjects, targetProjectionLanguage, timelineConfig],
   );
 
   // Build available languages list
@@ -168,31 +182,34 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (!isOpen || !projectId) return;
 
     let cancelled = false;
-    const sourceTimelineLanguage = sourceLanguage || defaultSourceLanguage || settings.mainLanguage || 'English';
-    const targetTimelineLanguage = targetLanguage || defaultTargetLanguage || '';
+    const sourceTimelineLanguage = sourceProjectionLanguage;
+    const targetTimelineLanguage = targetProjectionLanguage;
+    const objectTypes: AnyObjectType[] = [
+      'basic_info',
+      'guidelines',
+      'story_entity_folder',
+      'story_entity',
+      'outline',
+      'manuscript',
+    ];
 
     setPickerLoading(true);
     setTranslationStatusReady(false);
 
     void Promise.all([
-      refreshProjectObjects(projectId, [
-        'basic_info',
-        'guidelines',
-        'story_entity',
-        'outline',
-        'manuscript',
-      ]),
-      timelineService.getTimeline(projectId, sourceTimelineLanguage),
+      refreshProjectObjects(projectId, objectTypes, sourceTimelineLanguage),
       targetTimelineLanguage
-        ? timelineService.getTimeline(projectId, targetTimelineLanguage)
-        : Promise.resolve(null),
+        ? refreshProjectObjects(projectId, objectTypes, targetTimelineLanguage)
+        : Promise.resolve(),
+      fetchTimeline(projectId, sourceTimelineLanguage, { force: true }),
+      targetTimelineLanguage
+        ? fetchTimeline(projectId, targetTimelineLanguage, { force: true })
+        : Promise.resolve(),
       availableLanguages.length > 0
         ? translationService.getProjectTranslationStatus(projectId, availableLanguages)
         : Promise.resolve({ translation_status: [] }),
-    ]).then(([, nextSourceTimeline, nextTargetTimeline, statusResult]) => {
+    ]).then(([, , , , statusResult]) => {
       if (cancelled) return;
-      setSourceTimeline(nextSourceTimeline);
-      setTargetTimeline(nextTargetTimeline);
       setTranslationStatuses(statusResult.translation_status);
       setTranslationStatusReady(true);
     }).catch((err) => {
@@ -215,10 +232,11 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     defaultTargetLanguage,
     isOpen,
     projectId,
+    fetchTimeline,
     refreshProjectObjects,
     settings.mainLanguage,
-    sourceLanguage,
-    targetLanguage,
+    sourceProjectionLanguage,
+    targetProjectionLanguage,
   ]);
 
   // Get IDs of objects that have target language translations (for context reference)
@@ -226,11 +244,16 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (!targetLanguage || !translationStatusReady) return [];
 
     const ids = new Set<string>();
-    const allObjects = Object.values(objects) as UnifiedObject<any>[];
+    const allObjects = Object.values(targetObjects) as UnifiedObject<any>[];
 
     allObjects.forEach(obj => {
       if (obj.metadata?.project_id !== projectId) return;
-      if (!hasLanguageForObject(translationStatusByObjectId, obj.id, obj.data, targetLanguage)) return;
+      if (!hasLanguageForObject(
+        translationStatusByObjectId,
+        obj.id,
+        obj.language_state?.available_languages,
+        targetLanguage,
+      )) return;
 
       const objType = obj.type;
       // Skip manuscript and basic_info for context
@@ -239,18 +262,23 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       ids.add(obj.id);
     });
 
-    projectFolders.forEach((folder) => {
-      if (!hasLanguageForObject(translationStatusByObjectId, folder.id, folder.data, targetLanguage)) return;
+    targetProjectFolders.forEach((folder) => {
+      if (!hasLanguageForObject(
+        translationStatusByObjectId,
+        folder.id,
+        folder.language_state?.available_languages,
+        targetLanguage,
+      )) return;
       ids.add(folder.id);
     });
 
     if (targetTimeline) {
       forEachTimelineTrack(targetTimeline.tracks, (track) => {
-        if (hasLanguageForObject(translationStatusByObjectId, track.id, track.data, targetLanguage)) {
+        if (hasLanguageForObject(translationStatusByObjectId, track.id, track.languageState?.available_languages, targetLanguage)) {
           ids.add(track.id);
         }
         track.events.forEach((event) => {
-          if (hasLanguageForObject(translationStatusByObjectId, event.id, event.data, targetLanguage)) {
+          if (hasLanguageForObject(translationStatusByObjectId, event.id, event.languageState?.available_languages, targetLanguage)) {
             ids.add(event.id);
           }
         });
@@ -258,7 +286,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     }
 
     return Array.from(ids);
-  }, [objects, projectId, targetLanguage, translationStatusReady, translationStatusByObjectId, projectFolders, targetTimeline]);
+  }, [projectId, targetLanguage, targetObjects, translationStatusReady, translationStatusByObjectId, targetProjectFolders, targetTimeline]);
 
   const hasAnyContext = contextObjectIds.length > 0;
 
@@ -306,7 +334,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       if (!shouldOfferObjectForTranslation({
         statusByObjectId: translationStatusByObjectId,
         objectId: obj.id,
-        dataByLanguage: obj.data,
+        availableLanguages: obj.language_state?.available_languages,
         sourceLanguage,
         targetLanguage,
         preSelected: isPreSelected,
@@ -314,8 +342,11 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
       const objType = obj.type;
       if (objType === 'story_entity_folder') return; // handled by projectFolders.forEach with correct ordering
+      if (objType === 'timeline_track' || objType === 'timeline_event') return; // handled by sourceTimeline with tree/date ordering
 
-      const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
+      const sourceData = obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+        ? obj.data as Record<string, any>
+        : {};
       let label = sourceData.name || sourceData.title || obj.id;
       if (objType === 'guidelines') {
         label = getAnyObjectTypeLabel(objType) || label;
@@ -344,7 +375,9 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       } else if (objType === 'manuscript' && obj.metadata?.chapter_id) {
         const chapter = objects[obj.metadata.chapter_id as string];
         if (chapter) {
-          const chapterData = chapter.data[sourceLanguage] || chapter.data[Object.keys(chapter.data)[0]];
+          const chapterData = chapter.data && typeof chapter.data === 'object' && !Array.isArray(chapter.data)
+            ? chapter.data as Record<string, any>
+            : {};
           if (chapterData?.name) {
             label = chapterData.name;
           }
@@ -377,7 +410,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       if (!shouldOfferObjectForTranslation({
         statusByObjectId: translationStatusByObjectId,
         objectId: folder.id,
-        dataByLanguage: folder.data,
+        availableLanguages: folder.language_state?.available_languages,
         sourceLanguage,
         targetLanguage,
         preSelected: isPreSelected,
@@ -400,18 +433,20 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         if (!(preSelectedSet && !isTrackPreSelected) && shouldOfferObjectForTranslation({
           statusByObjectId: translationStatusByObjectId,
           objectId: track.id,
-          dataByLanguage: track.data,
+          availableLanguages: track.languageState?.available_languages,
           sourceLanguage,
           targetLanguage,
           preSelected: isTrackPreSelected,
         })) {
-          const sourceData = getTimelineDataForLanguage(track.data, sourceLanguage);
+          const sourceData = track.data;
           result.push({
             objectType: 'timeline_track',
             objectId: track.id,
             sourceData,
             versionNumber: track.version?.number,
-            label: sourceData.name || `Track ${track.id}`,
+            label: typeof sourceData.name === 'string' && sourceData.name.trim()
+              ? sourceData.name
+              : `Track ${track.id}`,
             order: timelineBaseOrder(path),
           });
         }
@@ -424,19 +459,21 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
           if (shouldOfferObjectForTranslation({
             statusByObjectId: translationStatusByObjectId,
             objectId: event.id,
-            dataByLanguage: event.data,
+            availableLanguages: event.languageState?.available_languages,
             sourceLanguage,
             targetLanguage,
             preSelected: isEventPreSelected,
           })) {
-            const sourceData = getTimelineDataForLanguage(event.data, sourceLanguage);
+            const sourceData = event.data;
             const dateLabel = formatDate(event.startDate, sourceTimeline.calendar);
             result.push({
               objectType: 'timeline_event',
               objectId: event.id,
               sourceData,
               versionNumber: event.version?.number,
-              label: sourceData.name || dateLabel,
+              label: typeof sourceData.name === 'string' && sourceData.name.trim()
+                ? sourceData.name
+                : dateLabel,
               order: eventOrderValue(sourceTimeline, path, event.startDate, index),
             });
           }
@@ -528,8 +565,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
       setRawMode(false);
-      setSourceTimeline(null);
-      setTargetTimeline(null);
       setTranslationStatuses([]);
       setTranslationStatusReady(false);
     }
@@ -700,7 +735,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               language={sourceLanguage}
               filterIds={availableObjectIds}
               loading={pickerLoading}
-              timelineOverride={sourceTimeline}
               showSearch={false}
               maxHeight="300px"
               emptyMessage="No objects available for translation"
@@ -762,7 +796,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               language={targetLanguage}
               filterIds={contextObjectIds}
               loading={pickerLoading}
-              timelineOverride={targetTimeline}
               showSearch={false}
               maxHeight="200px"
               emptyMessage="No translated objects available"

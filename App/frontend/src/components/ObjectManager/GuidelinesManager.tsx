@@ -25,7 +25,7 @@ import type { TipTapDoc } from '../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import type { GuidelinesObject, GuidelinesData } from '../../types/unifiedObject';
 import {
-  resolveRequestedLanguageState,
+  requestedLanguageStateFromProjection,
   resolveTranslationSourceLanguage,
 } from '../../utils/requestedLanguage';
 
@@ -35,7 +35,7 @@ interface GuidelinesManagerProps {
 
 const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
   const loadingMap = useUnifiedObjectStore((state) => state.loading);
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
@@ -65,23 +65,13 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   // Helper to get data for a specific language
   const getDataForLanguage = useCallback((lang: string): GuidelinesData => {
+    void lang;
     if (!guidelines) return { authorNote: emptyDoc() };
-    const data = guidelines.data[lang];
-    if (data) return { authorNote: normalizeDoc((data as GuidelinesData).authorNote) };
-    const availableLanguages = Object.keys(guidelines.data);
-    if (availableLanguages.length > 0) {
-      const fallback = guidelines.data[availableLanguages[0]] as GuidelinesData;
-      return { authorNote: normalizeDoc(fallback.authorNote) };
-    }
-    return { authorNote: emptyDoc() };
+    return { authorNote: normalizeDoc((guidelines.data as GuidelinesData).authorNote) };
   }, [guidelines]);
 
   const languageState = useMemo(
-    () => resolveRequestedLanguageState({
-      availableLanguages: guidelines ? Object.keys(guidelines.data) : [],
-      requestedLanguage: globalDisplayLanguage,
-      mainLanguage: settings.mainLanguage,
-    }),
+    () => requestedLanguageStateFromProjection(guidelines?.language_state, settings.mainLanguage),
     [guidelines, globalDisplayLanguage, settings.mainLanguage],
   );
 
@@ -112,7 +102,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     setInitializationError(null);
 
     try {
-      const existing = await listObjects('guidelines', projectId);
+      const existing = await listObjects('guidelines', projectId, globalDisplayLanguage);
       if (existing.length > 0) {
         setGuidelinesId(existing[0].id);
       } else {
@@ -127,7 +117,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     } finally {
       setInitializing(false);
     }
-  }, [projectId, listObjects]);
+  }, [globalDisplayLanguage, projectId, listObjects]);
 
   useEffect(() => {
     setGuidelinesId(null);
@@ -136,9 +126,9 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   useEffect(() => {
     if (guidelinesId) {
-      fetchObject('guidelines', guidelinesId);
+      fetchObject('guidelines', guidelinesId, globalDisplayLanguage);
     }
-  }, [guidelinesId, fetchObject]);
+  }, [fetchObject, globalDisplayLanguage, guidelinesId]);
 
   useEffect(() => {
     if (currentData && !isEditing) {
@@ -195,7 +185,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const handleRestoreVersion = async () => {
     if (!guidelinesId) return;
     try {
-      await fetchObject('guidelines', guidelinesId);
+      await fetchObject('guidelines', guidelinesId, globalDisplayLanguage);
     } catch (err) {
       console.error('Failed to refresh after restore:', err);
     }
@@ -203,7 +193,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
-  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId)}>Retry</button></div>;
+  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId, globalDisplayLanguage)}>Retry</button></div>;
   if (initializationError && !guidelines) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeGuidelines} disabled={initializing}>Retry</button></div>;
   if (initializing && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
   if (!guidelines) return <div className="error-container">Guidelines not found.</div>;
@@ -406,7 +396,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
           onClose={() => setShowTranslationModal(false)}
           projectId={projectId}
           preSelectedObjectIds={[guidelinesId]}
-          defaultSourceLanguage={resolveTranslationSourceLanguage(Object.keys(guidelines.data), settings.mainLanguage)}
+          defaultSourceLanguage={resolveTranslationSourceLanguage(guidelines.language_state.available_languages, settings.mainLanguage)}
           defaultTargetLanguage={languageState.requestedLanguage}
         />
       )}

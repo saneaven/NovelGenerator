@@ -57,7 +57,7 @@ import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../
 import type { ObjectAssetLink } from '../../api/assetService';
 import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import {
-  resolveRequestedLanguageState,
+  requestedLanguageStateFromProjection,
   resolveTranslationSourceLanguage,
   type RequestedLanguageState,
 } from '../../utils/requestedLanguage';
@@ -129,20 +129,13 @@ function makeSortEntities(language: string, mainLanguage: string) {
 
 function getEntityLanguageState(
   entity: StoryEntityObject,
-  requestedLanguage: string,
   mainLanguage: string,
 ): RequestedLanguageState {
-  return resolveRequestedLanguageState({
-    availableLanguages: Object.keys(entity.data),
-    requestedLanguage,
-    mainLanguage,
-  });
+  return requestedLanguageStateFromProjection(entity.language_state, mainLanguage);
 }
 
-function getEntityData(entity: StoryEntityObject, language: string): StoryEntityData {
-  return entity.data[language]
-    || entity.data[Object.keys(entity.data)[0]]
-    || { name: '', description: '', content: emptyDoc() };
+function getEntityData(entity: StoryEntityObject, _language: string): StoryEntityData {
+  return entity.data || { name: '', description: '', content: emptyDoc() };
 }
 
 function kindIcon(kind: StoryEntityKind): React.ReactNode {
@@ -170,7 +163,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const { projectId } = useParams<{ projectId: string }>();
   const settings = useSettings();
 
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
   const loading = useUnifiedObjectStore((state) => state.loading);
   const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
@@ -331,7 +324,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       description: getStoryEntityFolderDescription(f, globalDisplayLanguage, settings.mainLanguage),
     }));
     const entityItems: GridItem[] = filteredEntities.map((entity) => {
-      const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
+      const languageState = getEntityLanguageState(entity, settings.mainLanguage);
       const itemData = getEntityData(entity, languageState.viewLanguage);
       return {
         type: 'entity' as const,
@@ -524,7 +517,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     if (!projectId || !expandedEntityId || !editingEntityDraft || !name.trim()) return;
     const entity = entities.find((item) => item.id === expandedEntityId);
     if (!entity) return;
-    const languageState = getEntityLanguageState(entity, globalDisplayLanguage, settings.mainLanguage);
+    const languageState = getEntityLanguageState(entity, settings.mainLanguage);
     if (!languageState.canEdit) return;
     try {
       await updateObject('story_entity', expandedEntityId, {
@@ -543,7 +536,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
         await patchObjectStructure('story_entity', expandedEntityId, {
           folder_id: editingEntityDraft.folderId,
         });
-        void refreshStoryEntityTree(projectId).catch((error) => {
+        void refreshStoryEntityTree(projectId, { language: globalDisplayLanguage }).catch((error) => {
           console.error('Failed to reconcile story entity tree after structure update:', error);
         });
       }
@@ -612,7 +605,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
 
     try {
       await patchObjectStructure(objectType, objectId, metadata);
-      void refreshStoryEntityTree(projectId).catch((error) => {
+      void refreshStoryEntityTree(projectId, { language: globalDisplayLanguage }).catch((error) => {
         console.error('Failed to reconcile story entity tree after move:', error);
       });
     } catch (error) {
@@ -703,7 +696,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     ? entities.find((entity) => entity.id === expandedEntityId) ?? null
     : null;
   const currentExpandedEntityLanguageState = currentExpandedEntity
-    ? getEntityLanguageState(currentExpandedEntity, globalDisplayLanguage, settings.mainLanguage)
+    ? getEntityLanguageState(currentExpandedEntity, settings.mainLanguage)
     : null;
 
   // Get the selected folder name for the header
@@ -1088,7 +1081,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
           preSelectedObjectIds={[translationTargetId]}
           defaultSourceLanguage={resolveTranslationSourceLanguage(
             translationTargetId
-              ? Object.keys(entities.find((entity) => entity.id === translationTargetId)?.data ?? {})
+              ? entities.find((entity) => entity.id === translationTargetId)?.language_state.available_languages ?? []
               : [],
             settings.mainLanguage,
           )}

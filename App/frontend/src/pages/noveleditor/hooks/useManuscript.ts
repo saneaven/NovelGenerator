@@ -21,8 +21,7 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
 
   const { doc, wordCount } = useMemo(() => {
     if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
-    const preferredLang = settings.mainLanguage;
-    const dataForLang = manuscript.data?.[preferredLang] ?? manuscript.data?.[Object.keys(manuscript.data ?? {})[0] ?? ''];
+    const dataForLang = manuscript.data;
     const nextDoc = normalizeDoc((dataForLang as any)?.content);
     const nextWordCount = typeof (dataForLang as any)?.wordCount === 'number'
       ? (dataForLang as any).wordCount

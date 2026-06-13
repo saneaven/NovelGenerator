@@ -11,20 +11,20 @@ from ..database import get_db
 from ..models.db_models import User
 from ..schemas.timeline_schemas import (
     CalendarUpdateRequest,
-    FullTimelineResponse,
+    TimelineConfigResponse,
     TimelineEventCreate,
     TimelineEventLinkRequest,
     TimelineEventLinkResponse,
-    TimelineEventResponse,
     TimelineEventUpdate,
     TimelineTrackCreate,
     TimelineTrackMoveRequest,
-    TimelineTrackResponse,
     TimelineTrackUpdate,
 )
 from ..services.ownership import require_owned_project
+from ..services.object_service import object_service
 from ..services.storage_usage_service import StorageQuotaExceededError
 from ..services.timeline_service import timeline_service
+from .unified_object_routes import UnifiedObjectResponse
 
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/timeline", tags=["timeline"])
@@ -41,46 +41,63 @@ def _optional_uuid(value: str | None, *, field_name: str) -> UUID | None:
         raise HTTPException(status_code=400, detail=f"Invalid {field_name}") from exc
 
 
-@router.get("", response_model=FullTimelineResponse)
+def _main_language(current_user: User) -> str:
+    settings = getattr(current_user, "settings", None)
+    value = getattr(settings, "main_language", None)
+    return str(value or "English")
+
+
+def _timeline_config_response(
+    db: Session,
+    *,
+    project_id: UUID,
+    user_id: UUID,
+    warnings: list[str] | None = None,
+) -> TimelineConfigResponse:
+    timeline = timeline_service.get_or_create_timeline(db, project_id=project_id, user_id=user_id)
+    return TimelineConfigResponse(
+        id=str(timeline.id),
+        project_id=str(project_id),
+        calendar=timeline.calendar if isinstance(timeline.calendar, dict) else {},
+        warnings=warnings or [],
+    )
+
+
+def _serialized_object(
+    db: Session,
+    *,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    language: str,
+    fallback_language: str,
+) -> UnifiedObjectResponse:
+    result = object_service.get_object(
+        db,
+        object_type=object_type,
+        object_id=object_id,
+        project_id=project_id,
+        language=language,
+        fallback_language=fallback_language,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"{object_type} not found")
+    return UnifiedObjectResponse(**result)
+
+
+@router.get("", response_model=TimelineConfigResponse)
 async def get_timeline(
     project_id: UUID,
-    language: str | None = Query(None),
-    tags: list[str] | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    result = timeline_service.get_full_timeline(
-        db,
-        project_id=project_id,
-        language=language,
-        tags_filter=tags,
-        ensure_exists=True,
-        user_id=current_user.id,
-    )
+    result = _timeline_config_response(db, project_id=project_id, user_id=current_user.id)
     db.commit()
-    return FullTimelineResponse(**result)
+    return result
 
 
-@router.get("/tracks", response_model=list[TimelineTrackResponse])
-async def list_tracks(
-    project_id: UUID,
-    language: str | None = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    tracks = timeline_service.list_tracks(
-        db,
-        project_id=project_id,
-        language=language,
-        user_id=current_user.id,
-    )
-    db.commit()
-    return [TimelineTrackResponse(**track) for track in tracks]
-
-
-@router.post("/tracks", response_model=TimelineTrackResponse)
+@router.post("/tracks", response_model=UnifiedObjectResponse)
 async def create_track(
     project_id: UUID,
     request: TimelineTrackCreate,
@@ -103,8 +120,16 @@ async def create_track(
             user_request=request.user_request,
             user_id=current_user.id,
         )
+        response = _serialized_object(
+            db,
+            project_id=project_id,
+            object_type="timeline_track",
+            object_id=UUID(str(result["id"])),
+            language=request.language,
+            fallback_language=_main_language(current_user),
+        )
         db.commit()
-        return TimelineTrackResponse(**result)
+        return response
     except HTTPException:
         db.rollback()
         raise
@@ -113,7 +138,7 @@ async def create_track(
         raise HTTPException(status_code=413, detail="Storage quota exceeded")
 
 
-@router.put("/tracks/{track_id}", response_model=TimelineTrackResponse)
+@router.put("/tracks/{track_id}", response_model=UnifiedObjectResponse)
 async def update_track(
     project_id: UUID,
     track_id: UUID,
@@ -139,8 +164,16 @@ async def update_track(
             create_new_version=request.create_new_version,
             user_id=current_user.id,
         )
+        response = _serialized_object(
+            db,
+            project_id=project_id,
+            object_type="timeline_track",
+            object_id=track_id,
+            language=request.language or _main_language(current_user),
+            fallback_language=_main_language(current_user),
+        )
         db.commit()
-        return TimelineTrackResponse(**result)
+        return response
     except HTTPException:
         db.rollback()
         raise
@@ -167,7 +200,7 @@ async def delete_track(
     return {"success": True}
 
 
-@router.patch("/tracks/{track_id}/move", response_model=TimelineTrackResponse)
+@router.patch("/tracks/{track_id}/move", response_model=UnifiedObjectResponse)
 async def move_track(
     project_id: UUID,
     track_id: UUID,
@@ -176,7 +209,7 @@ async def move_track(
     current_user: User = Depends(get_current_user),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    result = timeline_service.move_track(
+    timeline_service.move_track(
         db,
         project_id=project_id,
         track_id=track_id,
@@ -184,15 +217,23 @@ async def move_track(
         position=request.position,
         user_id=current_user.id,
     )
+    main_language = _main_language(current_user)
+    response = _serialized_object(
+        db,
+        project_id=project_id,
+        object_type="timeline_track",
+        object_id=track_id,
+        language=main_language,
+        fallback_language=main_language,
+    )
     db.commit()
-    return TimelineTrackResponse(**result)
+    return response
 
 
-@router.put("/calendar", response_model=FullTimelineResponse)
+@router.put("/calendar", response_model=TimelineConfigResponse)
 async def update_calendar(
     project_id: UUID,
     request: CalendarUpdateRequest,
-    language: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -203,10 +244,14 @@ async def update_calendar(
             project_id=project_id,
             new_calendar=request.calendar.model_dump(),
             user_id=current_user.id,
-            language=language,
         )
         db.commit()
-        return FullTimelineResponse(**result)
+        return TimelineConfigResponse(
+            id=str(result.get("id") or ""),
+            project_id=str(project_id),
+            calendar=result.get("calendar") if isinstance(result.get("calendar"), dict) else {},
+            warnings=result.get("warnings") if isinstance(result.get("warnings"), list) else [],
+        )
     except HTTPException:
         db.rollback()
         raise
@@ -215,7 +260,7 @@ async def update_calendar(
         raise HTTPException(status_code=413, detail="Storage quota exceeded")
 
 
-@router.post("/events", response_model=TimelineEventResponse)
+@router.post("/events", response_model=UnifiedObjectResponse)
 async def create_event(
     project_id: UUID,
     request: TimelineEventCreate,
@@ -240,8 +285,16 @@ async def create_event(
             user_request=request.user_request,
             user_id=current_user.id,
         )
+        response = _serialized_object(
+            db,
+            project_id=project_id,
+            object_type="timeline_event",
+            object_id=UUID(str(result["id"])),
+            language=request.language,
+            fallback_language=_main_language(current_user),
+        )
         db.commit()
-        return TimelineEventResponse(**result)
+        return response
     except HTTPException:
         db.rollback()
         raise
@@ -253,7 +306,7 @@ async def create_event(
         raise HTTPException(status_code=413, detail="Storage quota exceeded")
 
 
-@router.put("/events/{event_id}", response_model=TimelineEventResponse)
+@router.put("/events/{event_id}", response_model=UnifiedObjectResponse)
 async def update_event(
     project_id: UUID,
     event_id: UUID,
@@ -263,7 +316,7 @@ async def update_event(
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     try:
-        result = timeline_service.update_event(
+        timeline_service.update_event(
             db,
             project_id=project_id,
             event_id=event_id,
@@ -280,8 +333,16 @@ async def update_event(
             create_new_version=request.create_new_version,
             user_id=current_user.id,
         )
+        response = _serialized_object(
+            db,
+            project_id=project_id,
+            object_type="timeline_event",
+            object_id=event_id,
+            language=request.language or _main_language(current_user),
+            fallback_language=_main_language(current_user),
+        )
         db.commit()
-        return TimelineEventResponse(**result)
+        return response
     except HTTPException:
         db.rollback()
         raise
@@ -311,17 +372,18 @@ async def delete_event(
     return {"success": True}
 
 
-@router.post("/events/{event_id}/links", response_model=TimelineEventLinkResponse)
+@router.post("/events/{event_id}/links", response_model=UnifiedObjectResponse)
 async def create_event_link(
     project_id: UUID,
     event_id: UUID,
     request: TimelineEventLinkRequest,
+    language: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     try:
-        result = timeline_service.link_event(
+        timeline_service.link_event(
             db,
             project_id=project_id,
             event_id=event_id,
@@ -329,8 +391,17 @@ async def create_event_link(
             object_id=UUID(request.object_id),
             user_id=current_user.id,
         )
+        main_language = _main_language(current_user)
+        response = _serialized_object(
+            db,
+            project_id=project_id,
+            object_type="timeline_event",
+            object_id=event_id,
+            language=language or main_language,
+            fallback_language=main_language,
+        )
         db.commit()
-        return TimelineEventLinkResponse(**result)
+        return response
     except HTTPException:
         db.rollback()
         raise
@@ -339,11 +410,12 @@ async def create_event_link(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.delete("/events/{event_id}/links/{link_id}")
+@router.delete("/events/{event_id}/links/{link_id}", response_model=UnifiedObjectResponse)
 async def delete_event_link(
     project_id: UUID,
     event_id: UUID,
     link_id: UUID,
+    language: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -355,8 +427,17 @@ async def delete_event_link(
         link_id=link_id,
         user_id=current_user.id,
     )
+    main_language = _main_language(current_user)
+    response = _serialized_object(
+        db,
+        project_id=project_id,
+        object_type="timeline_event",
+        object_id=event_id,
+        language=language or main_language,
+        fallback_language=main_language,
+    )
     db.commit()
-    return {"success": True}
+    return response
 
 
 @router.get("/links", response_model=list[TimelineEventLinkResponse])

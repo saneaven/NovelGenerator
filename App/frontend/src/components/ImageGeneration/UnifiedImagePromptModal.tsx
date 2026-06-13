@@ -106,7 +106,9 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const objectData = objectId ? unifiedStore.objects[objectId] : null;
   const targetObject = useMemo(() => {
     if (contextType !== 'object' || !objectId || !objectData) return null;
-    const data = objectData.data[settings.mainLanguage] || Object.values(objectData.data)[0] || {};
+    const data = objectData.data && typeof objectData.data === 'object' && !Array.isArray(objectData.data)
+      ? objectData.data as Record<string, any>
+      : {};
     // BasicInfo uses title, other objects use name
     const displayName = objectType === 'basic_info' ? data.title : data.name;
     return { id: objectData.id, name: displayName || '' };

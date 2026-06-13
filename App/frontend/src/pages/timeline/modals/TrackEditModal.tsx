@@ -42,12 +42,13 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   const updateTrack = useTimelineStore((s) => s.updateTrack);
 
   const isCreating = track === null;
+  const canEditProjection = isCreating || Boolean(track?.languageState?.has_requested_language);
   const initial = useMemo(() => {
     if (!track) {
       // null = let the server assign an automatic color
       return { name: '', description: '', content: emptyDoc(), color: null as string | null };
     }
-    const data = (track.data?.[displayLanguage] ?? Object.values(track.data ?? {})[0] ?? {}) as Record<string, unknown>;
+    const data = (track.data ?? {}) as Record<string, unknown>;
     return {
       name: (data.name as string) || '',
       description: (data.description as string) || '',
@@ -84,6 +85,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   }, [isDirty, onClose, t]);
 
   const handleSave = useCallback(async () => {
+    if (!canEditProjection) return;
     if (!name.trim()) {
       setNameError(true);
       setActiveTab('details');
@@ -119,7 +121,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [name, description, content, color, initial.color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
+  }, [canEditProjection, name, description, content, color, initial.color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
 
   return (
     <BaseModal
@@ -131,7 +133,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
       footer={
         <div className="tl-modal-footer">
           <TextButton variant="secondary" onClick={handleClose}>{t('common.cancel')}</TextButton>
-          <TextButton variant="primary" onClick={handleSave} disabled={!name.trim()} loading={isSaving}>
+          <TextButton variant="primary" onClick={handleSave} disabled={!name.trim() || !canEditProjection} loading={isSaving}>
             {isCreating ? t('common.create') : t('common.save')}
           </TextButton>
         </div>

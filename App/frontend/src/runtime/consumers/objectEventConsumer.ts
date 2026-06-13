@@ -2,7 +2,6 @@ import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useProjectStore } from '../../store/projectStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useTimelineStore } from '../../store/timelineStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { isRichPreviewType, useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
@@ -16,6 +15,8 @@ const OBJECT_TYPE_SET: ReadonlySet<ObjectType> = new Set([
   'story_entity',
   'outline',
   'manuscript',
+  'timeline_track',
+  'timeline_event',
 ]);
 
 type PendingUpsert = {
@@ -60,21 +61,6 @@ export class ObjectEventConsumer {
       const objectId = String(change?.object_id ?? '');
       const objectTypeRaw = change?.object_type;
       if (!objectId) continue;
-
-      if (objectTypeRaw === 'timeline_track' || objectTypeRaw === 'timeline_event') {
-        const settings = useSettingsStore.getState().settings;
-        const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
-        const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
-        void useTimelineStore.getState().fetchTimeline(projectId, language, { force: true }).catch((error) => {
-          console.warn('Failed to refresh timeline from SSE event', {
-            projectId,
-            objectType: objectTypeRaw,
-            objectId,
-            error,
-          });
-        });
-        continue;
-      }
 
       if (!this.isObjectType(objectTypeRaw)) continue;
 
@@ -139,15 +125,18 @@ export class ObjectEventConsumer {
 
     const fetched: UnifiedObject[] = [];
     const fetchedMarkdown: UnifiedObject[] = [];
+    const settings = useSettingsStore.getState().settings;
+    const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+    const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
     await Promise.all(
       upserts.map(async (item) => {
         const key = this.objectKey(item.objectType, item.objectId);
         try {
           const isRich = isRichPreviewType(item.objectType);
           const [object, markdownObject] = await Promise.all([
-            unifiedObjectService.getObject(item.objectType, item.objectId),
+            unifiedObjectService.getObject(item.objectType, item.objectId, language),
             isRich
-              ? unifiedObjectService.getObject(item.objectType, item.objectId, undefined, 'markdown')
+              ? unifiedObjectService.getObject(item.objectType, item.objectId, language, 'markdown')
               : Promise.resolve(null),
           ]);
           const latestRevision = this.revisionByKey.get(key) ?? 0;
@@ -174,4 +163,3 @@ export class ObjectEventConsumer {
     }
   }
 }
-

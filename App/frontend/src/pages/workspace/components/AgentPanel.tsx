@@ -14,6 +14,7 @@ import { useSubAgentStore } from '../../../store/subAgentStore';
 import { useThreadStore } from '../../../store/threadStore';
 import { useTimelineStore } from '../../../store/timelineStore';
 import { computeParentClosure } from '../../../utils/parentClosure';
+import { buildTimelineFromObjects } from '../../../utils/timelineView';
 import {
   cancelThread,
   sendThreadMessage,
@@ -410,11 +411,11 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   );
 });
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, displayLanguage }) => {
   const { t } = useTranslation();
   const settings = useSettings();
   const sidebarStore = useSidebarStore();
-  const sourceLanguage = settings.mainLanguage;
+  const sourceLanguage = displayLanguage || settings.mainLanguage;
 
   const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useAgentStore((state) => state.getSelectedAgent(projectId));
@@ -431,9 +432,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
   const runMode = useAgentUIStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
   const setRunMode = useAgentUIStore((state) => state.setRunMode);
   const setInput = useAgentUIStore((state) => state.setInput);
-  const unifiedObjects = useUnifiedObjectStore((state) => state.objects);
+  const unifiedObjects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, sourceLanguage));
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
-  const timeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
+  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
 
@@ -470,6 +471,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
     })),
   );
   const liveView = useThreadLiveViewState(threadId);
+  const timeline = useMemo(
+    () => buildTimelineFromObjects(projectId, unifiedObjects, timelineConfig),
+    [projectId, timelineConfig, unifiedObjects],
+  );
 
   const availableMcpServers = useMemo(() => (
     mcpServers.filter((server) => (
@@ -696,7 +701,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface }) =>
         'story_entity',
         'outline',
         'manuscript',
-      ]).catch((loadError) => {
+      ], sourceLanguage).catch((loadError) => {
         console.error('Failed to preload agent context objects:', loadError);
       }),
       fetchTimeline(projectId, sourceLanguage, { force: true }).catch((loadError) => {

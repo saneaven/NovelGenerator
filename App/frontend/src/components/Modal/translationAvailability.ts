@@ -11,7 +11,7 @@ export function buildTranslationStatusByObjectId(
 export function hasLanguageForObject(
   statusByObjectId: TranslationStatusByObjectId,
   objectId: string,
-  dataByLanguage: Record<string, unknown> | undefined,
+  availableLanguages: readonly string[] | undefined,
   language: string,
 ): boolean {
   if (!language) return false;
@@ -19,31 +19,31 @@ export function hasLanguageForObject(
   if (status) {
     return status.available_languages.includes(language);
   }
-  return Object.prototype.hasOwnProperty.call(dataByLanguage ?? {}, language);
+  return availableLanguages?.includes(language) ?? false;
 }
 
 export function shouldOfferObjectForTranslation({
   statusByObjectId,
   objectId,
-  dataByLanguage,
+  availableLanguages,
   sourceLanguage,
   targetLanguage,
   preSelected,
 }: {
   statusByObjectId: TranslationStatusByObjectId;
   objectId: string;
-  dataByLanguage: Record<string, unknown> | undefined;
+  availableLanguages: readonly string[] | undefined;
   sourceLanguage: string;
   targetLanguage: string;
   preSelected: boolean;
 }): boolean {
-  if (!hasLanguageForObject(statusByObjectId, objectId, dataByLanguage, sourceLanguage)) {
+  if (!hasLanguageForObject(statusByObjectId, objectId, availableLanguages, sourceLanguage)) {
     return false;
   }
   if (preSelected) {
     return true;
   }
-  return !hasLanguageForObject(statusByObjectId, objectId, dataByLanguage, targetLanguage);
+  return !hasLanguageForObject(statusByObjectId, objectId, availableLanguages, targetLanguage);
 }
 
 export function chooseTargetLanguageByMissingCount(

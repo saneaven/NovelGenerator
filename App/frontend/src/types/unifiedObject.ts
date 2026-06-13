@@ -18,15 +18,26 @@ export type ObjectType =
   | 'story_entity_folder'
   | 'story_entity'
   | 'outline'
-  | 'manuscript';
+  | 'manuscript'
+  | 'timeline_track'
+  | 'timeline_event';
 
 export type TimelineObjectType = 'timeline_track' | 'timeline_event';
-export type AnyObjectType = ObjectType | TimelineObjectType;
+export type AnyObjectType = ObjectType;
 
 export type StoryEntityKind = 'character' | 'organization' | 'location' | 'lorebook';
 export type OutlineKind = 'outline' | 'act' | 'chapter';
 export type StoryEntityStructureObjectType = 'story_entity_folder' | 'story_entity';
 export type RichTextFormat = 'tiptap' | 'markdown' | 'tree';
+
+export interface LanguageState {
+  requested_language: string;
+  content_language: string | null;
+  fallback_to: string | null;
+  available_languages: string[];
+  has_requested_language: boolean;
+  is_fallback: boolean;
+}
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -37,22 +48,22 @@ export interface UnifiedObject<TData = Record<string, any>> {
   type: ObjectType;
   kind?: StoryEntityKind | OutlineKind;
   metadata: ObjectMetadata;
-  data: Record<string, TData>;  // Language-keyed data: { "English": {...}, "Korean": {...} }
-  // languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
+  data: TData;
+  language_state: LanguageState;
   version: VersionInfo;
 }
 
-// Helper functions for working with language-keyed data
+// Helper functions for projection objects.
 export function getAvailableLanguages<TData>(obj: UnifiedObject<TData>): string[] {
-  return Object.keys(obj.data);
+  return obj.language_state.available_languages;
 }
 
-export function getDataForLanguage<TData>(obj: UnifiedObject<TData>, language: string): TData | undefined {
-  return obj.data[language];
+export function getDataForLanguage<TData>(obj: UnifiedObject<TData>, _language: string): TData {
+  return obj.data;
 }
 
 export function hasLanguage<TData>(obj: UnifiedObject<TData>, language: string): boolean {
-  return language in obj.data;
+  return obj.language_state.available_languages.includes(language);
 }
 
 // ============================================================================
@@ -76,6 +87,19 @@ export interface ObjectMetadata {
   image_prompt_negative?: string | null;  // Tag-based negative (NovelAI)
   // Cover image (for basic_info only) - URL resolved at runtime using getAssetUrl utility
   cover_image_id?: string | null;
+  timeline_id?: string;
+  color?: string;
+  track_id?: string;
+  start_date?: Record<string, number>;
+  end_date?: Record<string, number> | null;
+  tags?: string[];
+  links?: Array<{
+    id: string;
+    event_id: string;
+    object_type: string;
+    object_id: string;
+    created_at: string | null;
+  }>;
 }
 
 // ============================================================================
@@ -133,6 +157,13 @@ export interface StoryEntityFolderData {
   description: string;
 }
 
+export interface TimelineObjectData {
+  name: string;
+  description: string;
+  content: TipTapDoc | string;
+  content_markdown?: string;
+}
+
 // ============================================================================
 // TYPED UNIFIED OBJECTS
 // ============================================================================
@@ -145,6 +176,8 @@ export type GuidelinesObject = UnifiedObject<GuidelinesData> & { type: 'guidelin
 export type OutlineObject = UnifiedObject<StoryEntityData> & { type: 'outline'; kind: OutlineKind };
 export type ActObject = OutlineObject & { kind: 'act' };
 export type ChapterObject = OutlineObject & { kind: 'chapter' };
+export type TimelineTrackObject = UnifiedObject<TimelineObjectData> & { type: 'timeline_track' };
+export type TimelineEventObject = UnifiedObject<TimelineObjectData> & { type: 'timeline_event' };
 
 // ============================================================================
 // REQUEST TYPES

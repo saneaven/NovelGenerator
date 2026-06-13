@@ -140,6 +140,13 @@ class FullTimelineResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class TimelineConfigResponse(BaseModel):
+    id: str
+    project_id: str
+    calendar: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
+
+
 class CalendarUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

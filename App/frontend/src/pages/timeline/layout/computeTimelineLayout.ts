@@ -19,14 +19,13 @@ import type {
 } from './types';
 
 export function resolveEntityText(
-  data: Record<string, Record<string, unknown>> | undefined,
-  displayLanguage: string,
+  data: Record<string, unknown> | undefined,
+  _displayLanguage: string,
 ): { name: string; description: string; contentMarkdown: string } {
-  const langData = data?.[displayLanguage] ?? (data ? data[Object.keys(data)[0]] : undefined) ?? {};
   return {
-    name: typeof langData.name === 'string' ? langData.name : '',
-    description: typeof langData.description === 'string' ? langData.description : '',
-    contentMarkdown: typeof langData.content_markdown === 'string' ? langData.content_markdown : '',
+    name: typeof data?.name === 'string' ? data.name : '',
+    description: typeof data?.description === 'string' ? data.description : '',
+    contentMarkdown: typeof data?.content_markdown === 'string' ? data.content_markdown : '',
   };
 }
 

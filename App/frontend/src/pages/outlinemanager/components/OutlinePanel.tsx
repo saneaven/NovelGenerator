@@ -33,7 +33,7 @@ import type { UnifiedObject, OutlineObject } from '../../../types/unifiedObject'
 import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import ObjectCardExpanded from '../../../components/ObjectManager/ObjectCards/ObjectCardExpanded';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
-import { resolveRequestedLanguageState, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
+import { requestedLanguageStateFromProjection, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
@@ -175,25 +175,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const getActsForOutline = (outlineId: string): OutlineObject[] => actsByOutlineId.get(outlineId) || [];
   const getChaptersForAct = (actId: string): OutlineObject[] => chaptersByActId.get(actId) || [];
 
-  // Helper to get data for a specific language with fallback
+  // Helper to get projection data.
   const getDataForLanguage = (obj: UnifiedObject, lang: string) => {
-    const data = obj.data[lang];
-    if (data) {
-      return { ...data, content: normalizeDoc((data as any).content) };
-    }
-    const available = Object.keys(obj.data);
-    if (available.length > 0) {
-      const fallback = obj.data[available[0]];
-      return { ...fallback, content: normalizeDoc((fallback as any).content) };
-    }
-    return { name: '', description: '', content: emptyDoc() };
+    void lang;
+    const data = obj.data as Record<string, any> | undefined;
+    return data ? { ...data, content: normalizeDoc(data.content) } : { name: '', description: '', content: emptyDoc() };
   };
 
-  const getLanguageState = useCallback((obj: UnifiedObject) => resolveRequestedLanguageState({
-    availableLanguages: Object.keys(obj.data),
-    requestedLanguage: globalDisplayLanguage,
-    mainLanguage: settings.mainLanguage,
-  }), [globalDisplayLanguage, settings.mainLanguage]);
+  const getLanguageState = useCallback(
+    (obj: UnifiedObject) => requestedLanguageStateFromProjection(obj.language_state, settings.mainLanguage),
+    [settings.mainLanguage],
+  );
 
   // Auto-select first outline when outlines load
   useEffect(() => {
@@ -576,11 +568,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
       try {
         const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
-        const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
-          availableLanguages: [],
-          requestedLanguage: globalDisplayLanguage,
-          mainLanguage: settings.mainLanguage,
-        });
+        const languageState = activeObject
+          ? getLanguageState(activeObject)
+          : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
         await store.updateObject('outline', active.id as string, {
           data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
           language: languageState.viewLanguage,
@@ -623,11 +613,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
       try {
         const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
-        const languageState = activeObject ? getLanguageState(activeObject) : resolveRequestedLanguageState({
-          availableLanguages: [],
-          requestedLanguage: globalDisplayLanguage,
-          mainLanguage: settings.mainLanguage,
-        });
+        const languageState = activeObject
+          ? getLanguageState(activeObject)
+          : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
         await store.updateObject('outline', active.id as string, {
           data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
           language: languageState.viewLanguage,
@@ -1117,7 +1105,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           projectId={projectId}
           preSelectedObjectIds={[translationTargetId]}
           defaultSourceLanguage={resolveTranslationSourceLanguage(
-            Object.keys((store.objects[translationTargetId] as UnifiedObject | undefined)?.data ?? {}),
+            (store.objects[translationTargetId] as UnifiedObject | undefined)?.language_state.available_languages ?? [],
             settings.mainLanguage,
           )}
           defaultTargetLanguage={globalDisplayLanguage}

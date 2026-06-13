@@ -1,17 +1,15 @@
 import { apiClient } from './client';
 import type {
   CalendarConfig,
-  FullTimeline,
-  TimelineEvent,
   TimelineEventCreateRequest,
   TimelineEventLink,
   TimelineEventLinkRequest,
   TimelineEventUpdateRequest,
-  TimelineTrack,
   TimelineTrackCreateRequest,
   TimelineTrackMoveRequest,
   TimelineTrackUpdateRequest,
 } from '../types/timeline';
+import type { TimelineObjectData, UnifiedObject } from '../types/unifiedObject';
 
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -32,12 +30,6 @@ function buildQueryString(params: Record<string, QueryValue | QueryValue[] | und
   return query ? `?${query}` : '';
 }
 
-type ApiTimelineVersion = {
-  id: string | null;
-  number: number;
-  created_at: string | null;
-};
-
 type ApiTimelineEventLink = {
   id: string;
   event_id: string;
@@ -46,48 +38,19 @@ type ApiTimelineEventLink = {
   created_at: string | null;
 };
 
-type ApiTimelineEvent = {
-  id: string;
-  track_id: string;
-  start_date: Record<string, number>;
-  end_date?: Record<string, number> | null;
-  tags: string[];
-  created_at: string | null;
-  updated_at: string | null;
-  data: Record<string, Record<string, unknown>>;
-  version: ApiTimelineVersion;
-  links: ApiTimelineEventLink[];
-};
-
-type ApiTimelineTrack = {
-  id: string;
-  timeline_id: string;
-  parent_id?: string | null;
-  position: number;
-  color: string;
-  created_at: string | null;
-  updated_at: string | null;
-  data: Record<string, Record<string, unknown>>;
-  version: ApiTimelineVersion;
-  events: ApiTimelineEvent[];
-  children: ApiTimelineTrack[];
-};
-
-type ApiFullTimeline = {
+type ApiTimelineConfig = {
   id: string;
   project_id: string;
   calendar: CalendarConfig;
-  tracks: ApiTimelineTrack[];
   warnings: string[];
 };
 
-function normalizeVersion(version: ApiTimelineVersion) {
-  return {
-    id: version.id,
-    number: version.number,
-    createdAt: version.created_at,
-  };
-}
+export type TimelineConfig = {
+  id: string;
+  projectId: string;
+  calendar: CalendarConfig;
+  warnings: string[];
+};
 
 function normalizeLink(link: ApiTimelineEventLink): TimelineEventLink {
   return {
@@ -99,43 +62,11 @@ function normalizeLink(link: ApiTimelineEventLink): TimelineEventLink {
   };
 }
 
-function normalizeEvent(event: ApiTimelineEvent): TimelineEvent {
-  return {
-    id: event.id,
-    trackId: event.track_id,
-    startDate: event.start_date,
-    endDate: event.end_date ?? null,
-    tags: event.tags ?? [],
-    createdAt: event.created_at,
-    updatedAt: event.updated_at,
-    data: event.data ?? {},
-    version: normalizeVersion(event.version),
-    links: Array.isArray(event.links) ? event.links.map(normalizeLink) : [],
-  };
-}
-
-function normalizeTrack(track: ApiTimelineTrack): TimelineTrack {
-  return {
-    id: track.id,
-    timelineId: track.timeline_id,
-    parentId: track.parent_id ?? null,
-    position: track.position,
-    color: track.color,
-    createdAt: track.created_at,
-    updatedAt: track.updated_at,
-    data: track.data ?? {},
-    version: normalizeVersion(track.version),
-    events: Array.isArray(track.events) ? track.events.map(normalizeEvent) : [],
-    children: Array.isArray(track.children) ? track.children.map(normalizeTrack) : [],
-  };
-}
-
-function normalizeTimeline(timeline: ApiFullTimeline): FullTimeline {
+function normalizeConfig(timeline: ApiTimelineConfig): TimelineConfig {
   return {
     id: timeline.id,
     projectId: timeline.project_id,
     calendar: timeline.calendar,
-    tracks: Array.isArray(timeline.tracks) ? timeline.tracks.map(normalizeTrack) : [],
     warnings: Array.isArray(timeline.warnings) ? timeline.warnings : [],
   };
 }
@@ -205,91 +136,79 @@ function serializeEventUpdate(request: TimelineEventUpdateRequest) {
 }
 
 export const timelineService = {
-  async getTimeline(projectId: string, language?: string, tags?: string[]): Promise<FullTimeline> {
-    const query = buildQueryString({ language, tags });
-    const response = await apiClient.get<ApiFullTimeline>(`/api/v1/projects/${projectId}/timeline${query}`);
-    return normalizeTimeline(response);
+  async getTimelineConfig(projectId: string): Promise<TimelineConfig> {
+    const response = await apiClient.get<ApiTimelineConfig>(`/api/v1/projects/${projectId}/timeline`);
+    return normalizeConfig(response);
   },
 
-  async listTracks(projectId: string, language?: string): Promise<TimelineTrack[]> {
-    const query = buildQueryString({ language });
-    const response = await apiClient.get<ApiTimelineTrack[]>(`/api/v1/projects/${projectId}/timeline/tracks${query}`);
-    return response.map(normalizeTrack);
-  },
-
-  async createTrack(projectId: string, request: TimelineTrackCreateRequest): Promise<TimelineTrack> {
-    const response = await apiClient.post<ApiTimelineTrack>(
+  async createTrack(projectId: string, request: TimelineTrackCreateRequest): Promise<UnifiedObject<TimelineObjectData>> {
+    return apiClient.post<UnifiedObject<TimelineObjectData>>(
       `/api/v1/projects/${projectId}/timeline/tracks`,
       serializeTrackCreate(request),
     );
-    return normalizeTrack(response);
   },
 
-  async updateTrack(projectId: string, trackId: string, request: TimelineTrackUpdateRequest): Promise<TimelineTrack> {
-    const response = await apiClient.put<ApiTimelineTrack>(
+  async updateTrack(projectId: string, trackId: string, request: TimelineTrackUpdateRequest): Promise<UnifiedObject<TimelineObjectData>> {
+    return apiClient.put<UnifiedObject<TimelineObjectData>>(
       `/api/v1/projects/${projectId}/timeline/tracks/${trackId}`,
       serializeTrackUpdate(request),
     );
-    return normalizeTrack(response);
   },
 
-  async moveTrack(projectId: string, trackId: string, request: TimelineTrackMoveRequest): Promise<TimelineTrack> {
-    const response = await apiClient.patch<ApiTimelineTrack>(
+  async moveTrack(projectId: string, trackId: string, request: TimelineTrackMoveRequest): Promise<UnifiedObject<TimelineObjectData>> {
+    return apiClient.patch<UnifiedObject<TimelineObjectData>>(
       `/api/v1/projects/${projectId}/timeline/tracks/${trackId}/move`,
       {
         parent_id: request.parentId ?? null,
         position: request.position,
       },
     );
-    return normalizeTrack(response);
   },
 
   async deleteTrack(projectId: string, trackId: string): Promise<void> {
     await apiClient.delete(`/api/v1/projects/${projectId}/timeline/tracks/${trackId}`);
   },
 
-  async updateCalendar(projectId: string, calendar: CalendarConfig, language?: string): Promise<FullTimeline> {
-    const query = buildQueryString({ language });
-    const response = await apiClient.put<ApiFullTimeline>(
-      `/api/v1/projects/${projectId}/timeline/calendar${query}`,
+  async updateCalendar(projectId: string, calendar: CalendarConfig): Promise<TimelineConfig> {
+    const response = await apiClient.put<ApiTimelineConfig>(
+      `/api/v1/projects/${projectId}/timeline/calendar`,
       { calendar },
     );
-    return normalizeTimeline(response);
+    return normalizeConfig(response);
   },
 
-  async createEvent(projectId: string, request: TimelineEventCreateRequest): Promise<TimelineEvent> {
-    const response = await apiClient.post<ApiTimelineEvent>(
+  async createEvent(projectId: string, request: TimelineEventCreateRequest): Promise<UnifiedObject<TimelineObjectData>> {
+    return apiClient.post<UnifiedObject<TimelineObjectData>>(
       `/api/v1/projects/${projectId}/timeline/events`,
       serializeEventCreate(request),
     );
-    return normalizeEvent(response);
   },
 
-  async updateEvent(projectId: string, eventId: string, request: TimelineEventUpdateRequest): Promise<TimelineEvent> {
-    const response = await apiClient.put<ApiTimelineEvent>(
+  async updateEvent(projectId: string, eventId: string, request: TimelineEventUpdateRequest): Promise<UnifiedObject<TimelineObjectData>> {
+    return apiClient.put<UnifiedObject<TimelineObjectData>>(
       `/api/v1/projects/${projectId}/timeline/events/${eventId}`,
       serializeEventUpdate(request),
     );
-    return normalizeEvent(response);
   },
 
   async deleteEvent(projectId: string, eventId: string): Promise<void> {
     await apiClient.delete(`/api/v1/projects/${projectId}/timeline/events/${eventId}`);
   },
 
-  async createEventLink(projectId: string, eventId: string, request: TimelineEventLinkRequest): Promise<TimelineEventLink> {
-    const response = await apiClient.post<ApiTimelineEventLink>(
-      `/api/v1/projects/${projectId}/timeline/events/${eventId}/links`,
+  async createEventLink(projectId: string, eventId: string, request: TimelineEventLinkRequest, language?: string): Promise<UnifiedObject<TimelineObjectData>> {
+    const query = buildQueryString({ language });
+    return apiClient.post<UnifiedObject<TimelineObjectData>>(
+      `/api/v1/projects/${projectId}/timeline/events/${eventId}/links${query}`,
       {
         object_type: request.objectType,
         object_id: request.objectId,
       },
     );
-    return normalizeLink(response);
   },
 
-  async deleteEventLink(projectId: string, eventId: string, linkId: string): Promise<void> {
-    await apiClient.delete(`/api/v1/projects/${projectId}/timeline/events/${eventId}/links/${linkId}`);
+  async deleteEventLink(projectId: string, eventId: string, linkId: string, language?: string): Promise<UnifiedObject<TimelineObjectData>> {
+    const query = buildQueryString({ language });
+    return apiClient.delete<UnifiedObject<TimelineObjectData>>(`/api/v1/projects/${projectId}/timeline/events/${eventId}/links/${linkId}${query}`);
   },
 
   async listLinksByObject(projectId: string, objectType: string, objectId: string): Promise<TimelineEventLink[]> {

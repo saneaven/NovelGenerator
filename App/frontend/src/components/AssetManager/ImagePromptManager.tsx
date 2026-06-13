@@ -145,7 +145,9 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     // Get object name for display (use title for basic_info, name for others)
     const objectName = useMemo(() => {
         if (!object) return 'Loading...';
-        const data = object.data[settings.mainLanguage] || Object.values(object.data)[0] || {};
+        const data = object.data && typeof object.data === 'object' && !Array.isArray(object.data)
+            ? object.data as Record<string, any>
+            : {};
         return (objectType === 'basic_info' ? data.title : data.name) || 'Unnamed';
     }, [object, objectType, settings.mainLanguage]);
 

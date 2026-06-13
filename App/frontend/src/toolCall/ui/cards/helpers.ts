@@ -12,17 +12,11 @@ export interface ObjectSnapshot {
 }
 
 function dataForLanguage(object: UnifiedObject | undefined, language: string): Record<string, unknown> {
+  void language;
   if (!object) return {};
-  if (object.data?.[language]) {
-    return object.data[language] as Record<string, unknown>;
-  }
-
-  const fallbackLanguage = Object.keys(object.data ?? {})[0];
-  if (fallbackLanguage) {
-    return object.data[fallbackLanguage] as Record<string, unknown>;
-  }
-
-  return {};
+  return object.data && typeof object.data === 'object' && !Array.isArray(object.data)
+    ? object.data as Record<string, unknown>
+    : {};
 }
 
 function storyEntityKindToUnifiedType(storyEntityKind?: StoryEntityKind): UnifiedObjectType | undefined {

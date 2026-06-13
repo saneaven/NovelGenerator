@@ -64,7 +64,6 @@ const UnifiedWorkspace: React.FC = () => {
 
   const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading, setCurrentProject } = useProjectStore();
   const { fetchAgents } = useAgentStore();
-  const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const changeRevision = useUnifiedObjectStore(state => state.changeRevision);
@@ -154,6 +153,7 @@ const UnifiedWorkspace: React.FC = () => {
     }
     return mainLanguage;
   }, [preferredDisplayLanguage, availableLanguages, mainLanguage]);
+  const unifiedObjects = useUnifiedObjectStore(state => state.getObjectsForProject(projectId ?? '', currentDisplayLanguage));
 
   // Refresh count of objects needing translation
   const refreshTranslationCount = useCallback(() => {
@@ -188,7 +188,9 @@ const UnifiedWorkspace: React.FC = () => {
     const chapter = unifiedObjects[selectedChapterId];
     if (!chapter || chapter.type !== 'outline' || chapter.kind !== 'chapter') return null;
 
-    const langData = chapter.data[currentDisplayLanguage] || chapter.data[mainLanguage] || chapter.data[Object.keys(chapter.data)[0]] || {};
+    const langData = chapter.data && typeof chapter.data === 'object' && !Array.isArray(chapter.data)
+      ? chapter.data as Record<string, any>
+      : {};
 
     return {
       id: chapter.id,
@@ -202,11 +204,10 @@ const UnifiedWorkspace: React.FC = () => {
   const hasChapters = projectObjects.outline.outlines.some(outline => outline.acts.some(act => act.chapters.length > 0));
 
   // Helper to get data for a specific language
-  const getDataForLanguage = (obj: any, language: string): Record<string, any> => {
-    if (obj.data[language]) return obj.data[language];
-    const available = Object.keys(obj.data);
-    if (available.length > 0) return obj.data[available[0]];
-    return {};
+  const getDataForLanguage = (obj: any, _language: string): Record<string, any> => {
+    return obj?.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+      ? obj.data
+      : {};
   };
 
   // Set current project when projectId changes
@@ -246,7 +247,7 @@ const UnifiedWorkspace: React.FC = () => {
           'story_entity_folder',
           'story_entity',
           'outline',
-        ]);
+        ], currentDisplayLanguage);
       } catch (error) {
         console.error('Failed to load objects:', error);
         const errorStatus = (error as any)?.status || (error as any)?.response?.status;
@@ -257,7 +258,7 @@ const UnifiedWorkspace: React.FC = () => {
     };
 
     populateStoreCache();
-  }, [projectId, refreshProjectObjects]);
+  }, [currentDisplayLanguage, projectId, refreshProjectObjects]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -279,13 +280,13 @@ const UnifiedWorkspace: React.FC = () => {
     const buildProjectObjects = async () => {
       try {
         const [basicInfoList, storyEntities, outlineItems] = await Promise.all([
-          listObjects('basic_info', projectId),
-          listObjects('story_entity', projectId),
-          listObjects('outline', projectId),
+          listObjects('basic_info', projectId, currentDisplayLanguage),
+          listObjects('story_entity', projectId, currentDisplayLanguage),
+          listObjects('outline', projectId, currentDisplayLanguage),
         ]);
 
         const basicInfo = basicInfoList.length > 0 ? (() => {
-          const data = normalizeBasicInfoData(getDataForLanguage(basicInfoList[0], mainLanguage));
+          const data = normalizeBasicInfoData(getDataForLanguage(basicInfoList[0], currentDisplayLanguage));
           return {
             id: basicInfoList[0].id,
             title: data.title,
@@ -316,7 +317,7 @@ const UnifiedWorkspace: React.FC = () => {
         const outlineData = {
           outlines: outlines
             .map(outline => {
-              const oData = getDataForLanguage(outline, mainLanguage);
+              const oData = getDataForLanguage(outline, currentDisplayLanguage);
               const outlineActs = sortOutlineObjects(
                 acts.filter(act => act.metadata.parent_id === outline.id)
               );
@@ -327,7 +328,7 @@ const UnifiedWorkspace: React.FC = () => {
                 content: normalizeDoc(oData.content),
                 position: outline.metadata.position || 0,
                 acts: outlineActs.map(act => {
-                  const actData = getDataForLanguage(act, mainLanguage);
+                  const actData = getDataForLanguage(act, currentDisplayLanguage);
                   return {
                     id: act.id,
                     name: actData.name || '',
@@ -339,7 +340,7 @@ const UnifiedWorkspace: React.FC = () => {
                       chapters.filter(ch => ch.metadata.parent_id === act.id)
                     )
                       .map(chapter => {
-                        const chapterData = getDataForLanguage(chapter, mainLanguage);
+                        const chapterData = getDataForLanguage(chapter, currentDisplayLanguage);
                         return {
                           id: chapter.id,
                           name: chapterData.name || '',
@@ -359,7 +360,7 @@ const UnifiedWorkspace: React.FC = () => {
           setProjectObjects({
             basicInfo,
             storyEntities: storyEntityItems.map((entity) => {
-              const data = getDataForLanguage(entity, mainLanguage);
+              const data = getDataForLanguage(entity, currentDisplayLanguage);
               return {
                 id: entity.id,
                 kind: entity.kind,
@@ -371,25 +372,25 @@ const UnifiedWorkspace: React.FC = () => {
             characters: storyEntityItems
               .filter((entity) => entity.kind === 'character')
               .map((entity) => {
-                const data = getDataForLanguage(entity, mainLanguage);
+                const data = getDataForLanguage(entity, currentDisplayLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             organizations: storyEntityItems
               .filter((entity) => entity.kind === 'organization')
               .map((entity) => {
-                const data = getDataForLanguage(entity, mainLanguage);
+                const data = getDataForLanguage(entity, currentDisplayLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             locations: storyEntityItems
               .filter((entity) => entity.kind === 'location')
               .map((entity) => {
-                const data = getDataForLanguage(entity, mainLanguage);
+                const data = getDataForLanguage(entity, currentDisplayLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             lorebook: storyEntityItems
               .filter((entity) => entity.kind === 'lorebook')
               .map((entity) => {
-                const data = getDataForLanguage(entity, mainLanguage);
+                const data = getDataForLanguage(entity, currentDisplayLanguage);
                 return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
               }),
             outline: outlineData,
@@ -424,7 +425,7 @@ const UnifiedWorkspace: React.FC = () => {
     return () => {
       isActive = false;
     };
-  }, [projectId, currentSubPage, listObjects, mainLanguage, getSelectedChapterId, selectChapter]);
+  }, [currentDisplayLanguage, projectId, currentSubPage, listObjects, getSelectedChapterId, selectChapter]);
 
   // Fetch agents when projectId changes
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { OBJECT_TYPE_CONFIG } from './objectTypeConfig';
 import type { TipTapDoc } from './tiptap';
-import type { AnyObjectType, ObjectType, TimelineObjectType } from './unifiedObject';
+import type { AnyObjectType, LanguageState, ObjectType, TimelineObjectType } from './unifiedObject';
 
 export interface CalendarUnit {
   name: string;
@@ -37,7 +37,8 @@ export interface TimelineEvent {
   tags: string[];
   createdAt: string | null;
   updatedAt: string | null;
-  data: Record<string, Record<string, unknown>>;
+  data: Record<string, unknown>;
+  languageState?: LanguageState;
   version: TimelineVersionInfo;
   links: TimelineEventLink[];
 }
@@ -51,7 +52,8 @@ export interface TimelineTrack {
   color: string;
   createdAt: string | null;
   updatedAt: string | null;
-  data: Record<string, Record<string, unknown>>;
+  data: Record<string, unknown>;
+  languageState?: LanguageState;
   version: TimelineVersionInfo;
   events: TimelineEvent[];
   children: TimelineTrack[];
@@ -66,8 +68,8 @@ export interface FullTimeline {
 }
 
 export const TIMELINE_OBJECT_TYPE_CONFIG: Record<TimelineObjectType, { label: string; order: number }> = {
-  timeline_track: { label: 'Timeline Track', order: 2.1 },
-  timeline_event: { label: 'Timeline Event', order: 2.2 },
+  timeline_track: OBJECT_TYPE_CONFIG.timeline_track,
+  timeline_event: OBJECT_TYPE_CONFIG.timeline_event,
 };
 
 export function isTimelineObjectType(type: string): type is TimelineObjectType {

@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { useTimelineStore } from '../../../store/timelineStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { defaultCalendar, formatDate } from '../../../utils/timelineCalendar';
+import { buildTimelineFromObjects } from '../../../utils/timelineView';
 import type {
   CalendarConfig,
   FullTimeline,
@@ -12,10 +14,9 @@ import type {
 /**
  * Shared data-sourcing helpers for timeline tool-call cards.
  *
- * Timeline tracks / events live in `useTimelineStore` (not the unified object
- * store), so the generic `getObjectSnapshot` resolver returns nothing for them.
- * These helpers look the objects up directly and format dates with the
- * project's calendar config.
+ * Timeline tracks / events are unified object projections. These helpers derive
+ * a lookup from the unified object store and format dates with the project's
+ * calendar config.
  */
 export interface TimelineLookup {
   calendar: CalendarConfig;
@@ -50,27 +51,28 @@ function buildLookup(timeline: FullTimeline | null): TimelineLookup {
 
 /** Resolve a lookup of existing timeline tracks/events for the given project. */
 export function useTimelineLookup(projectId: string): TimelineLookup {
-  const timeline = useTimelineStore((state) =>
-    state.loadedProjectId === projectId ? state.timeline : null
+  const objects = useUnifiedObjectStore((state) => state.objects);
+  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
+  const timeline = useMemo(
+    () => buildTimelineFromObjects(projectId, objects, timelineConfig),
+    [objects, projectId, timelineConfig],
   );
   return useMemo(() => buildLookup(timeline), [timeline]);
 }
 
-/** Pick the localized value bag for a track/event, falling back to any language. */
+/** Return the projected value bag for a track/event. */
 export function dataForLanguage(
-  data: Record<string, Record<string, unknown>> | undefined,
-  language: string
+  data: Record<string, unknown> | undefined,
+  language: string,
 ): Record<string, unknown> {
-  if (!data) return {};
-  if (data[language]) return data[language];
-  const fallback = Object.keys(data)[0];
-  return fallback ? data[fallback] : {};
+  void language;
+  return data ?? {};
 }
 
-/** Read a track/event display name from its localized data. */
+/** Read a track/event display name from its projected data. */
 export function timelineName(
-  data: Record<string, Record<string, unknown>> | undefined,
-  language: string
+  data: Record<string, unknown> | undefined,
+  language: string,
 ): string | undefined {
   const value = dataForLanguage(data, language).name;
   return typeof value === 'string' && value.trim() ? value : undefined;

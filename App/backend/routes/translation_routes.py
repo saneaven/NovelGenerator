@@ -86,6 +86,12 @@ class LanguageAvailabilityResponse(BaseModel):
 # TRANSLATION STATUS ENDPOINTS
 # ============================================================================
 
+def _main_language(current_user: User) -> str:
+    settings = getattr(current_user, "settings", None)
+    value = getattr(settings, "main_language", None)
+    return str(value or "English")
+
+
 def _collect_project_object_ids(
     db: Session, project_id: UUID
 ) -> List[tuple]:
@@ -393,8 +399,8 @@ async def add_translations(
     Returns updated objects for immediate frontend store update (matches PUT pattern).
     """
     translated_count = 0
-    translated_objects: list[tuple[str, UUID, UUID]] = []
-    seen_targets: set[tuple[str, UUID, UUID]] = set()
+    translated_objects: list[tuple[str, UUID, UUID, str]] = []
+    seen_targets: set[tuple[str, UUID, UUID, str]] = set()
 
     try:
         for translation_data in request.translations:
@@ -426,7 +432,7 @@ async def add_translations(
                 created_by=current_user.id,
             )
 
-            key = (object_type, object_id, project_id)
+            key = (object_type, object_id, project_id, translation_data.language)
             if key not in seen_targets:
                 seen_targets.add(key)
                 translated_objects.append(key)
@@ -434,14 +440,16 @@ async def add_translations(
 
         db.commit()
 
+        main_language = _main_language(current_user)
         updated_objects = []
-        for obj_type, obj_id, project_id in translated_objects:
+        for obj_type, obj_id, project_id, language in translated_objects:
             obj = object_service.get_object(
                 db,
                 object_type=obj_type,
                 object_id=obj_id,
                 project_id=project_id,
-                language=None,
+                language=language,
+                fallback_language=main_language,
             )
             if obj is not None:
                 updated_objects.append(obj)

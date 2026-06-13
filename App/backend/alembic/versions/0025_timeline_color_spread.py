@@ -27,14 +27,14 @@ branch_labels = None
 depends_on = None
 
 
-ROOT_L = 0.68
-ROOT_C = 0.14
+ROOT_L = 0.70
+ROOT_C = 0.15
 SEED_HUE = 250.0
 CHILD_L_STEP = 0.06
 MIN_L = 0.40
 CHILD_C_STEP = 0.015
 MIN_C = 0.08
-CHILD_HUE_MAX = 25.0
+CHILD_HUE_MAX = 30.0
 _NEUTRAL_CHROMA_CUTOFF = 0.04
 
 _OKLCH_RE = re.compile(

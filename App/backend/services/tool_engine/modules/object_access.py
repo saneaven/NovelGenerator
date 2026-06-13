@@ -36,13 +36,9 @@ def require_story_entity_arg_kind(value: Any) -> str:
 
 
 def extract_lang_data(obj: dict[str, Any], language: str) -> dict[str, Any]:
-    data = obj.get("data", {})
-    if isinstance(data.get(language), dict):
-        return data[language]
-    for val in data.values() if isinstance(data, dict) else []:
-        if isinstance(val, dict):
-            return val
-    return {}
+    del language
+    data = obj.get("data")
+    return data if isinstance(data, dict) else {}
 
 
 def get_primary_object_id(db: Session, project_id: UUID, object_type: str) -> UUID:

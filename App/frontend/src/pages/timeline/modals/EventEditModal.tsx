@@ -110,11 +110,12 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   const deleteEventLink = useTimelineStore((s) => s.deleteEventLink);
 
   const isCreating = event === null;
+  const canEditProjection = isCreating || Boolean(event?.languageState?.has_requested_language);
   const leafTracks = useMemo(() => collectLeafTracks(tracks, displayLanguage), [tracks, displayLanguage]);
 
   const initial = useMemo(() => {
     if (event) {
-      const data = (event.data?.[displayLanguage] ?? Object.values(event.data ?? {})[0] ?? {}) as Record<string, unknown>;
+      const data = (event.data ?? {}) as Record<string, unknown>;
       return {
         name: (data.name as string) || '',
         description: (data.description as string) || '',
@@ -134,7 +135,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
       tags: [] as string[],
       trackId: defaults?.trackId ?? (leafTracks.length === 1 ? leafTracks[0].id : ''),
     };
-  }, [event, defaults, displayLanguage, calendar, leafTracks]);
+  }, [event, defaults, calendar, leafTracks]);
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -192,6 +193,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   }, [name, trackId, leafTracks, startDate, endDate, calendar, t]);
 
   const handleSave = useCallback(async () => {
+    if (!canEditProjection) return;
     const nextErrors = validate();
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -234,7 +236,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [validate, isCreating, event, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, onClose, onCreated]);
+  }, [canEditProjection, validate, isCreating, event, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, onClose, onCreated]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -323,7 +325,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
           </div>
           <div className="tl-modal-footer">
             <TextButton variant="secondary" onClick={handleClose}>{t('common.cancel')}</TextButton>
-            <TextButton variant="primary" onClick={handleSave} loading={isSaving}>
+            <TextButton variant="primary" onClick={handleSave} loading={isSaving} disabled={!canEditProjection}>
               {isCreating ? t('common.create') : t('common.save')}
             </TextButton>
           </div>

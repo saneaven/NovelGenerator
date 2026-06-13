@@ -23,6 +23,12 @@ class StoryEntityTreeResponse(BaseModel):
     entities: list[UnifiedObjectResponse]
 
 
+def _main_language(current_user: User) -> str:
+    settings = getattr(current_user, "settings", None)
+    value = getattr(settings, "main_language", None)
+    return str(value or "English")
+
+
 @router.get(
     "/api/v1/projects/{project_id}/story-entity-tree",
     response_model=StoryEntityTreeResponse,
@@ -35,19 +41,23 @@ async def get_story_entity_tree(
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
+    main_language = _main_language(current_user)
+    requested_language = language or main_language
     folders = object_service.list_objects(
         db,
         project_id=project_id,
         object_type=STORY_ENTITY_FOLDER_TYPE,
-        language=language,
+        language=requested_language,
         rich_text_format=rich_text_format,
+        fallback_language=main_language,
     )
     entities = object_service.list_objects(
         db,
         project_id=project_id,
         object_type=STORY_ENTITY_TYPE,
-        language=language,
+        language=requested_language,
         rich_text_format=rich_text_format,
+        fallback_language=main_language,
     )
     return StoryEntityTreeResponse(
         folders=[UnifiedObjectResponse(**item) for item in folders],

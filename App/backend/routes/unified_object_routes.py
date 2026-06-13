@@ -44,8 +44,8 @@ class UnifiedObjectResponse(BaseModel):
     type: str
     kind: Optional[str] = None
     metadata: Dict[str, Any]  # project_id, created_at, updated_at, structure metadata
-    data: Dict[str, Any]  # Language-keyed data: {"English": {...}, "Korean": {...}}
-    # languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
+    data: Dict[str, Any]
+    language_state: Dict[str, Any]
     version: Dict[str, Any]  # id, number, created_at
 
     class Config:
@@ -111,34 +111,38 @@ class VersionResponse(BaseModel):
 # UNIFIED CRUD ENDPOINTS
 # ============================================================================
 
+
+def _main_language(current_user: User) -> str:
+    settings = getattr(current_user, "settings", None)
+    value = getattr(settings, "main_language", None)
+    return str(value or "English")
+
 @router.get("/objects/{object_type}/{object_id}", response_model=UnifiedObjectResponse)
 async def get_object(
     object_type: str,
     object_id: UUID,
-    language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
+    language: Optional[str] = Query(None, description="Requested projection language. Defaults to the user's main language."),
     rich_text_format: RichTextFormat = Query("tiptap"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get object with language data.
-
-    Default (no language param): Returns ALL languages in data field.
-    With ?language=X: Returns only that language in data field.
-    """
+    """Get one object projected into a single requested language."""
     project_id = resolve_project_id_for_object(
         db,
         object_type=object_type,
         object_id=object_id,
         user_id=current_user.id,
     )
+    main_language = _main_language(current_user)
+    requested_language = language or main_language
     result = object_service.get_object(
         db,
         object_type=object_type,
         object_id=object_id,
         project_id=project_id,
-        language=language,
+        language=requested_language,
         rich_text_format=rich_text_format,
+        fallback_language=main_language,
     )
     if result is None:
         raise HTTPException(status_code=404, detail=f"{object_type} not found")
@@ -379,7 +383,7 @@ async def restore_version(
 async def list_objects(
     project_id: UUID,
     object_type: str,
-    language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
+    language: Optional[str] = Query(None, description="Requested projection language. Defaults to the user's main language."),
     kinds: Optional[List[str]] = Query(None, description="Optional story entity kind filters."),
     rich_text_format: RichTextFormat = Query("tiptap"),
     page: int = Query(1, ge=1),
@@ -387,12 +391,7 @@ async def list_objects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    List all objects of a specific type for a project.
-
-    Default (no language param): Returns ALL languages in data field for each object.
-    With ?language=X: Returns only that language in data field.
-    """
+    """List project objects projected into a single requested language."""
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     normalized_kinds: list[str] | None = None
     if kinds:
@@ -401,13 +400,16 @@ async def list_objects(
         elif object_type == "outline":
             normalized_kinds = [str(kind) for kind in kinds]
 
+    main_language = _main_language(current_user)
+    requested_language = language or main_language
     serialized = object_service.list_objects(
         db,
         project_id=project_id,
         object_type=object_type,
-        language=language,
+        language=requested_language,
         kinds=normalized_kinds,
         rich_text_format=rich_text_format,
+        fallback_language=main_language,
     )
     result_objects = [UnifiedObjectResponse(**item) for item in serialized]
 
@@ -593,5 +595,4 @@ async def update_image_prompt(
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message)
         raise HTTPException(status_code=400, detail=message)
-
 

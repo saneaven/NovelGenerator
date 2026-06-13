@@ -81,7 +81,6 @@ function objectEditLabel(input: ObjectEditInput): string {
   }
 
   const store = useUnifiedObjectStore.getState();
-  const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
 
   if (input.category === 'outline') {
     const outline = store.getObject(input.targetId);
@@ -93,17 +92,16 @@ function objectEditLabel(input: ObjectEditInput): string {
 
   if (input.category === 'manuscript') {
     const chapter = store.getObject(input.targetId);
-    const langData = chapter?.data?.[mainLanguage] || (chapter?.data ? Object.values(chapter.data)[0] : undefined);
+    const langData = chapter?.data as Record<string, unknown> | undefined;
     const chapterName = (langData as any)?.name ?? '';
     return chapterName ? `AI Edit: ${categoryLabel} - ${chapterName}` : `AI Edit: ${categoryLabel}`;
   }
 
   const obj = store.getObject(input.targetId);
+  const data = obj?.data as Record<string, unknown> | undefined;
   const name =
-    (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.name ??
-    (obj?.data ? (obj.data as any)[mainLanguage] : undefined)?.title ??
-    (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.name ??
-    (obj?.data ? (Object.values(obj.data)[0] as any) : undefined)?.title ??
+    (data as any)?.name ??
+    (data as any)?.title ??
     '';
 
   return name ? `AI Edit: ${categoryLabel} - ${name}` : `AI Edit: ${categoryLabel}`;

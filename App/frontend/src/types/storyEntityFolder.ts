@@ -25,23 +25,13 @@ export interface StoryEntityKindOption {
 
 export function getStoryEntityFolderData(
   folder: StoryEntityFolder,
-  preferredLanguage?: string | null,
-  fallbackLanguage?: string | null,
+  _preferredLanguage?: string | null,
+  _fallbackLanguage?: string | null,
 ): StoryEntityFolderData {
   const data = folder.data ?? {};
-  if (preferredLanguage && data[preferredLanguage]) {
-    return data[preferredLanguage];
-  }
-  if (fallbackLanguage && data[fallbackLanguage]) {
-    return data[fallbackLanguage];
-  }
-  const firstLanguage = Object.keys(data)[0];
-  if (firstLanguage && data[firstLanguage]) {
-    return data[firstLanguage];
-  }
   return {
-    name: '',
-    description: '',
+    name: typeof data.name === 'string' ? data.name : '',
+    description: typeof data.description === 'string' ? data.description : '',
   };
 }
 

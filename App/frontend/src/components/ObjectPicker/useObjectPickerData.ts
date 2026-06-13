@@ -6,7 +6,6 @@ import { useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useTimelineStore } from '../../store/timelineStore';
 import type { AnyObjectType, ObjectType, UnifiedObject } from '../../types/unifiedObject';
 import type { CalendarConfig, TimelineTrack } from '../../types/timeline';
 import { getAnyObjectTypeOrder } from '../../types/timeline';
@@ -20,6 +19,8 @@ import type {
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
 import { formatDate } from '../../utils/timelineCalendar';
+import { buildTimelineFromObjects } from '../../utils/timelineView';
+import { useTimelineStore } from '../../store/timelineStore';
 import {
   getStoryEntityFolderDescription,
   getStoryEntityFolderName,
@@ -43,14 +44,10 @@ type GetRichTextMarkdown = (
 ) => string | undefined;
 
 function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, unknown> {
-  if (obj.data[language]) {
-    return obj.data[language];
-  }
-  const availableLanguages = Object.keys(obj.data);
-  if (availableLanguages.length > 0) {
-    return obj.data[availableLanguages[0]];
-  }
-  return {};
+  void language;
+  return obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+    ? obj.data as Record<string, unknown>
+    : {};
 }
 
 export function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): AnyObjectType[] {
@@ -216,12 +213,6 @@ function objectToItem(
   };
 }
 
-function getTimelineDataForLanguage(data: Record<string, Record<string, unknown>>, language: string): Record<string, unknown> {
-  if (data[language]) return data[language];
-  const firstLanguage = Object.keys(data)[0];
-  return firstLanguage ? data[firstLanguage] : {};
-}
-
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -254,17 +245,17 @@ function formatTimelineEventDate(
 export function buildTimelineEventGroups(
   tracks: TimelineTrack[],
   calendar: CalendarConfig | null,
-  language: string,
+  _language: string,
   _mode: ObjectPickerMode,
   t: TFunction,
 ): ObjectPickerGroup[] {
   if (tracks.length === 0) return [];
 
   const untitledTrack = t('timeline.untitledTrack', 'Untitled Track');
-  const untitledEvent = t('timeline.untitledEvent', 'Untitled Event');
+    const untitledEvent = t('timeline.untitledEvent', 'Untitled Event');
 
   const buildTrackGroup = (track: TimelineTrack): ObjectPickerGroup => {
-    const trackData = getTimelineDataForLanguage(track.data, language);
+    const trackData = track.data;
     const trackName = toNonEmptyString(trackData.name) || untitledTrack;
     return {
       id: `timeline-track-${track.id}`,
@@ -288,7 +279,7 @@ export function buildTimelineEventGroups(
           },
         },
         ...track.events.map((event) => {
-          const eventData = getTimelineDataForLanguage(event.data, language);
+          const eventData = event.data;
           const eventDescription = toNonEmptyString(eventData.description);
           const formattedDate = formatTimelineEventDate(event.startDate, event.endDate, calendar);
           return {
@@ -705,13 +696,15 @@ export function useObjectPickerData({
   language,
   mode,
   excludeTypes = EMPTY_OBJECT_TYPES,
-  timelineOverride,
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const { t } = useTranslation();
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, language));
   const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
-  const storeTimeline = useTimelineStore((state) => (state.loadedProjectId === projectId ? state.timeline : null));
-  const timeline = timelineOverride !== undefined ? timelineOverride : storeTimeline;
+  const timelineConfig = useTimelineStore((state) => (projectId ? state.configByProject[projectId] : null));
+  const timeline = useMemo(
+    () => (projectId ? buildTimelineFromObjects(projectId, objects, timelineConfig) : null),
+    [objects, projectId, timelineConfig],
+  );
   const typesToInclude = useMemo(
     () => getTypesForMode(mode, excludeTypes),
     [mode, excludeTypes],

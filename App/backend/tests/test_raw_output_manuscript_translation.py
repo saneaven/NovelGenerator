@@ -128,10 +128,8 @@ def test_raw_object_translation_manuscript_uses_markdown_projection(monkeypatch)
             )
             return {
                 "data": {
-                    "English": {
-                        "content": "# Existing manuscript",
-                        "wordCount": 2,
-                    }
+                    "content": "# Existing manuscript",
+                    "wordCount": 2,
                 }
             }
 
@@ -164,7 +162,7 @@ def test_raw_object_translation_manuscript_uses_markdown_projection(monkeypatch)
             "object_type": "manuscript",
             "object_id": object_id,
             "project_id": project_id,
-            "language": None,
+            "language": "Korean",
             "rich_text_format": "markdown",
         }
     ]
@@ -194,11 +192,9 @@ def test_raw_object_translation_story_entity_stays_markdown_based(monkeypatch) -
             )
             return {
                 "data": {
-                    "Korean": {
-                        "name": "Ari",
-                        "description": "Broker",
-                        "content": "old content",
-                    }
+                    "name": "Ari",
+                    "description": "Broker",
+                    "content": "old content",
                 }
             }
 
@@ -236,6 +232,8 @@ def test_raw_object_translation_story_entity_stays_markdown_based(monkeypatch) -
         }
     ]
     assert captured["data"]["content"] == "new translated content"
+    assert captured["data"]["name"] == "Ari"
+    assert captured["data"]["description"] == "Broker"
     assert captured["rich_text_format"] == "markdown"
     assert captured["language"] == "Korean"
     assert captured["create_new_version"] is False
@@ -261,11 +259,9 @@ def test_raw_object_translation_timeline_track_uses_markdown_projection(monkeypa
             )
             return {
                 "data": {
-                    "Korean": {
-                        "name": "Track",
-                        "description": "Track desc",
-                        "content": "old timeline markdown",
-                    }
+                    "name": "Track",
+                    "description": "Track desc",
+                    "content": "old timeline markdown",
                 }
             }
 
@@ -304,9 +300,11 @@ def test_raw_object_translation_timeline_track_uses_markdown_projection(monkeypa
     ]
     assert captured["rich_text_format"] == "markdown"
     assert captured["data"]["content"] == "new translated timeline markdown"
+    assert captured["data"]["name"] == "Track"
+    assert captured["data"]["description"] == "Track desc"
 
 
-def test_raw_object_translation_basic_info_omits_projection(monkeypatch) -> None:
+def test_raw_object_translation_basic_info_uses_projection(monkeypatch) -> None:
     object_id = uuid4()
     project_id = uuid4()
     user_id = uuid4()
@@ -326,10 +324,8 @@ def test_raw_object_translation_basic_info_omits_projection(monkeypatch) -> None
             )
             return {
                 "data": {
-                    "Korean": {
-                        "title": "Novel",
-                        "logline": "Old logline",
-                    }
+                    "title": "Novel",
+                    "logline": "Old logline",
                 }
             }
 
@@ -366,4 +362,5 @@ def test_raw_object_translation_basic_info_omits_projection(monkeypatch) -> None
         }
     ]
     assert "rich_text_format" not in captured
+    assert captured["data"]["title"] == "Novel"
     assert captured["data"]["logline"] == "New logline"

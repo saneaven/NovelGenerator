@@ -28,11 +28,11 @@ describe('translationAvailability', () => {
       status('event-1', 'timeline_event', ['English', 'Korean'], []),
     ]);
 
-    expect(hasLanguageForObject(statuses, 'event-1', { English: {} }, 'Korean')).toBe(true);
+    expect(hasLanguageForObject(statuses, 'event-1', ['English'], 'Korean')).toBe(true);
     expect(shouldOfferObjectForTranslation({
       statusByObjectId: statuses,
       objectId: 'event-1',
-      dataByLanguage: { English: {} },
+      availableLanguages: ['English'],
       sourceLanguage: 'English',
       targetLanguage: 'Korean',
       preSelected: false,
@@ -49,7 +49,7 @@ describe('translationAvailability', () => {
       expect(shouldOfferObjectForTranslation({
         statusByObjectId: statuses,
         objectId,
-        dataByLanguage: { English: {} },
+        availableLanguages: ['English'],
         sourceLanguage: 'English',
         targetLanguage: 'Korean',
         preSelected: false,
@@ -66,7 +66,7 @@ describe('translationAvailability', () => {
     expect(shouldOfferObjectForTranslation({
       statusByObjectId: statuses,
       objectId: 'event-1',
-      dataByLanguage: {},
+      availableLanguages: [],
       sourceLanguage: 'English',
       targetLanguage: 'Korean',
       preSelected: true,
@@ -74,7 +74,7 @@ describe('translationAvailability', () => {
     expect(shouldOfferObjectForTranslation({
       statusByObjectId: statuses,
       objectId: 'event-2',
-      dataByLanguage: {},
+      availableLanguages: [],
       sourceLanguage: 'English',
       targetLanguage: 'Korean',
       preSelected: true,
