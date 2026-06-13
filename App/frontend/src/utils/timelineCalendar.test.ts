@@ -3,10 +3,12 @@ import type { CalendarConfig } from '../types/timeline';
 import {
   baseUnitsPerTopUnit,
   compareTimelineDates,
+  dateUnitMax,
   defaultCalendar,
   durationBreakdown,
   formatAnchorLabel,
   toBaseUnits,
+  unitLabelTokens,
   wholeTopUnitsBetween,
 } from './timelineCalendar';
 
@@ -33,6 +35,26 @@ describe('compareTimelineDates', () => {
     expect(compareTimelineDates(a, b, GREGORIAN)).toBeLessThan(0);
     expect(compareTimelineDates(b, a, GREGORIAN)).toBeGreaterThan(0);
     expect(compareTimelineDates(a, { ...a }, GREGORIAN)).toBe(0);
+  });
+});
+
+describe('dateUnitMax', () => {
+  it('leaves the top unit open-ended (no max), not its own count', () => {
+    // regression: the top unit's count is "children per parent", NOT a cap on
+    // the top unit itself — year must not be capped at 12 / age at 3.
+    expect(dateUnitMax(AGE_CALENDAR, { age: 1, season: 1, day: 1 }, 'age')).toBeUndefined();
+    expect(dateUnitMax(GREGORIAN, { year: 1, month: 1, day: 1 }, 'year')).toBeUndefined();
+  });
+
+  it('caps each child unit by its parent unit count', () => {
+    expect(dateUnitMax(AGE_CALENDAR, { age: 1, season: 1, day: 1 }, 'season')).toBe(3);
+    expect(dateUnitMax(AGE_CALENDAR, { age: 1, season: 1, day: 1 }, 'day')).toBe(90);
+  });
+
+  it('uses gregorian-aware bounds for gregorian calendars', () => {
+    expect(dateUnitMax(GREGORIAN, { year: 2024, month: 2, day: 1 }, 'month')).toBe(12);
+    expect(dateUnitMax(GREGORIAN, { year: 2024, month: 2, day: 1 }, 'day')).toBe(29);
+    expect(dateUnitMax(GREGORIAN, { year: 2023, month: 2, day: 1 }, 'day')).toBe(28);
   });
 });
 
@@ -174,6 +196,18 @@ describe('formatAnchorLabel', () => {
   it('uses user-authored labels for fixed calendars', () => {
     const label = formatAnchorLabel({ age: 3, season: 2, day: 1 }, { age: 3, season: 1, day: 1 }, AGE_CALENDAR);
     expect(label.parts).toEqual([{ text: 'Season 2', rank: 1 }]);
+  });
+});
+
+describe('unitLabelTokens', () => {
+  it('returns every gregorian unit token, top unit first', () => {
+    expect(unitLabelTokens({ year: 1023, month: 3, day: 12, hour: 15, minute: 33 }, GREGORIAN))
+      .toEqual(['Y1023', 'M3', 'D12', '14:32']);
+  });
+
+  it('uses user-authored labels for fixed calendars', () => {
+    expect(unitLabelTokens({ age: 3, season: 2, day: 5 }, AGE_CALENDAR))
+      .toEqual(['Age 3', 'Season 2', 'Day 5']);
   });
 });
 

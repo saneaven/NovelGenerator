@@ -16,7 +16,7 @@ import AnchorRow from './AnchorRow';
 import BreakSeparator from './BreakSeparator';
 import SpanRail from './SpanRail';
 import StickyPeriodPill from './StickyPeriodPill';
-import { topUnitLabel } from './streamText';
+import { stickyPeriodLabel } from './streamText';
 import './TimelineStream.css';
 
 export interface TimelineStreamHandle {
@@ -201,10 +201,12 @@ const TimelineStream = forwardRef<TimelineStreamHandle, TimelineStreamProps>(({
     if (index === -1) return null;
     for (let i = index; i >= 0; i -= 1) {
       const row = layout.rows[i];
-      if (row.kind === 'anchor') return topUnitLabel(row.date, calendar);
+      if (row.kind === 'anchor') return stickyPeriodLabel(row.date, row.labelRank, calendar);
     }
     const firstAnchor = layout.rows.find((row) => row.kind === 'anchor');
-    return firstAnchor && firstAnchor.kind === 'anchor' ? topUnitLabel(firstAnchor.date, calendar) : null;
+    return firstAnchor && firstAnchor.kind === 'anchor'
+      ? stickyPeriodLabel(firstAnchor.date, firstAnchor.labelRank, calendar)
+      : null;
   }, [topRowKey, layout, calendar]);
 
   const useContentVisibility = layout.rows.length > CONTENT_VISIBILITY_THRESHOLD;

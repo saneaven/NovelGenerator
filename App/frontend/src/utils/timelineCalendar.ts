@@ -162,7 +162,11 @@ export function dateUnitMax(calendar: CalendarConfig, dateValue: TimelineDate, u
     if (unitName === 'minute') return 60;
     return undefined;
   }
-  return calendar.units.find((unit) => unit.name === unitName)?.count;
+  // count = how many of the CHILD unit fit in a unit, so a unit's max is its
+  // PARENT's count (mirrors validateDate). The top unit is open-ended.
+  const idx = calendar.units.findIndex((unit) => unit.name === unitName);
+  if (idx <= 0) return undefined;
+  return calendar.units[idx - 1].count;
 }
 
 export function clampTimelineDate(dateValue: TimelineDate, calendar: CalendarConfig): TimelineDate {
@@ -324,6 +328,14 @@ function buildLabelGroups(
     differs: prevDate !== null && part(dateValue, unit.name) !== part(prevDate, unit.name),
     isDefault: part(dateValue, unit.name) === 1,
   }));
+}
+
+/** Compact tokens for every unit of a date, top unit first — same format as the anchor gutter parts. */
+export function unitLabelTokens(
+  dateValue: TimelineDate,
+  unitsOrCalendar: CalendarConfig | CalendarUnit[],
+): string[] {
+  return buildLabelGroups(dateValue, null, unitsOrCalendar).map((group) => group.text);
 }
 
 /**

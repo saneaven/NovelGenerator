@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { resolveNumberInput } from './numberInputParse';
 
 interface NumberInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
   /** The controlled numeric value (or undefined for optional fields). */
   value: number | undefined;
-  /** Called with the validated number on blur, or undefined if the field is empty and allowEmpty is true. */
+  /** Called with the validated number as the user types, and again (normalized) on blur. */
   onValueChange: (value: number | undefined) => void;
-  /** Minimum allowed value. Clamped on blur. */
+  /** Minimum allowed value. Clamped on every commit. */
   min?: number;
-  /** Maximum allowed value. Clamped on blur. */
+  /** Maximum allowed value. Clamped on every commit. */
   max?: number;
   /** If true, empty field commits undefined instead of clamping to min. Default: false. */
   allowEmpty?: boolean;
@@ -39,9 +40,16 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     }
   }, [value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayValue(e.target.value);
-  };
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      // keep showing exactly what the user typed; commit live so callers stay in sync
+      setDisplayValue(raw);
+      const result = resolveNumberInput(raw, { min, max, integer, allowEmpty, fallback: min ?? value ?? 0 }, false);
+      if (result.commit) onValueChange(result.value);
+    },
+    [onValueChange, min, max, allowEmpty, integer, value]
+  );
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     isFocusedRef.current = true;
@@ -51,37 +59,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   const handleBlur = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
       isFocusedRef.current = false;
-      const raw = displayValue.trim();
-
-      if (raw === '') {
-        if (allowEmpty) {
-          onValueChange(undefined);
-          setDisplayValue('');
-        } else {
-          const fallback = min ?? value ?? 0;
-          onValueChange(fallback);
-          setDisplayValue(String(fallback));
-        }
-        onBlurProp?.(e);
-        return;
-      }
-
-      let parsed = integer ? parseInt(raw, 10) : parseFloat(raw);
-
-      if (Number.isNaN(parsed)) {
-        const fallback = min ?? value ?? 0;
-        onValueChange(fallback);
-        setDisplayValue(String(fallback));
-        onBlurProp?.(e);
-        return;
-      }
-
-      if (min !== undefined) parsed = Math.max(min, parsed);
-      if (max !== undefined) parsed = Math.min(max, parsed);
-      if (integer) parsed = Math.trunc(parsed);
-
-      onValueChange(parsed);
-      setDisplayValue(String(parsed));
+      const result = resolveNumberInput(displayValue, { min, max, integer, allowEmpty, fallback: min ?? value ?? 0 }, true);
+      if (result.commit) onValueChange(result.value);
+      if (result.display !== undefined) setDisplayValue(result.display);
       onBlurProp?.(e);
     },
     [displayValue, onValueChange, min, max, allowEmpty, integer, value, onBlurProp]

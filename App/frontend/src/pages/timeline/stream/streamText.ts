@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { CalendarConfig, TimelineDate } from '../../../types/timeline';
-import { durationBreakdown, isGregorianCalendar } from '../../../utils/timelineCalendar';
+import { durationBreakdown, isGregorianCalendar, unitLabelTokens } from '../../../utils/timelineCalendar';
 import type { VisibleEvent } from '../layout/types';
 
 const GREGORIAN_DURATION_UNITS = new Set(['year', 'month', 'day', 'hour', 'minute']);
@@ -32,9 +32,11 @@ export function formatBreakText(
   return t('timeline.break.unitsLater', { count, unit: unitLabel });
 }
 
-/** Sticky pill text: the top calendar unit of a date. */
-export function topUnitLabel(date: TimelineDate, calendar: CalendarConfig): string {
-  if (isGregorianCalendar(calendar)) return `Y${Number(date.year ?? 1)}`;
-  const top = calendar.units[0];
-  return `${top.label || top.name} ${Number(date[top.name] ?? 1)}`;
+/**
+ * Sticky pill text: the higher-order units the top viewport card omitted (ranks above its
+ * label rank), so pill + card reads as the full date. The top unit is always kept, so the
+ * pill never empties even on a top-unit-boundary card.
+ */
+export function stickyPeriodLabel(date: TimelineDate, labelRank: number, calendar: CalendarConfig): string {
+  return unitLabelTokens(date, calendar).slice(0, Math.max(labelRank, 1)).join(' ');
 }
