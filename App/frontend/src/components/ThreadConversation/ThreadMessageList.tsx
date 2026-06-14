@@ -250,6 +250,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             const isEditing = editingMessageId === row.message.id;
             const isAnyMessageEditing = Boolean(editingMessageId);
             const translating = Boolean(translatingByMessageId[row.message.id]);
+            const canCopy = !row.isStreaming && Boolean(row.bodyText);
             const canEdit = !row.isStreaming && !row.isSecondaryView && !isAnyMessageEditing;
             const canTranslate = !row.isStreaming && !row.isSecondaryView && !isAnyMessageEditing;
             const canToggleLanguage = !row.isStreaming
@@ -269,10 +270,12 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             const hasSubAgentCalls = row.toolCalls.some((toolCall) => (
               toolCall.toolName.startsWith('call_') && Boolean(toolCall.childThreadId)
             ));
-            const hasToolbar = canEdit || canTranslate || canToggleLanguage || canDelete;
+            const hasToolbar = canCopy || canEdit || canTranslate || canToggleLanguage || canDelete;
 
             const messageToolbar = hasToolbar ? (
               <MessageRowToolbar
+                canCopy={canCopy}
+                copyText={row.bodyText}
                 canEdit={canEdit}
                 canTranslate={canTranslate}
                 canToggleLanguage={canToggleLanguage}

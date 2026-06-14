@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../IconButton';
-import { Edit, Eye, Globe, Trash } from '../icons';
+import { Check, Copy, Edit, Eye, Globe, Trash } from '../icons';
 
 interface MessageRowToolbarProps {
+  canCopy: boolean;
   canEdit: boolean;
   canTranslate: boolean;
   canToggleLanguage: boolean;
   canDelete: boolean;
+  copyText?: string;
   editDisabled?: boolean;
   translateDisabled?: boolean;
   deleteDisabled?: boolean;
@@ -23,10 +25,12 @@ interface MessageRowToolbarProps {
 }
 
 const MessageRowToolbar: React.FC<MessageRowToolbarProps> = React.memo(({
+  canCopy,
   canEdit,
   canTranslate,
   canToggleLanguage,
   canDelete,
+  copyText = '',
   editDisabled = false,
   translateDisabled = false,
   deleteDisabled = false,
@@ -41,8 +45,24 @@ const MessageRowToolbar: React.FC<MessageRowToolbarProps> = React.memo(({
   onDelete,
 }) => {
   const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
 
-  if (!canEdit && !canTranslate && !canToggleLanguage && !canDelete) return null;
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopied(true);
+    } catch (err) {
+      console.error('Failed to copy message', err);
+    }
+  };
+
+  if (!canCopy && !canEdit && !canTranslate && !canToggleLanguage && !canDelete) return null;
 
   const translateTitle = targetLanguage
     ? (
@@ -57,6 +77,16 @@ const MessageRowToolbar: React.FC<MessageRowToolbarProps> = React.memo(({
 
   return (
     <div className="thread-message-toolbar" aria-label={t('agent.messageActions')}>
+      {canCopy && (
+        <IconButton
+          icon={copied ? <Check size="sm" /> : <Copy size="sm" />}
+          onClick={() => void handleCopy()}
+          title={copied ? t('agent.copied') : t('agent.copy')}
+          variant="ghost"
+          size="sm"
+          isActive={copied}
+        />
+      )}
       {canEdit && (
         <IconButton
           icon={<Edit size="sm" />}

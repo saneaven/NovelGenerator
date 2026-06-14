@@ -1334,6 +1334,8 @@
     "projectHelp": "\"{{projectName}}\" 프로젝트에 대해 무엇을 도와드릴까요?",
     "you": "나",
     "ai": "AI",
+    "copy": "복사",
+    "copied": "복사됨",
     "edit": "편집",
     "delete": "삭제",
     "showMore": "더 보기",

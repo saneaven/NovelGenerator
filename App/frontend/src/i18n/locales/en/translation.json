@@ -1334,6 +1334,8 @@
     "projectHelp": "What can I help you with for the \"{{projectName}}\" project?",
     "you": "You",
     "ai": "AI",
+    "copy": "Copy",
+    "copied": "Copied",
     "edit": "Edit",
     "delete": "Delete",
     "showMore": "Show more",
