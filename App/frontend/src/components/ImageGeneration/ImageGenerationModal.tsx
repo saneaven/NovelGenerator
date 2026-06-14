@@ -822,7 +822,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             ))}
                         </select>
                     </div>
+                </div>
 
+                {/* Model Selection */}
+                <div className="form-row">
                     <div className="form-field">
                         <label>Model</label>
                         <ImageModelBrowser

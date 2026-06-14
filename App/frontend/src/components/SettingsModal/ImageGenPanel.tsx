@@ -76,8 +76,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         <p className="panel-description">{t('settings.imageGen.description')}</p>
       </div>
 
-      <div className="settings-grid">
-        <div className="setting-item">
+      <div className="settings-grid image-settings-grid">
+        <div className="setting-item setting-item--full">
           <label className="setting-label">
             <span className="label-text">{t('settings.imageGen.provider')}</span>
             <span className="label-hint">{t('settings.imageGen.providerHint')}</span>
@@ -101,7 +101,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
           />
         </div>
 
-        <div className="setting-item">
+        <div className="setting-item setting-item--full">
           <label className="setting-label">
             <span className="label-text">{t('settings.imageGen.model')}</span>
             <span className="label-hint">{t('settings.imageGen.modelHint')}</span>

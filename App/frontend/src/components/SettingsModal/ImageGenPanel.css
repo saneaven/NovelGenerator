@@ -18,6 +18,14 @@
     gap: var(--spacing-sm);
 }
 
+.image-settings-grid {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.setting-item--full {
+    grid-column: 1 / -1;
+}
+
 .style-select-row {
     display: flex;
     align-items: center;
