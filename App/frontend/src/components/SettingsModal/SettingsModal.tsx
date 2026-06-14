@@ -21,7 +21,7 @@ import ProfilePanel from './ProfilePanel';
 import SearchMemoryPanel from './SearchMemoryPanel';
 import LLMLogViewer from './LLMLogViewer';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star } from '../icons';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List, Star, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
@@ -629,7 +629,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </button>
         <h2><SettingsIcon size="xl" /> {t('settings.title')}</h2>
         <button className="close-button" onClick={handleRequestClose}>
-          ×
+          <Close size="md" />
         </button>
       </div>
 

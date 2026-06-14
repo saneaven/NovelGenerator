@@ -8,6 +8,7 @@ import type { AnyObjectType } from '../../types/unifiedObject';
 import { getAnyObjectTypeLabel } from '../../types/timeline';
 import type { ObjectPickerSearchProps } from './types';
 import CustomSelect from '../ui/CustomSelect';
+import { Close } from '../icons';
 
 const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
   value,
@@ -75,7 +76,7 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
             onClick={handleClear}
             aria-label={t('objectPicker.clearSearch')}
           >
-            ×
+            <Close size="xs" />
           </button>
         )}
       </div>

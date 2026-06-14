@@ -26,9 +26,11 @@
 }
 
 .image-generation-modal .close-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
-    font-size: var(--font-size-xl);
     color: var(--color-text-secondary);
     cursor: pointer;
     padding: 0;

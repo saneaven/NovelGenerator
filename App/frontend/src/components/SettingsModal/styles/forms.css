@@ -95,9 +95,46 @@ textarea {
 }
 
 .model-input-row input,
+.model-input-row > .model-input-control,
 .template-selector-row .custom-select {
     flex: 1 1 auto;
     min-width: 0;
+}
+
+/* Model name input that doubles as the search field, with an inline clear (×) button */
+.model-input-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.model-input-control .config-input {
+    width: 100%;
+    padding-right: var(--spacing-xl);
+}
+
+.model-input-clear {
+    position: absolute;
+    right: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: var(--color-surface-subtle);
+    color: var(--color-text-tertiary);
+    line-height: 1;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.model-input-clear:hover {
+    background: var(--color-surface-elevated);
+    color: var(--color-text-primary);
 }
 
 /* Slider / Range Input */

@@ -483,9 +483,11 @@
 }
 
 .object-picker-preview-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
-  font-size: var(--font-size-lg);
   color: var(--color-text-tertiary);
   cursor: pointer;
   padding: 0;

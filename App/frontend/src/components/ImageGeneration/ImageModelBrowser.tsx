@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import type { ImageModelInfo } from '../../api/assetService';
 import type { ImageProviderType } from '../../store/settingsStore';
 import { TextButton } from '../TextButton';
-import { Check } from '../icons';
+import { Check, Close } from '../icons';
+import { useTranslation } from 'react-i18next';
 import './ImageModelBrowser.css';
 
 type ImageModelBrowserProps = {
@@ -48,7 +49,6 @@ function getBadges(model: ImageModelInfo): string[] {
 }
 
 const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
-  provider,
   models,
   currentModel,
   onSelectModel,
@@ -56,11 +56,12 @@ const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
   error = null,
   disabled = false,
 }) => {
+  const { t } = useTranslation();
   const [showBrowser, setShowBrowser] = useState(false);
-  const [query, setQuery] = useState('');
 
+  // The model-name input doubles as the search field.
   const filteredModels = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = currentModel.trim().toLowerCase();
     if (!needle) return models;
     return models.filter((model) => {
       return model.name.toLowerCase().includes(needle)
@@ -68,19 +69,31 @@ const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
         || String(model.description || '').toLowerCase().includes(needle)
         || String(model.category || '').toLowerCase().includes(needle);
     });
-  }, [models, query]);
+  }, [models, currentModel]);
 
   return (
     <div className="image-model-browser">
       <div className="model-input-row">
-        <input
-          type="text"
-          value={currentModel}
-          onChange={(event) => onSelectModel(event.target.value)}
-          placeholder={loading ? 'Loading models...' : 'Select a model'}
-          className="config-input"
-          disabled={disabled}
-        />
+        <div className="model-input-control">
+          <input
+            type="text"
+            value={currentModel}
+            onChange={(event) => onSelectModel(event.target.value)}
+            placeholder={loading ? 'Loading models...' : 'Search or enter a model'}
+            className="config-input"
+            disabled={disabled}
+          />
+          {currentModel && !disabled ? (
+            <button
+              type="button"
+              className="model-input-clear"
+              onClick={() => onSelectModel('')}
+              aria-label={t('common.clear')}
+            >
+              <Close size="xs" />
+            </button>
+          ) : null}
+        </div>
         <TextButton
           variant={showBrowser ? 'primary' : 'secondary'}
           size="sm"
@@ -94,13 +107,6 @@ const ImageModelBrowser: React.FC<ImageModelBrowserProps> = ({
 
       {showBrowser ? (
         <div className="image-model-browser__panel">
-          <input
-            type="text"
-            className="config-input"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${provider} models...`}
-          />
           {error ? <div className="image-model-browser__empty">{error}</div> : null}
           {!error && filteredModels.length === 0 ? (
             <div className="image-model-browser__empty">

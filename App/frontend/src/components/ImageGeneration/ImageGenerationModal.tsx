@@ -699,7 +699,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 <h3>Generate Image</h3>
                 {onClose && (
                     <button className="close-button" onClick={onClose}>
-                        &times;
+                        <Close size="md" />
                     </button>
                 )}
             </div>

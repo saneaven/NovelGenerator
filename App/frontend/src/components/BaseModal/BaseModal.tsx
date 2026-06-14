@@ -2,6 +2,7 @@ import React, { useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useModalHistory } from '../../hooks/useModalHistory';
 import type { BaseModalProps } from './types';
+import { Close } from '../icons';
 import './BaseModal.css';
 
 const BaseModal: React.FC<BaseModalProps> = ({
@@ -95,7 +96,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
                 aria-label="Close"
                 type="button"
               >
-                &times;
+                <Close size="md" />
               </button>
             )}
           </div>

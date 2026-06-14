@@ -21,7 +21,7 @@ import ToggleSwitch from '../common/ToggleSwitch';
 import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
 import { IconButton } from '../IconButton';
-import { ChevronLeft, ChevronRight, Scroll, Search, Settings as SettingsIcon, Toggle } from '../icons';
+import { ChevronLeft, ChevronRight, Close, Scroll, Search, Settings as SettingsIcon, Toggle } from '../icons';
 import { useProviderSpecStore } from '../../providerEngine/store';
 import './SearchMemoryPanel.css';
 
@@ -294,13 +294,25 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
           <div className="form-field">
             <label>{t('settings.searchMemory.fields.model')}</label>
             <div className="model-input-row">
-              <input
-                type="text"
-                value={config.embedding.model}
-                onChange={(event) => handleModelChange(event.target.value)}
-                placeholder={t('settings.searchMemory.fields.modelPlaceholder')}
-                className="config-input"
-              />
+              <div className="model-input-control">
+                <input
+                  type="text"
+                  value={config.embedding.model}
+                  onChange={(event) => handleModelChange(event.target.value)}
+                  placeholder={t('settings.searchMemory.fields.modelPlaceholder')}
+                  className="config-input"
+                />
+                {config.embedding.model ? (
+                  <button
+                    type="button"
+                    className="model-input-clear"
+                    onClick={() => handleModelChange('')}
+                    aria-label={t('common.clear')}
+                  >
+                    <Close size="xs" />
+                  </button>
+                ) : null}
+              </div>
               <TextButton
                 variant={showModelBrowser && activeModelBrowser === target ? 'primary' : 'secondary'}
                 size="sm"

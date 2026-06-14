@@ -6,7 +6,7 @@ import { TOOL_CALL_AUTO_APPROVE_CATEGORIES } from '../../store/settingsStore';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
 import { NumberInput } from '../ui/NumberInput';
-import { Refresh, Document } from '../icons';
+import { Refresh, Document, Close } from '../icons';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
@@ -159,7 +159,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                                         disabled={!retryConfig.enabled}
                                         title={t('settings.advanced.errorRetry.remove')}
                                     >
-                                        ×
+                                        <Close size="xs" />
                                     </button>
                                 </div>
                             ))

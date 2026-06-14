@@ -6,6 +6,7 @@ import React, { useCallback } from 'react';
 import { getAnyObjectTypeLabel } from '../../types/timeline';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import type { ObjectPickerPreviewProps } from './types';
+import { Close } from '../icons';
 
 const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
   item,
@@ -75,7 +76,7 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
             onClick={onClose}
             aria-label="Close preview"
           >
-            ×
+            <Close size="xs" />
           </button>
         </div>
 

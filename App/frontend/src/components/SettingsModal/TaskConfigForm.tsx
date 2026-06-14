@@ -15,7 +15,7 @@ import ThinkingTemplateEditor from './ThinkingTemplateEditor';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
-import { Warning, Settings, Advenced } from '../icons';
+import { Warning, Settings, Advenced, Close } from '../icons';
 import { useProviderSpecStore } from '../../providerEngine/store';
 import {
   buildSelectOptions,
@@ -312,13 +312,25 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         <div className="form-field">
           <label>{t('settings.taskConfig.aiModel')}</label>
           <div className="model-input-row">
-            <input
-              type="text"
-              value={config.model}
-              onChange={(event) => emitChange({ ...config, model: event.target.value })}
-              placeholder={t('settings.taskConfig.modelPlaceholder')}
-              className="config-input"
-            />
+            <div className="model-input-control">
+              <input
+                type="text"
+                value={config.model}
+                onChange={(event) => emitChange({ ...config, model: event.target.value })}
+                placeholder={t('settings.taskConfig.modelPlaceholder')}
+                className="config-input"
+              />
+              {config.model ? (
+                <button
+                  type="button"
+                  className="model-input-clear"
+                  onClick={() => emitChange({ ...config, model: '' })}
+                  aria-label={t('common.clear')}
+                >
+                  <Close size="xs" />
+                </button>
+              ) : null}
+            </div>
             <TextButton
               variant={showModelBrowser ? 'primary' : 'secondary'}
               size="sm"

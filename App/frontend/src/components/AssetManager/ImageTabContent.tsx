@@ -751,7 +751,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         {error && (
                             <div className="error-banner">
                                 {error}
-                                <button onClick={clearError}>&times;</button>
+                                <button onClick={clearError} aria-label="Close"><Close size="xs" /></button>
                             </div>
                         )}
 

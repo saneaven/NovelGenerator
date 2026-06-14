@@ -400,8 +400,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
-  // Search, filter, and sort state
-  const [searchQuery, setSearchQuery] = useState('');
+  // Filter and sort state (search uses the currentModel input as its query)
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [accessTierFilter, setAccessTierFilter] = useState<AccessTierFilter>('all');
 
@@ -574,9 +573,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
     let models = [...modelsData.data];
 
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    // Filter by search query (the model-name input doubles as the search field)
+    if (currentModel.trim()) {
+      const query = currentModel.toLowerCase();
       models = models.filter((model: any) => {
         const name = getModelDisplayName(model).toLowerCase();
         const id = (model.id || '').toLowerCase();
@@ -620,7 +619,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     });
 
     return models;
-  }, [detailsConfig.showPricing, modelsData, provider, searchQuery, sortOption, accessTierFilter]);
+  }, [detailsConfig.showPricing, modelsData, provider, currentModel, sortOption, accessTierFilter]);
 
   const modelTree = useMemo((): TreeNode[] | null => {
     if (grouping === 'flat' || !processedModels.length) return null;
@@ -968,8 +967,8 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
 
     if (!modelsData?.data || processedModels.length === 0) {
-      if (searchQuery) {
-        return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsFound', { query: searchQuery })}</div>;
+      if (currentModel) {
+        return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsFound', { query: currentModel })}</div>;
       }
       return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsAvailable')}</div>;
     }
@@ -995,15 +994,8 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
       {
         <div className="model-browser__content">
-          {/* Toolbar: Search and Sort */}
+          {/* Toolbar: Filter and Sort (search is driven by the model-name input) */}
           <div className="model-browser__toolbar">
-            <input
-              type="text"
-              placeholder={t('settings.modelBrowser.searchPlaceholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="model-browser__search"
-            />
             {provider === 'nanogpt' && (
               <CustomSelect
                 value={accessTierFilter}

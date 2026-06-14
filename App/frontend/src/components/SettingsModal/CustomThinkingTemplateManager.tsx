@@ -8,6 +8,7 @@ import type {
 } from '../../store/settingsStore';
 import { TextButton } from '../TextButton';
 import ToggleSwitch from '../common/ToggleSwitch';
+import { Close } from '../icons';
 import './CustomThinkingTemplateManager.css';
 
 interface Props {
@@ -142,7 +143,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
               </select>
             </div>
             <button className="remove-field-button" onClick={() => removeEffortField(idx)}>
-              &times;
+              <Close size="xs" />
             </button>
           </div>
         ))}
@@ -186,7 +187,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
               />
             </div>
             <button className="remove-field-button" onClick={() => removeResponseField(idx)}>
-              &times;
+              <Close size="xs" />
             </button>
           </div>
         ))}
@@ -223,7 +224,7 @@ const CustomThinkingTemplateManager: React.FC<Props> = ({ template, onUpdate }) 
               />
             </div>
             <button className="remove-field-button" onClick={() => removeHistoryField(idx)}>
-              &times;
+              <Close size="xs" />
             </button>
           </div>
         ))}
