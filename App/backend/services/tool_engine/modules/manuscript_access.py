@@ -68,7 +68,7 @@ async def validate_patch_args(*, args: dict[str, Any], ctx: ToolValidationContex
 
     rr = apply_single_replacement(markdown, old_text, new_text)
     if not rr.success:
-        raise ValueError(rr.code or rr.reason or "patch failed")
+        raise ValueError(rr.reason or rr.code or "patch failed")
 
 
 async def replace_manuscript(
@@ -124,7 +124,7 @@ async def patch_manuscript(
 
     rr = apply_single_replacement(markdown, old_text, new_text)
     if not rr.success:
-        raise ValueError(rr.code or rr.reason or "patch failed")
+        raise ValueError(rr.reason or rr.code or "patch failed")
 
     object_service.update_object(
         ctx.db,

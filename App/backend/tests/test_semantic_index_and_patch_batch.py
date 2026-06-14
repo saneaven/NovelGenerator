@@ -752,6 +752,41 @@ def test_object_patch_batch_reads_and_writes_markdown_for_rich_objects(monkeypat
     assert "daily routines as the community rebuilds" in captured["written_data"]["content"]
 
 
+def test_object_patch_batch_preserves_patch_mismatch_reason(monkeypatch) -> None:
+    session = FakeNestedSession()
+    batch = ObjectPatchBatch()
+    object_id = uuid4()
+    project_id = uuid4()
+
+    def _fake_read_object(*_args, **_kwargs):
+        return {
+            "content": "제단 위에는 검은 봉인석이 놓여 있었다.",
+        }
+
+    monkeypatch.setattr(object_patch_batch_module, "read_object", _fake_read_object)
+
+    result = batch.apply_patch(
+        db=session,
+        project_id=project_id,
+        object_type="outline",
+        object_id=object_id,
+        language="Korean",
+        field="content",
+        old_text="제단 위에는 붉은 봉인석이 놓여 있었다.",
+        new_text="제단 위에는 푸른 봉인석이 놓여 있었다.",
+        call_id="call-1",
+        create_new_version=True,
+        user_id=uuid4(),
+    )
+
+    assert result["success"] is False
+    assert result["reason"] == (
+        'PATCH_NOT_FOUND\n'
+        'expected="제단 위에는 붉은 봉인석이 놓여 있었다."\n'
+        'actual="제단 위에는 검은 봉인석이 놓여 있었다."'
+    )
+
+
 def test_thread_routes_marks_processing_tool_calls_failed_after_flush_errors() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     routes_text = (backend_root / "routes" / "thread_routes.py").read_text(encoding="utf-8")
