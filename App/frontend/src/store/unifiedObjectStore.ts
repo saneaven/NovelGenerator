@@ -522,16 +522,19 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     if (!projectId) return [];
 
     const requestKey = getCollectionRequestKey(projectId, collectionHydrationKey('outline', language));
+    // Revision is keyed per (project, language) so that concurrent reloads for
+    // different languages don't invalidate each other's hydration commit.
+    const revisionKey = projectionCacheKey(projectId, language);
     setCollectionLoading(requestKey, true);
     try {
-      const nextRevision = (outlineCollectionRevision.get(projectId) ?? 0) + 1;
-      outlineCollectionRevision.set(projectId, nextRevision);
+      const nextRevision = (outlineCollectionRevision.get(revisionKey) ?? 0) + 1;
+      outlineCollectionRevision.set(revisionKey, nextRevision);
 
       const [outlineObjects, markdownOutlineObjects] = await Promise.all([
         fetchAllOutlinePages(projectId, language),
         fetchAllOutlineMarkdownPages(projectId, language),
       ]);
-      if ((outlineCollectionRevision.get(projectId) ?? 0) !== nextRevision) {
+      if ((outlineCollectionRevision.get(revisionKey) ?? 0) !== nextRevision) {
         return getProjectObjectsByType(
           projectId,
           'outline',

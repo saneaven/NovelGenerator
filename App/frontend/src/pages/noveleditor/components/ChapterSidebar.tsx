@@ -27,7 +27,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   displayLanguage,
 }) => {
   const { t } = useTranslation();
-  const store = useUnifiedObjectStore();
+  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
+  const getManuscriptByChapterId = useUnifiedObjectStore((state) => state.getManuscriptByChapterId);
   const projectionObjects = useUnifiedObjectStore(
     (state) => state.getObjectsForProject(projectId, displayLanguage),
   );
@@ -79,14 +80,14 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     const loadOutlineData = async () => {
       if (!projectId) return;
       try {
-        await store.listObjects('outline', projectId, displayLanguage);
-        await store.listObjects('manuscript', projectId, displayLanguage);
+        await listObjects('outline', projectId, displayLanguage);
+        await listObjects('manuscript', projectId, displayLanguage);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
     };
     loadOutlineData();
-  }, [displayLanguage, projectId, store]);
+  }, [displayLanguage, projectId, listObjects]);
 
   // Get outlines for dropdown
   const outlines = useMemo(() => {
@@ -252,7 +253,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                     {actChapters.length > 0 ? (
                       actChapters.map((chapter, chapIndex) => {
                         const chapData = getLocalizedData(chapter, { name: t('chapterSidebar.untitledChapter'), description: '' });
-                        const manuscript = store.getManuscriptByChapterId(chapter.id) as ManuscriptObject | null;
+                        const manuscript = getManuscriptByChapterId(chapter.id) as ManuscriptObject | null;
                         const manuData = manuscript ? getLocalizedData(manuscript, { wordCount: 0 }) : { wordCount: 0 };
                         const isSelected = selectedChapterId === chapter.id;
 
