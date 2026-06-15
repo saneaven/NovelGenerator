@@ -23,7 +23,7 @@ import StringChipInput from '../ui/StringChipInput';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image, Save, Close } from '../icons';
-import { Loading } from '../common/Loading';
+import { Skeleton, SkeletonText } from '../common/Skeleton';
 import type { BasicInfoObject, BasicInfoData } from '../../types/unifiedObject';
 import { normalizeBasicInfoData } from '../../utils/basicInfo';
 import {
@@ -206,11 +206,29 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   }, [projectId, basicInfoId, fetchObjectAssetLinks]);
 
+  // A stale projection (still in the previous language) counts as "not ready" while
+  // a fetch for the requested language is in flight, so the skeleton stays up on a
+  // language switch instead of flashing stale content.
+  const isStaleLanguage = basicInfo
+    ? basicInfo.language_state?.requested_language !== globalDisplayLanguage
+    : false;
+  const loadingView = (
+    <div className="basic-info-manager">
+      <div className="section-header"><h2>Basic Information</h2></div>
+      <div className="section-divider" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', padding: 'var(--spacing-lg)' }}>
+        <Skeleton height={180} radius="var(--border-radius-lg)" />
+        <Skeleton width="50%" height={24} />
+        <SkeletonText lines={3} />
+      </div>
+    </div>
+  );
+
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
+  if (loading && (!basicInfo || isStaleLanguage)) return loadingView;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId, globalDisplayLanguage)}>Retry</button></div>;
   if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
-  if (initializing && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
+  if (initializing && !basicInfo) return loadingView;
   if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
 
   return (

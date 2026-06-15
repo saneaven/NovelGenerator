@@ -20,7 +20,7 @@ import { TextButton } from '../TextButton';
 import { RichTextEditor } from '../RichTextEditor';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from '../icons';
-import { Loading } from '../common/Loading';
+import { Skeleton, SkeletonText } from '../common/Skeleton';
 import type { TipTapDoc } from '../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import type { GuidelinesObject, GuidelinesData } from '../../types/unifiedObject';
@@ -191,11 +191,32 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     }
   };
 
+  // A stale projection (still showing the previous language) counts as "not ready"
+  // while a fetch for the requested language is in flight, so we keep showing the
+  // skeleton on a language switch instead of flashing stale content.
+  const isStaleLanguage = guidelines
+    ? guidelines.language_state?.requested_language !== globalDisplayLanguage
+    : false;
+  const loadingView = (
+    <div className="guidelines-manager">
+      <div className="section-header"><h2>Guidelines</h2></div>
+      <div className="section-divider" />
+      <div className="guidelines-layout">
+        <div className="guidelines-card">
+          <div className="guidelines-content" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+            <Skeleton width="35%" height={20} />
+            <SkeletonText lines={8} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
+  if (loading && (!guidelines || isStaleLanguage)) return loadingView;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId, globalDisplayLanguage)}>Retry</button></div>;
   if (initializationError && !guidelines) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeGuidelines} disabled={initializing}>Retry</button></div>;
-  if (initializing && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
+  if (initializing && !guidelines) return loadingView;
   if (!guidelines) return <div className="error-container">Guidelines not found.</div>;
 
   return (

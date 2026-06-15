@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
@@ -9,6 +9,7 @@ import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { Close, ChevronDown } from '../../../components/icons';
+import { SkeletonList } from '../../../components/common/Skeleton';
 import { sortOutlineObjects } from '../../../utils/outlineOrdering';
 import './ChapterSidebar.css';
 
@@ -30,6 +31,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   const projectionObjects = useUnifiedObjectStore(
     (state) => state.getObjectsForProject(projectId, displayLanguage),
   );
+  const { loading: chaptersLoading, hydrated: chaptersHydrated } = useObjectCollectionStatus(
+    projectId,
+    ['outline', 'manuscript'],
+    displayLanguage,
+  );
+  const showSkeleton = chaptersLoading && !chaptersHydrated;
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
@@ -193,7 +200,11 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     >
       <div className="timeline-container">
         <div className="timeline-line"></div>
-        {acts.length === 0 ? (
+        {showSkeleton ? (
+          <div style={{ padding: 'var(--spacing-md)' }}>
+            <SkeletonList rows={5} />
+          </div>
+        ) : acts.length === 0 ? (
           <div className="empty-state">
             <div className="empty-content">
               <span className="empty-icon">📝</span>

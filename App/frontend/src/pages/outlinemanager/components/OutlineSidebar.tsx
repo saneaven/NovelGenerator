@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { SkeletonList } from '../../../components/common/Skeleton';
 import { alert as showAlert } from '../../../store/dialogStore';
 import type { OutlineObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
@@ -43,6 +44,12 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   const projectionObjects = useUnifiedObjectStore(
     (state) => state.getObjectsForProject(projectId, displayLanguage),
   );
+  const { loading: outlineLoading, hydrated: outlineHydrated } = useObjectCollectionStatus(
+    projectId,
+    ['outline'],
+    displayLanguage,
+  );
+  const showSkeleton = outlineLoading && !outlineHydrated;
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   // Add form state
@@ -176,8 +183,15 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
           </div>
         )}
 
+        {/* Loading Skeleton */}
+        {!showAddForm && showSkeleton && (
+          <div className="outline-list">
+            <SkeletonList rows={5} />
+          </div>
+        )}
+
         {/* Empty State */}
-        {!showAddForm && outlines.length === 0 && (
+        {!showAddForm && !showSkeleton && outlines.length === 0 && (
           <div className="empty-state">
             <div className="empty-content">
               <Books size="lg" className="empty-icon" />
@@ -197,7 +211,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
         )}
 
         {/* Outline List */}
-        {!showAddForm && outlines.length > 0 && (
+        {!showAddForm && !showSkeleton && outlines.length > 0 && (
           <>
             <div className="outline-list">
               {outlines.map((outline, index) => {

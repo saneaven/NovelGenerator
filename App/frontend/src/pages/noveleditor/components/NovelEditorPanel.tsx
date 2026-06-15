@@ -26,7 +26,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
 import { alert as showAlert } from '../../../store/dialogStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
@@ -47,7 +47,7 @@ import ManuscriptEditor, { type ManuscriptEditorRef } from './ManuscriptEditor';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Loading } from '../../../components/common/Loading';
+import { Skeleton, SkeletonText } from '../../../components/common/Skeleton';
 import { requestedLanguageStateFromProjection, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import './NovelEditorPanel.css';
 
@@ -102,6 +102,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const storeObjects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, globalDisplayLanguage));
   const storeLoading = useUnifiedObjectStore((state) => state.loading);
   const storeErrors = useUnifiedObjectStore((state) => state.errors);
+  // Whether the chapter (outline) collection has loaded for the current language.
+  // Used to avoid a false "Failed to resolve linked manuscript" while chapters load.
+  const { hydrated: chaptersHydrated } = useObjectCollectionStatus(projectId, ['outline'], globalDisplayLanguage);
 
   // Actions accessed via getState() - doesn't trigger re-renders
   const fetchObject = useUnifiedObjectStore.getState().fetchObject;
@@ -294,8 +297,15 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       return;
     }
 
-    // 3) Fail fast when chapter->manuscript linkage is missing.
+    // 3) Neither resolved. If the chapter collection for this language hasn't
+    //    loaded yet, the chapter is simply still loading — show the skeleton, not
+    //    a false error. Only report a missing link once chapters are hydrated.
     setManuscriptId(null);
+    if (!chaptersHydrated) {
+      setContentIdError(null);
+      setIsResolvingContentId(true);
+      return;
+    }
     setContentIdError('Failed to resolve linked manuscript.');
     setIsResolvingContentId(false);
   }, [
@@ -304,6 +314,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     existingManuscript,
     linkedManuscriptIdFromChapter,
     storeObjects,
+    chaptersHydrated,
   ]);
 
   // Fetch manuscript when ID is resolved but object is not in store yet
@@ -625,6 +636,27 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // RENDER
   // ============================================================================
 
+  const manuscriptSkeleton = (
+    <div className="novel-editor-panel loading">
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--spacing-md)',
+          width: '100%',
+          maxWidth: '760px',
+          margin: '0 auto',
+          padding: 'var(--spacing-2xl)',
+        }}
+      >
+        <Skeleton width="45%" height={28} />
+        <SkeletonText lines={3} />
+        <SkeletonText lines={5} />
+        <SkeletonText lines={4} />
+      </div>
+    </div>
+  );
+
   if (!selectedChapterId) {
     const isChapterMissing = chaptersInitialized && !hasChapters;
     const heading = isChapterMissing
@@ -649,11 +681,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   }
 
   if (isResolvingContentId) {
-    return (
-      <div className="novel-editor-panel loading">
-        <Loading size="lg" text={t('novelEditor.loading.chapterContent')} />
-      </div>
-    );
+    return manuscriptSkeleton;
   }
 
   if (contentIdError) {
@@ -666,27 +694,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   }
 
   if (loading && !manuscript) {
-    return (
-      <div className="novel-editor-panel loading">
-        <Loading size="lg" />
-        <p>{t('novelEditor.loading.manuscript')}</p>
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-tertiary)', marginTop: '0.5rem' }}>
-          Manuscript ID: {manuscriptId}
-        </p>
-        <div style={{ marginTop: '1rem' }}>
-          <TextButton
-            variant="secondary"
-            onClick={() => {
-              if (manuscriptId) {
-                fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
-              }
-            }}
-          >
-            {t('novelEditor.error.retry')}
-          </TextButton>
-        </div>
-      </div>
-    );
+    return manuscriptSkeleton;
   }
 
   if (error) {
@@ -705,6 +713,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   }
 
   if (!manuscript) {
+    // Chapters still loading for this language — show the skeleton, not "not found".
+    if (!chaptersHydrated) return manuscriptSkeleton;
     return (
       <div className="novel-editor-panel empty-state">
         <div className="empty-state-content">

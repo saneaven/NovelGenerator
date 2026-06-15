@@ -334,6 +334,10 @@ interface UnifiedObjectStore {
   loading: Record<string, boolean>;
   errors: Record<string, string | null>;
 
+  // Reactive collection-load state, keyed by getCollectionRequestKey(projectId, hydrationKey).
+  // Set while a collection fetch (listObjects / story tree / outline reload) is in flight.
+  collectionLoading: Record<string, boolean>;
+
   // Translation status (reactive, replaces TranslationService static Map)
   translating: Record<string, boolean>;
 
@@ -429,6 +433,19 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     )
   );
 
+  const setCollectionLoading = (requestKey: string, isLoading: boolean) => {
+    set((state) => {
+      if (Boolean(state.collectionLoading[requestKey]) === isLoading) return state;
+      const next = { ...state.collectionLoading };
+      if (isLoading) {
+        next[requestKey] = true;
+      } else {
+        delete next[requestKey];
+      }
+      return { collectionLoading: next };
+    });
+  };
+
   const withCollectionRequestDeduped = async (
     projectId: string,
     key: ProjectHydrationKey,
@@ -441,7 +458,9 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       return;
     }
 
+    setCollectionLoading(requestKey, true);
     const request = run().finally(() => {
+      setCollectionLoading(requestKey, false);
       // Keep the resolved promise in the map for a short grace period so that
       // rapid SSE-driven invalidations don't trigger immediate re-fetches.
       setTimeout(() => {
@@ -502,46 +521,52 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   const reloadOutlineObjects = async (projectId: string, language?: string): Promise<UnifiedObject[]> => {
     if (!projectId) return [];
 
-    const nextRevision = (outlineCollectionRevision.get(projectId) ?? 0) + 1;
-    outlineCollectionRevision.set(projectId, nextRevision);
+    const requestKey = getCollectionRequestKey(projectId, collectionHydrationKey('outline', language));
+    setCollectionLoading(requestKey, true);
+    try {
+      const nextRevision = (outlineCollectionRevision.get(projectId) ?? 0) + 1;
+      outlineCollectionRevision.set(projectId, nextRevision);
 
-    const [outlineObjects, markdownOutlineObjects] = await Promise.all([
-      fetchAllOutlinePages(projectId, language),
-      fetchAllOutlineMarkdownPages(projectId, language),
-    ]);
-    if ((outlineCollectionRevision.get(projectId) ?? 0) !== nextRevision) {
-      return getProjectObjectsByType(
-        projectId,
-        'outline',
-        get().objectsByLanguage[projectionCacheKey(projectId, language)] ?? get().objects,
-      );
+      const [outlineObjects, markdownOutlineObjects] = await Promise.all([
+        fetchAllOutlinePages(projectId, language),
+        fetchAllOutlineMarkdownPages(projectId, language),
+      ]);
+      if ((outlineCollectionRevision.get(projectId) ?? 0) !== nextRevision) {
+        return getProjectObjectsByType(
+          projectId,
+          'outline',
+          get().objectsByLanguage[projectionCacheKey(projectId, language)] ?? get().objects,
+        );
+      }
+
+      set((currentState) => ({
+        objects: reconcileProjectObjects(currentState.objects, projectId, outlineObjects, ['outline']),
+        objectsByLanguage: mergeProjectionCache(
+          currentState.objectsByLanguage,
+          projectId,
+          language,
+          outlineObjects,
+          ['outline'],
+        ),
+        markdownPreviews: mergeMarkdownPreviewFromObjects(currentState.markdownPreviews, markdownOutlineObjects),
+        projectHydration: setProjectHydrationState(
+          currentState.projectHydration,
+          projectId,
+          [collectionHydrationKey('outline', language)],
+          true,
+        ),
+        previewHydration: setProjectHydrationState(
+          currentState.previewHydration,
+          projectId,
+          [collectionHydrationKey('outline', language)],
+          true,
+        ),
+      }));
+
+      return outlineObjects;
+    } finally {
+      setCollectionLoading(requestKey, false);
     }
-
-    set((currentState) => ({
-      objects: reconcileProjectObjects(currentState.objects, projectId, outlineObjects, ['outline']),
-      objectsByLanguage: mergeProjectionCache(
-        currentState.objectsByLanguage,
-        projectId,
-        language,
-        outlineObjects,
-        ['outline'],
-      ),
-      markdownPreviews: mergeMarkdownPreviewFromObjects(currentState.markdownPreviews, markdownOutlineObjects),
-      projectHydration: setProjectHydrationState(
-        currentState.projectHydration,
-        projectId,
-        [collectionHydrationKey('outline', language)],
-        true,
-      ),
-      previewHydration: setProjectHydrationState(
-        currentState.previewHydration,
-        projectId,
-        [collectionHydrationKey('outline', language)],
-        true,
-      ),
-    }));
-
-    return outlineObjects;
   };
 
   return ({
@@ -552,6 +577,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   previewHydration: {},
   loading: {},
   errors: {},
+  collectionLoading: {},
   translating: {},
   changeRevision: 0,
 
@@ -1244,6 +1270,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
       previewHydration: {},
       loading: {},
       errors: {},
+      collectionLoading: {},
       translating: {},
     });
   },
@@ -1494,6 +1521,55 @@ export function useObjects(type: ObjectType, ids: string[]) {
     loading: ids.some((id) => store.loading[id]),
     errors: ids.map((id) => store.errors[id]).filter(Boolean),
   };
+}
+
+/**
+ * Reactive collection-load status for a project's object collections in a given
+ * language. Panels use this to show a loading skeleton on first load and on
+ * language switch instead of a stale/empty view.
+ *
+ * - `loading`: at least one requested collection has an in-flight fetch.
+ * - `hydrated`: every requested collection has finished loading for this language.
+ *
+ * `story_entity` / `story_entity_folder` share the story-entity-tree hydration
+ * key; every other type uses its per-type collection key.
+ *
+ * Recommended gate: `const showSkeleton = loading && !hydrated;`
+ */
+export function useObjectCollectionStatus(
+  projectId: string | undefined,
+  types: ObjectType[],
+  language?: string,
+): { loading: boolean; hydrated: boolean } {
+  const typesKey = types.join(',');
+
+  const hydrationKeys = React.useMemo(
+    () => types.map((type) => (
+      isStoryEntityTreeType(type)
+        ? storyTreeHydrationKey(language)
+        : collectionHydrationKey(type, language)
+    )),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [typesKey, language],
+  );
+
+  const requestKeys = React.useMemo(
+    () => (projectId
+      ? [...new Set(hydrationKeys.map((key) => getCollectionRequestKey(projectId, key)))]
+      : []),
+    [projectId, hydrationKeys],
+  );
+
+  const loading = useUnifiedObjectStore(
+    (state) => requestKeys.some((key) => Boolean(state.collectionLoading[key])),
+  );
+  const hydrated = useUnifiedObjectStore(
+    (state) => projectId !== undefined
+      && hydrationKeys.length > 0
+      && hydrationKeys.every((key) => isProjectHydrated(state.projectHydration, projectId, key)),
+  );
+
+  return { loading, hydrated };
 }
 
 // ============================================================================

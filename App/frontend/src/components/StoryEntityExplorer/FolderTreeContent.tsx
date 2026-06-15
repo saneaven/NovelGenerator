@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
+import { SkeletonList } from '../common/Skeleton';
 import { ChevronRight, Folder } from '../icons';
 import { getStoryEntityFolderName, type StoryEntityFolder } from '../../types/storyEntityFolder';
 import {
@@ -27,6 +28,12 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
   const settings = useSettings();
   const mainLanguage = settings.mainLanguage;
   const objects = useUnifiedObjectStore((state) => state.objects);
+  const { loading: treeLoading, hydrated: treeHydrated } = useObjectCollectionStatus(
+    projectId,
+    ['story_entity_folder'],
+    displayLanguage,
+  );
+  const showSkeleton = treeLoading && !treeHydrated;
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   const folders = useMemo(
@@ -151,8 +158,19 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
         {rootEntityCount > 0 ? <span className="folder-tree-node__count">{rootEntityCount}</span> : null}
       </div>
 
-      {rootFolders.length > 0 ? <div className="folder-tree-content__divider" /> : null}
-      {rootFolders.map((folder) => renderFolderNode(folder, 0))}
+      {showSkeleton ? (
+        <>
+          <div className="folder-tree-content__divider" />
+          <div style={{ padding: '0 12px' }}>
+            <SkeletonList rows={4} rowHeight={28} />
+          </div>
+        </>
+      ) : (
+        <>
+          {rootFolders.length > 0 ? <div className="folder-tree-content__divider" /> : null}
+          {rootFolders.map((folder) => renderFolderNode(folder, 0))}
+        </>
+      )}
     </div>
   );
 };

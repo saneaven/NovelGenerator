@@ -16,9 +16,10 @@ import {
 import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
 import { AnimatePresence, motion } from 'motion/react';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
+import OutlinePanelSkeleton from './OutlinePanelSkeleton';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import TranslationModal from '../../../components/Modal/TranslationModal';
@@ -53,6 +54,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const projectionObjects = useUnifiedObjectStore(
     (state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage),
   );
+  const { loading: outlineLoading, hydrated: outlineHydrated } = useObjectCollectionStatus(
+    projectId,
+    ['outline'],
+    globalDisplayLanguage,
+  );
+  const showSkeleton = outlineLoading && !outlineHydrated;
   const settings = useSettings();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
 
@@ -770,6 +777,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       <div className="outline-panel-content">
         <div className="outline-manager">
           <div className="timeline-container">
+            {showSkeleton ? (
+              <OutlinePanelSkeleton />
+            ) : (
+              <>
             {/* No Outlines State */}
             {outlines.length === 0 && (
               <div className="empty-timeline-state">
@@ -1028,6 +1039,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                   })()}
                 </DragOverlay>
               </DndContext>
+            )}
+              </>
             )}
           </div>
         </div>

@@ -16,7 +16,7 @@ import {
 import { useDndSensors } from '../../hooks/useDndSensors';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../store/unifiedObjectStore';
 import { useSettings } from '../../store/settingsStore';
 import { useAssetStore } from '../../store/assetStore';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
@@ -68,6 +68,7 @@ import {
   getProjectStoryEntities,
 } from '../../utils/storyEntityTree';
 import FolderTreeContent from './FolderTreeContent';
+import StoryEntityGridSkeleton from './StoryEntityGridSkeleton';
 import './StoryEntityExplorer.css';
 
 interface StoryEntityExplorerProps {
@@ -164,6 +165,12 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const settings = useSettings();
 
   const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
+  const { loading: treeLoading, hydrated: treeHydrated } = useObjectCollectionStatus(
+    projectId,
+    ['story_entity', 'story_entity_folder'],
+    globalDisplayLanguage,
+  );
+  const showSkeleton = treeLoading && !treeHydrated;
   const loading = useUnifiedObjectStore((state) => state.loading);
   const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
@@ -798,7 +805,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               />
             )}
 
-            {gridItems.length === 0 && !isCreatingFolder ? (
+            {showSkeleton && !isCreatingFolder ? (
+              <StoryEntityGridSkeleton />
+            ) : gridItems.length === 0 && !isCreatingFolder ? (
               <div className="empty-state">
                 <p>No items here.</p>
                 <p>
