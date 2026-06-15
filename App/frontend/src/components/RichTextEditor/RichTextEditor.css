@@ -493,16 +493,10 @@
     .editor-content-wrapper {
         padding: var(--spacing-lg);
     }
-    
-    .editor-content-wrapper::after {
-        content: '';
-        display: block;
-        height: var(--size-mobile-footer-height);
-        flex-shrink: 0;
-    }
 
     .tiptap-editor-content {
         font-size: var(--font-size-base);
+        padding-bottom: var(--size-mobile-footer-height);
     }
 
     /* Hide action buttons on mobile - merge into More Actions */

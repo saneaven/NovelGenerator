@@ -50,6 +50,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const getRichTextMarkdown = useUnifiedObjectStore(state => state.getRichTextMarkdown);
+  const projectionObjects = useUnifiedObjectStore(
+    (state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage),
+  );
   const settings = useSettings();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
 
@@ -92,7 +95,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     let isCancelled = false;
     const loadOutlineData = async () => {
       try {
-        await listObjects('outline', projectId);
+        await listObjects('outline', projectId, globalDisplayLanguage);
       } catch (error) {
         if (!isCancelled) {
           console.error('Failed to load outline data:', error);
@@ -104,41 +107,41 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     return () => {
       isCancelled = true;
     };
-  }, [projectId, listObjects]);
+  }, [projectId, listObjects, globalDisplayLanguage]);
 
   // Get outlines, acts, and chapters from store
   const outlines = useMemo(() => {
     if (!projectId) return [];
 
     return sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
     );
-  }, [store.objects, projectId]);
+  }, [projectionObjects, projectId]);
 
   const acts = useMemo(() => {
     if (!projectId) return [];
 
     return sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'act' && obj.metadata?.project_id === projectId)
       )
     );
-  }, [store.objects, projectId]);
+  }, [projectionObjects, projectId]);
 
   const chapters = useMemo(() => {
     if (!projectId) return [];
 
     return sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'chapter' && obj.metadata?.project_id === projectId)
       )
     );
-  }, [store.objects, projectId]);
+  }, [projectionObjects, projectId]);
 
   // Build parent->children indexes to avoid O(N*M) filters during renders
   const actsByOutlineId = useMemo(() => {
@@ -183,8 +186,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   };
 
   const getLanguageState = useCallback(
-    (obj: UnifiedObject) => requestedLanguageStateFromProjection(obj.language_state, settings.mainLanguage),
-    [settings.mainLanguage],
+    (obj: UnifiedObject) => requestedLanguageStateFromProjection(obj.language_state, globalDisplayLanguage),
+    [globalDisplayLanguage],
   );
 
   // Auto-select first outline when outlines load
@@ -241,7 +244,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // ========================================================================
 
   const openEditor = useCallback((id: string, kind: OutlineLevel) => {
-    const obj = store.objects[id] as OutlineObject | undefined;
+    const obj = projectionObjects[id] as OutlineObject | undefined;
     if (!obj) return;
     if (!getLanguageState(obj).canEdit) {
       openTranslationModal(id);
@@ -249,13 +252,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
     setCreatingTarget(null);
     setEditingTarget({ id, kind });
-  }, [store.objects, getLanguageState, openTranslationModal]);
+  }, [projectionObjects, getLanguageState, openTranslationModal]);
 
   const closeEditor = useCallback(() => setEditingTarget(null), []);
 
   const handleSaveOutlineItem = useCallback(async (name: string, description: string, content: TipTapDoc) => {
     if (!editingTarget) return;
-    const obj = store.objects[editingTarget.id] as OutlineObject | undefined;
+    const obj = projectionObjects[editingTarget.id] as OutlineObject | undefined;
     if (!obj) return;
     const languageState = getLanguageState(obj);
     if (!languageState.canEdit) {
@@ -275,7 +278,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       console.error('Failed to update outline item:', error);
       showAlert({ title: 'Update Error', message: 'Failed to save changes. Please try again.' });
     }
-  }, [editingTarget, store, getLanguageState, openTranslationModal, closeEditor]);
+  }, [editingTarget, store, projectionObjects, getLanguageState, openTranslationModal, closeEditor]);
 
   // Inline description editing handlers
   const handleStartEditDescription = () => {
@@ -292,7 +295,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const handleSaveDescription = async () => {
     if (!selectedOutlineId) return;
 
-    const outline = store.objects[selectedOutlineId] as OutlineObject;
+    const outline = projectionObjects[selectedOutlineId] as OutlineObject;
     if (!outline) return;
 
     const languageState = getLanguageState(outline);
@@ -471,8 +474,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     [getRichTextMarkdown, selectedOutline, selectedOutlineLanguageState],
   );
   const editingObject = useMemo(
-    () => (editingTarget ? (store.objects[editingTarget.id] as OutlineObject | undefined) ?? null : null),
-    [editingTarget, store.objects],
+    () => (editingTarget ? (projectionObjects[editingTarget.id] as OutlineObject | undefined) ?? null : null),
+    [editingTarget, projectionObjects],
   );
   const editingLanguageState = useMemo(
     () => (editingObject ? getLanguageState(editingObject) : null),
@@ -554,20 +557,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = selectedOutlineActs.findIndex((a) => a.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Optimistic update: reorder and assign new positions immediately
+      // Optimistic update: reorder and assign new positions immediately.
+      // Go through applyObjectChanges so both the flat and language projection
+      // caches stay in sync (the UI reads the language projection).
+      const previousActs = selectedOutlineActs;
       const reordered = arrayMove(selectedOutlineActs, oldIndex, newIndex);
-      const previousObjects = { ...useUnifiedObjectStore.getState().objects };
-      const optimisticObjects = { ...previousObjects };
-      reordered.forEach((act, i) => {
-        optimisticObjects[act.id] = {
+      store.applyObjectChanges({
+        upserts: reordered.map((act, i) => ({
           ...act,
           metadata: { ...act.metadata, position: i },
-        };
+        })) as UnifiedObject[],
       });
-      useUnifiedObjectStore.setState({ objects: optimisticObjects });
 
       try {
-        const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
+        const activeObject = previousActs.find((a) => a.id === active.id) as UnifiedObject | undefined;
         const languageState = activeObject
           ? getLanguageState(activeObject)
           : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
@@ -579,7 +582,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           user_request: 'Reposition act',
         });
       } catch (error) {
-        useUnifiedObjectStore.setState({ objects: previousObjects });
+        store.applyObjectChanges({ upserts: previousActs as UnifiedObject[] });
         console.error('Failed to reorder acts:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
       }
@@ -599,20 +602,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = ids.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Optimistic update: reorder and assign new positions immediately
+      // Optimistic update: reorder and assign new positions immediately.
+      // Go through applyObjectChanges so both the flat and language projection
+      // caches stay in sync (the UI reads the language projection).
+      const previousChapters = actChapters;
       const reordered = arrayMove(actChapters, oldIndex, newIndex);
-      const previousObjects = { ...useUnifiedObjectStore.getState().objects };
-      const optimisticObjects = { ...previousObjects };
-      reordered.forEach((ch, i) => {
-        optimisticObjects[ch.id] = {
+      store.applyObjectChanges({
+        upserts: reordered.map((ch, i) => ({
           ...ch,
           metadata: { ...ch.metadata, position: i },
-        };
+        })) as UnifiedObject[],
       });
-      useUnifiedObjectStore.setState({ objects: optimisticObjects });
 
       try {
-        const activeObject = previousObjects[active.id as string] as UnifiedObject | undefined;
+        const activeObject = previousChapters.find((ch) => ch.id === active.id) as UnifiedObject | undefined;
         const languageState = activeObject
           ? getLanguageState(activeObject)
           : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
@@ -624,7 +627,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           user_request: 'Reposition chapter',
         });
       } catch (error) {
-        useUnifiedObjectStore.setState({ objects: previousObjects });
+        store.applyObjectChanges({ upserts: previousChapters as UnifiedObject[] });
         console.error('Failed to reorder chapters:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
       }
@@ -1041,7 +1044,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           onTranslateOutline={openTranslationModal}
           onRetranslateOutline={openTranslationModal}
           onAIEditOutline={(outlineId) => {
-            const outline = store.objects[outlineId] as OutlineObject | undefined;
+            const outline = projectionObjects[outlineId] as OutlineObject | undefined;
             if (!outline || !getLanguageState(outline).isMainLanguage) return;
             setShowOutlineAIModal(outlineId);
           }}
@@ -1105,7 +1108,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           projectId={projectId}
           preSelectedObjectIds={[translationTargetId]}
           defaultSourceLanguage={resolveTranslationSourceLanguage(
-            (store.objects[translationTargetId] as UnifiedObject | undefined)?.language_state.available_languages ?? [],
+            (projectionObjects[translationTargetId] as UnifiedObject | undefined)?.language_state.available_languages ?? [],
             settings.mainLanguage,
           )}
           defaultTargetLanguage={globalDisplayLanguage}

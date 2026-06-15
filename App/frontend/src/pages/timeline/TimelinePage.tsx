@@ -91,7 +91,8 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const deleteEvent = useTimelineStore((s) => s.deleteEvent);
   const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
   const setTagFilter = useTimelineStore((s) => s.setTagFilter);
-  const unifiedObjects = useUnifiedObjectStore((s) => s.objects);
+  const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
+  const unifiedObjects = useUnifiedObjectStore((s) => s.getObjectsForProject(pid, displayLanguage));
   const getRichTextMarkdown = useUnifiedObjectStore((s) => s.getRichTextMarkdown);
 
   const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[pid]);
@@ -102,8 +103,6 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const setDismissedWarningsKey = useTimelineUiStore((s) => s.setDismissedWarningsKey);
 
   const sidebarOpen = useSidebarStore((s) => s.isOpen(pid, 'timeline'));
-
-  const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
 
   useEffect(() => {
     if (!pid) return;

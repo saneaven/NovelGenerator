@@ -40,6 +40,9 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   canCreateOutline,
 }) => {
   const store = useUnifiedObjectStore();
+  const projectionObjects = useUnifiedObjectStore(
+    (state) => state.getObjectsForProject(projectId, displayLanguage),
+  );
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   // Add form state
@@ -93,17 +96,17 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     return { data: obj.data ?? fallback, isFallback: Boolean(obj.language_state?.is_fallback) };
   };
 
-  const getLanguageState = (outline: OutlineObject) => requestedLanguageStateFromProjection(outline.language_state, mainLanguage);
+  const getLanguageState = (outline: OutlineObject) => requestedLanguageStateFromProjection(outline.language_state, displayLanguage);
 
-  // Get outlines from store
+  // Get outlines from store (language projection)
   const outlines = useMemo(() => {
     return sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
     );
-  }, [store.objects, projectId]);
+  }, [projectionObjects, projectId]);
 
   const handleOutlineSelect = (outlineId: string) => {
     onSelectOutline(outlineId);
@@ -201,7 +204,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
                 const { data: outlineData, isFallback } = getLocalizedData(outline, { name: 'Untitled Outline', description: '' });
                 const languageState = getLanguageState(outline);
                 const isSelected = selectedOutlineId === outline.id;
-                const actsCount = Object.values(store.objects).filter(
+                const actsCount = Object.values(projectionObjects).filter(
                   obj => obj?.type === 'outline' && obj?.kind === 'act' && obj?.metadata?.parent_id === outline.id
                 ).length;
 

@@ -27,6 +27,9 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 }) => {
   const { t } = useTranslation();
   const store = useUnifiedObjectStore();
+  const projectionObjects = useUnifiedObjectStore(
+    (state) => state.getObjectsForProject(projectId, displayLanguage),
+  );
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
@@ -81,12 +84,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   // Get outlines for dropdown
   const outlines = useMemo(() => {
     return sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is OutlineObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'outline' && obj.metadata?.project_id === projectId)
       )
     );
-  }, [projectId, store.objects]);
+  }, [projectId, projectionObjects]);
 
   useEffect(() => {
     if (outlines.length === 0) return;
@@ -103,7 +106,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 
   const { acts, chaptersByAct } = useMemo(() => {
     const loadedActs = sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is ActObject =>
           Boolean(
             obj
@@ -115,7 +118,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       )
     );
     const loadedChapters = sortOutlineObjects(
-      Object.values(store.objects).filter(
+      Object.values(projectionObjects).filter(
         (obj): obj is ChapterObject =>
           Boolean(obj && obj.type === 'outline' && obj.kind === 'chapter' && obj.metadata?.project_id === projectId)
       )
@@ -127,7 +130,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     }, {} as Record<string, ChapterObject[]>);
 
     return { acts: loadedActs, chaptersByAct: grouped };
-  }, [projectId, store.objects, selectedOutlineId]);
+  }, [projectId, projectionObjects, selectedOutlineId]);
 
   // Get selected outline name
   const selectedOutlineName = selectedOutline
