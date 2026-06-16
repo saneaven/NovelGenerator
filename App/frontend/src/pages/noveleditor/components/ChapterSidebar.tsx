@@ -4,7 +4,7 @@ import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
-import type { ActObject, ChapterObject, ManuscriptObject, OutlineObject } from '../../../types/unifiedObject';
+import type { ActObject, ChapterObject, OutlineObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
@@ -28,13 +28,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 }) => {
   const { t } = useTranslation();
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const getManuscriptByChapterId = useUnifiedObjectStore((state) => state.getManuscriptByChapterId);
   const projectionObjects = useUnifiedObjectStore(
     (state) => state.getObjectsForProject(projectId, displayLanguage),
   );
   const { loading: chaptersLoading, hydrated: chaptersHydrated } = useObjectCollectionStatus(
     projectId,
-    ['outline', 'manuscript'],
+    ['outline'],
     displayLanguage,
   );
   const showSkeleton = chaptersLoading && !chaptersHydrated;
@@ -81,7 +80,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       if (!projectId) return;
       try {
         await listObjects('outline', projectId, displayLanguage);
-        await listObjects('manuscript', projectId, displayLanguage);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
@@ -253,8 +251,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                     {actChapters.length > 0 ? (
                       actChapters.map((chapter, chapIndex) => {
                         const chapData = getLocalizedData(chapter, { name: t('chapterSidebar.untitledChapter'), description: '' });
-                        const manuscript = getManuscriptByChapterId(chapter.id) as ManuscriptObject | null;
-                        const manuData = manuscript ? getLocalizedData(manuscript, { wordCount: 0 }) : { wordCount: 0 };
                         const isSelected = selectedChapterId === chapter.id;
 
                         return (
@@ -270,7 +266,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                             >
                               <div className="chapter-card-header">
                                 <span className="chapter-number">Ch.{globalChapterOffset + chapIndex + 1}</span>
-                                <span className="word-count">{manuData.wordCount || 0}w</span>
                               </div>
                               <div className="chapter-card-main">
                                 <span className="chapter-name">{chapData.name || t('chapterSidebar.untitled')}</span>
