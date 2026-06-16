@@ -174,6 +174,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     : null;
   const loading = manuscriptId ? (storeLoading[manuscriptId] || false) : false;
   const error = manuscriptId ? (storeErrors[manuscriptId] || null) : null;
+  // True only when the currently shown manuscript is the projection for the active
+  // display language. On language change `manuscript` may momentarily be the previous
+  // language's object (served by getObjectsForProject's base-object fallback); we treat
+  // that as "not ready" so the loading skeleton appears immediately instead of ~0.5s late.
+  const manuscriptLanguageReady = manuscript
+    ? manuscript.language_state?.requested_language === globalDisplayLanguage
+    : false;
 
   const manuscriptLanguages = useMemo(() => {
     if (!manuscript) return [];
@@ -317,10 +324,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     chaptersHydrated,
   ]);
 
-  // Fetch manuscript when ID is resolved but object is not in store yet
+  // Fetch manuscript when ID is resolved but the object for the active language is
+  // not in the store yet. Also refetch when the active language changes and the shown
+  // manuscript is still the previous language's projection (stale), so switching language
+  // immediately loads the new language instead of lingering on base-object fallback.
   useEffect(() => {
     if (!manuscriptId) return;
-    if (manuscript) {
+    if (manuscript && manuscriptLanguageReady) {
       setContentIdError(null);
       setIsResolvingContentId(false);
       return;
@@ -351,7 +361,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [manuscriptId, manuscript, fetchObject]); // Fetch only when manuscript is missing
+  }, [manuscriptId, manuscript, manuscriptLanguageReady, globalDisplayLanguage, fetchObject]); // Fetch when manuscript is missing or stale for the active language
 
   // Note: RichTextEditor now handles baseline tracking internally via hasChanges()
   // No need to track baselineSetRef here anymore
@@ -723,6 +733,20 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         </div>
       </div>
     );
+  }
+
+  // The shown manuscript is still the previous language's projection (base-object
+  // fallback right after a language switch). Show the skeleton immediately — the fetch
+  // effect above is already loading this language's manuscript.
+  if (!manuscriptLanguageReady) {
+    return manuscriptSkeleton;
+  }
+
+  // Keep showing the loading skeleton until BOTH the chapter header (outline) and
+  // the manuscript content are ready, instead of rendering content without a header.
+  // Guarded on hydration so a genuinely missing header doesn't loop forever.
+  if (!selectedChapter && !chaptersHydrated) {
+    return manuscriptSkeleton;
   }
 
   return (
