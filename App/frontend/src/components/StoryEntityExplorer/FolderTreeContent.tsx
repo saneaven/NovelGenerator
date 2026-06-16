@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../store/unifiedObjectStore';
+import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
 import { useSettings } from '../../store/settingsStore';
 import { SkeletonList } from '../common/Skeleton';
 import { ChevronRight, Folder } from '../icons';
@@ -7,8 +7,6 @@ import { getStoryEntityFolderName, type StoryEntityFolder } from '../../types/st
 import {
   buildEntityCountByFolder,
   buildFolderChildrenMap,
-  getProjectStoryEntities,
-  getProjectStoryEntityFolders,
 } from '../../utils/storyEntityTree';
 import './FolderTreeContent.css';
 
@@ -27,18 +25,13 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
 }) => {
   const settings = useSettings();
   const mainLanguage = settings.mainLanguage;
-  const objects = useUnifiedObjectStore((state) => state.objects);
-  const { loading: treeLoading, hydrated: treeHydrated } = useObjectCollectionStatus(
-    projectId,
-    ['story_entity_folder'],
-    displayLanguage,
-  );
-  const showSkeleton = treeLoading && !treeHydrated;
+  const tree = useStoryEntityTreeQuery(projectId, displayLanguage);
+  const showSkeleton = tree.isLoading;
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  const folders = useMemo(
-    () => getProjectStoryEntityFolders(objects, projectId),
-    [objects, projectId],
+  const folders = useMemo<StoryEntityFolder[]>(
+    () => tree.data?.folders ?? [],
+    [tree.data],
   );
 
   const foldersById = useMemo(
@@ -50,8 +43,8 @@ const FolderTreeContent: React.FC<FolderTreeContentProps> = ({
   );
 
   const entities = useMemo(
-    () => getProjectStoryEntities(objects, projectId),
-    [objects, projectId],
+    () => tree.data?.entities ?? [],
+    [tree.data],
   );
 
   const entityCountByFolder = useMemo(

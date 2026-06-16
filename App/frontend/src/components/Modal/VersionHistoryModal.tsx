@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { unifiedObjectService } from '../../api/unifiedObjectService';
+import { useRestoreVersionMutation } from '../../data/objects/mutations/useRestoreVersionMutation';
+import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
@@ -47,7 +49,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   objectId,
   textVersionProps,
 }) => {
-  const store = useUnifiedObjectStore();
+  const restoreVersionMutation = useRestoreVersionMutation();
   const [versions, setVersions] = useState<any[]>([]);
   const [textVersions, setTextVersions] = useState<TextVersionHistoryItem[]>([]);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
@@ -72,7 +74,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       try {
         if (mode === 'story' && objectId) {
           // Metadata-only fetch — full content is lazy-loaded on Details expand
-          const versionHistory = await store.getVersions(objectType!, objectId);
+          const versionHistory = await unifiedObjectService.getVersions(objectType!, objectId);
           setVersions(versionHistory.sort((a, b) => b.number - a.number));
           setVersionContent({});
           setExpandedVersions(new Set());
@@ -130,8 +132,9 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   }, [mode, selectedVersion, textVersionProps, textVersionContent, loadingTextVersions]);
 
   // Story mode helpers
-  const currentObject = mode === 'story' ? store.objects[objectId!] : null;
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const currentObjectQuery = useObjectQuery(objectType ?? 'basic_info', mode === 'story' ? objectId : undefined, mainLanguage);
+  const currentObject = mode === 'story' ? currentObjectQuery.data ?? null : null;
   const availableLangs = currentObject?.language_state?.available_languages ?? [];
   const currentLanguage = availableLangs.includes(mainLanguage)
     ? mainLanguage
@@ -168,8 +171,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     }
 
     try {
-      await store.restoreVersion(objectType!, objectId!, versionId);
-      const versionHistory = await store.getVersions(objectType!, objectId!);
+      await restoreVersionMutation.mutateAsync({ type: objectType!, id: objectId!, versionId });
+      const versionHistory = await unifiedObjectService.getVersions(objectType!, objectId!);
       setVersions(versionHistory.sort((a, b) => b.number - a.number));
       setVersionContent({});
       setExpandedVersions(new Set());
@@ -223,7 +226,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         return next;
       });
       try {
-        const full = await store.getVersion(objectType, objectId, versionId);
+        const full = await unifiedObjectService.getVersion(objectType, objectId, versionId);
         if (full.data) {
           setVersionContent((prev) => ({ ...prev, [versionId]: full.data! }));
         }

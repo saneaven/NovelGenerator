@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { timelineService, type TimelineConfig } from '../api/timelineService';
-import { useUnifiedObjectStore } from './unifiedObjectStore';
+import { queryClient } from '../data/queryClient';
+import { objectKeys } from '../data/keys/objectKeys';
+import { fetchObjectCollection } from '../data/objects/useObjectCollectionQuery';
 import type {
   CalendarConfig,
   TimelineEvent,
@@ -12,10 +14,12 @@ import type {
   TimelineTrackMoveRequest,
   TimelineTrackUpdateRequest,
 } from '../types/timeline';
-import type { TimelineObjectData, UnifiedObject } from '../types/unifiedObject';
+import type { TimelineObjectData, ObjectType, UnifiedObject } from '../types/unifiedObject';
 import { buildTimelineFromObjects } from '../utils/timelineView';
 
 let fetchTimelineRequestSeq = 0;
+
+const TIMELINE_TYPES: ObjectType[] = ['timeline_track', 'timeline_event'];
 
 interface TimelineStore {
   configByProject: Record<string, TimelineConfig>;
@@ -41,12 +45,37 @@ interface TimelineStore {
   clearProject: (projectId: string) => void;
 }
 
+/**
+ * Reflect a created/updated timeline object: invalidate its collection so any
+ * mounted query refetches in the correct format. Callers that need the value
+ * immediately fall back to the service response (see createTrack/createEvent).
+ */
 function applyTimelineObject(object: UnifiedObject<TimelineObjectData>): void {
-  useUnifiedObjectStore.getState().applyObjectChanges({ upserts: [object as UnifiedObject] });
+  const projectId = object.metadata?.project_id;
+  if (typeof projectId !== 'string') return;
+  queryClient.invalidateQueries({ queryKey: objectKeys.collectionType(projectId, object.type) });
 }
 
-function buildTimeline(projectId: string, config?: TimelineConfig): ReturnType<typeof buildTimelineFromObjects> {
-  return buildTimelineFromObjects(projectId, useUnifiedObjectStore.getState().objects, config);
+function invalidateTimelineCollections(projectId: string): void {
+  for (const type of TIMELINE_TYPES) {
+    queryClient.invalidateQueries({ queryKey: objectKeys.collectionType(projectId, type) });
+  }
+}
+
+/** Read the project's timeline objects from the query cache (markdown ?? tiptap). */
+function timelineObjectsRecord(projectId: string, language: string): Record<string, UnifiedObject> {
+  const record: Record<string, UnifiedObject> = {};
+  for (const type of TIMELINE_TYPES) {
+    const collection =
+      queryClient.getQueryData<UnifiedObject[]>(objectKeys.collection(projectId, type, language, 'markdown'))
+      ?? queryClient.getQueryData<UnifiedObject[]>(objectKeys.collection(projectId, type, language, 'tiptap'));
+    if (collection) for (const object of collection) record[object.id] = object;
+  }
+  return record;
+}
+
+function buildTimeline(projectId: string, language: string, config?: TimelineConfig): ReturnType<typeof buildTimelineFromObjects> {
+  return buildTimelineFromObjects(projectId, timelineObjectsRecord(projectId, language), config);
 }
 
 function findTrack(tracks: TimelineTrack[], id: string): TimelineTrack | null {
@@ -89,7 +118,12 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     try {
       const [config] = await Promise.all([
         timelineService.getTimelineConfig(projectId),
-        useUnifiedObjectStore.getState().refreshProjectObjects(projectId, ['timeline_track', 'timeline_event'], language),
+        ...TIMELINE_TYPES.map((type) =>
+          queryClient.ensureQueryData({
+            queryKey: objectKeys.collection(projectId, type, language, 'markdown'),
+            queryFn: () => fetchObjectCollection(projectId, type, language, 'markdown'),
+          }),
+        ),
       ]);
       if (requestSeq !== fetchTimelineRequestSeq) return;
       set((state) => ({
@@ -122,11 +156,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   },
 
   createTrack: async (projectId, request, language) => {
-    void language;
     const created = await timelineService.createTrack(projectId, request);
     applyTimelineObject(created);
     set((state) => ({ changeRevision: state.changeRevision + 1 }));
-    return findTrack(buildTimeline(projectId, get().configByProject[projectId]).tracks, created.id)
+    return findTrack(buildTimeline(projectId, language, get().configByProject[projectId]).tracks, created.id)
       ?? {
         id: created.id,
         timelineId: String(created.metadata.timeline_id ?? ''),
@@ -155,18 +188,17 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     set((state) => ({ changeRevision: state.changeRevision + 1 }));
   },
 
-  deleteTrack: async (_projectId, trackId) => {
-    await timelineService.deleteTrack(_projectId, trackId);
-    useUnifiedObjectStore.getState().applyObjectChanges({ deletes: [trackId] });
+  deleteTrack: async (projectId, trackId) => {
+    await timelineService.deleteTrack(projectId, trackId);
+    invalidateTimelineCollections(projectId);
     set((state) => ({ changeRevision: state.changeRevision + 1 }));
   },
 
   createEvent: async (projectId, request, language) => {
-    void language;
     const created = await timelineService.createEvent(projectId, request);
     applyTimelineObject(created);
     set((state) => ({ changeRevision: state.changeRevision + 1 }));
-    return findEvent(buildTimeline(projectId, get().configByProject[projectId]).tracks, created.id)
+    return findEvent(buildTimeline(projectId, language, get().configByProject[projectId]).tracks, created.id)
       ?? {
         id: created.id,
         trackId: String(created.metadata.track_id ?? request.trackId),
@@ -190,7 +222,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
   deleteEvent: async (projectId, eventId) => {
     await timelineService.deleteEvent(projectId, eventId);
-    useUnifiedObjectStore.getState().applyObjectChanges({ deletes: [eventId] });
+    invalidateTimelineCollections(projectId);
     set((state) => ({ changeRevision: state.changeRevision + 1 }));
   },
 

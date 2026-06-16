@@ -1,6 +1,6 @@
 import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { readAnyObjectFromCache } from '../../data/objects/objectCache';
 import { ImageToolCard } from '../ui/cards/ImageToolCard';
 import type { GenerateOperationVM } from '../ui/vmTypes';
 
@@ -29,7 +29,7 @@ function dataForLanguage(object: { data?: Record<string, unknown> } | undefined,
 
 function resolveObjectLabel(objectId: string | undefined, language: string): string | undefined {
   if (!objectId) return undefined;
-  const object = useUnifiedObjectStore.getState().objects[objectId];
+  const object = readAnyObjectFromCache(objectId);
   if (!object) return undefined;
   const data = dataForLanguage(object, language);
   if (object.type === 'basic_info') {
@@ -45,12 +45,11 @@ function resolveObjectLabel(objectId: string | undefined, language: string): str
 
 function resolveSceneLabel(manuscriptId: string | undefined, language: string): string | undefined {
   if (!manuscriptId) return undefined;
-  const objects = useUnifiedObjectStore.getState().objects;
-  const manuscript = objects[manuscriptId];
+  const manuscript = readAnyObjectFromCache(manuscriptId);
   if (!manuscript) return undefined;
   const chapterId = typeof manuscript.metadata?.chapter_id === 'string' ? manuscript.metadata.chapter_id : null;
   if (chapterId) {
-    const chapter = objects[chapterId];
+    const chapter = readAnyObjectFromCache(chapterId) ?? undefined;
     const chapterData = dataForLanguage(chapter, language);
     const chapterName = chapterData.name;
     if (typeof chapterName === 'string' && chapterName.trim()) {

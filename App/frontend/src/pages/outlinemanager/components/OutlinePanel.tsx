@@ -16,7 +16,10 @@ import {
 import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
 import { AnimatePresence, motion } from 'motion/react';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
+import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
+import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
+import { useDeleteObjectMutation } from '../../../data/objects/mutations/useDeleteObjectMutation';
 import { useSettings } from '../../../store/settingsStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import OutlinePanelSkeleton from './OutlinePanelSkeleton';
@@ -35,7 +38,7 @@ import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import ObjectCardExpanded from '../../../components/ObjectManager/ObjectCards/ObjectCardExpanded';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { requestedLanguageStateFromProjection, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
-import { sortOutlineObjects } from '../../../utils/outlineOrdering';
+import { sortOutlineObjects } from '../../../domain/outlineHierarchy';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import './OutlinePanel.css';
@@ -48,20 +51,57 @@ interface OutlinePanelProps {
 
 const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const store = useUnifiedObjectStore();
-  const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const getRichTextMarkdown = useUnifiedObjectStore(state => state.getRichTextMarkdown);
-  const projectionObjects = useUnifiedObjectStore(
-    (state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage),
-  );
-  const { loading: outlineLoading, hydrated: outlineHydrated } = useObjectCollectionStatus(
-    projectId,
-    ['outline'],
-    globalDisplayLanguage,
-  );
-  const showSkeleton = outlineLoading && !outlineHydrated;
+  const updateMutation = useUpdateObjectMutation();
+  const createMutation = useCreateObjectMutation();
+  const deleteMutation = useDeleteObjectMutation();
+
+  // Outline collection in tiptap (structure + edit data) and markdown (rendered
+  // previews, replacing the old getRichTextMarkdown cache).
+  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage);
+  const outlineMarkdownQuery = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage, 'markdown');
+  const showSkeleton = outlineQuery.isLoading;
   const settings = useSettings();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
+
+  // Index objects by id for the per-id lookups the old store projection provided.
+  const serverObjects = useMemo(() => {
+    const map: Record<string, UnifiedObject> = {};
+    for (const obj of outlineQuery.data ?? []) {
+      map[obj.id] = obj;
+    }
+    return map;
+  }, [outlineQuery.data]);
+
+  // Optimistic overlay for drag-and-drop reorder. While a reposition write is in
+  // flight we render this locally-patched objects Record for instant feedback,
+  // then clear it once the outline query refetches the server truth (the update
+  // mutation invalidates the outline collection on structural metadata changes).
+  const [optimisticObjects, setOptimisticObjects] = useState<Record<string, UnifiedObject> | null>(null);
+
+  // Clear the optimistic overlay whenever fresh server data arrives.
+  useEffect(() => {
+    setOptimisticObjects(null);
+  }, [serverObjects]);
+
+  const projectionObjects = optimisticObjects ?? serverObjects;
+
+  // Rendered markdown content keyed by object id (markdown-format query: data.content
+  // is already rendered markdown text).
+  const markdownContentById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const obj of outlineMarkdownQuery.data ?? []) {
+      const content = (obj.data as Record<string, unknown> | undefined)?.content;
+      if (typeof content === 'string') {
+        map.set(obj.id, content);
+      }
+    }
+    return map;
+  }, [outlineMarkdownQuery.data]);
+
+  const getContentMarkdown = useCallback(
+    (objectId: string): string | undefined => markdownContentById.get(objectId),
+    [markdownContentById],
+  );
 
   // Selected outline state
   const [selectedOutlineId, setSelectedOutlineId] = useState<string | null>(null);
@@ -95,28 +135,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     setShowTranslationModal(true);
   }, []);
 
-  // Load outlines, acts, and chapters on mount
-  useEffect(() => {
-    if (!projectId) return;
-
-    let isCancelled = false;
-    const loadOutlineData = async () => {
-      try {
-        await listObjects('outline', projectId, globalDisplayLanguage);
-      } catch (error) {
-        if (!isCancelled) {
-          console.error('Failed to load outline data:', error);
-        }
-      }
-    };
-
-    loadOutlineData();
-    return () => {
-      isCancelled = true;
-    };
-  }, [projectId, listObjects, globalDisplayLanguage]);
-
-  // Get outlines, acts, and chapters from store
+  // Get outlines, acts, and chapters from the query collection
   const outlines = useMemo(() => {
     if (!projectId) return [];
 
@@ -273,19 +292,23 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
     try {
-      await store.updateObject('outline', editingTarget.id, {
-        data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
-        language: languageState.requestedLanguage,
-        rich_text_format: 'tiptap',
-        create_new_version: languageState.createNewVersion,
-        user_request: 'Manual Edit',
+      await updateMutation.mutateAsync({
+        type: 'outline',
+        id: editingTarget.id,
+        request: {
+          data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
+          language: languageState.requestedLanguage,
+          rich_text_format: 'tiptap',
+          create_new_version: languageState.createNewVersion,
+          user_request: 'Manual Edit',
+        },
       });
       closeEditor();
     } catch (error) {
       console.error('Failed to update outline item:', error);
       showAlert({ title: 'Update Error', message: 'Failed to save changes. Please try again.' });
     }
-  }, [editingTarget, store, projectionObjects, getLanguageState, openTranslationModal, closeEditor]);
+  }, [editingTarget, updateMutation, projectionObjects, getLanguageState, openTranslationModal, closeEditor]);
 
   // Inline description editing handlers
   const handleStartEditDescription = () => {
@@ -312,14 +335,18 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
 
     try {
-      await store.updateObject('outline', selectedOutlineId, {
-        data: {
-          name: selectedOutlineData.name,
-          description: editingDescriptionValue.trim()
+      await updateMutation.mutateAsync({
+        type: 'outline',
+        id: selectedOutlineId,
+        request: {
+          data: {
+            name: selectedOutlineData.name,
+            description: editingDescriptionValue.trim()
+          },
+          language: languageState.requestedLanguage,
+          create_new_version: languageState.createNewVersion,
+          user_request: 'Manual Edit',
         },
-        language: languageState.requestedLanguage,
-        create_new_version: languageState.createNewVersion,
-        user_request: 'Manual Edit',
       });
       setIsEditingDescription(false);
     } catch (error) {
@@ -354,8 +381,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
 
+    if (!projectId) return;
     try {
-      await store.deleteObject('outline', outlineId);
+      await deleteMutation.mutateAsync({ type: 'outline', id: outlineId, projectId });
     } catch (error) {
       console.error('Failed to delete outline:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete outline. Please try again.' });
@@ -372,15 +400,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     try {
       const outlineActs = getActsForOutline(outlineId);
       const actOrder = outlineActs.length;
-      await store.createObject(
-        'outline',
+      await createMutation.mutateAsync({
+        type: 'outline',
         projectId,
-        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
-        settings.mainLanguage,
-        { parent_id: outlineId, position: actOrder },
-        'User Creation',
-        'act'
-      );
+        data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
+        language: settings.mainLanguage,
+        metadata: { parent_id: outlineId, position: actOrder },
+        userRequest: 'User Creation',
+        kind: 'act',
+      });
     } catch (error) {
       console.error('Failed to create act:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create act. Please try again.' });
@@ -398,8 +426,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
 
+    if (!projectId) return;
     try {
-      await store.deleteObject('outline', actId);
+      await deleteMutation.mutateAsync({ type: 'outline', id: actId, projectId });
     } catch (error) {
       console.error('Failed to delete act:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete act. Please try again.' });
@@ -416,15 +445,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     try {
       const actChapters = getChaptersForAct(actId);
       const chapterOrder = actChapters.length;
-      await store.createObject(
-        'outline',
+      await createMutation.mutateAsync({
+        type: 'outline',
         projectId,
-        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
-        settings.mainLanguage,
-        { parent_id: actId, position: chapterOrder },
-        'User Creation',
-        'chapter'
-      );
+        data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
+        language: settings.mainLanguage,
+        metadata: { parent_id: actId, position: chapterOrder },
+        userRequest: 'User Creation',
+        kind: 'chapter',
+      });
     } catch (error) {
       console.error('Failed to create chapter:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create chapter. Please try again.' });
@@ -442,8 +471,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return;
     }
 
+    if (!projectId) return;
     try {
-      await store.deleteObject('outline', chapterId);
+      await deleteMutation.mutateAsync({ type: 'outline', id: chapterId, projectId });
     } catch (error) {
       console.error('Failed to delete chapter:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete chapter. Please try again.' });
@@ -473,12 +503,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     [getLanguageState, selectedOutline],
   );
   const selectedOutlineContentMarkdown = useMemo(
-    () => (
-      selectedOutline && selectedOutlineLanguageState
-        ? getRichTextMarkdown(selectedOutline.id, selectedOutlineLanguageState.viewLanguage, 'content')
-        : undefined
-    ),
-    [getRichTextMarkdown, selectedOutline, selectedOutlineLanguageState],
+    () => (selectedOutline ? getContentMarkdown(selectedOutline.id) : undefined),
+    [getContentMarkdown, selectedOutline],
   );
   const editingObject = useMemo(
     () => (editingTarget ? (projectionObjects[editingTarget.id] as OutlineObject | undefined) ?? null : null),
@@ -564,37 +590,42 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = selectedOutlineActs.findIndex((a) => a.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Optimistic update: reorder and assign new positions immediately.
-      // Go through applyObjectChanges so both the flat and language projection
-      // caches stay in sync (the UI reads the language projection).
-      const previousActs = selectedOutlineActs;
+      // Optimistic update: reorder and assign new positions immediately by
+      // overlaying a locally-patched objects Record. The overlay clears once the
+      // outline query refetches (the update mutation invalidates the outline
+      // collection because the request carries structural metadata).
       const reordered = arrayMove(selectedOutlineActs, oldIndex, newIndex);
-      store.applyObjectChanges({
-        upserts: reordered.map((act, i) => ({
-          ...act,
-          metadata: { ...act.metadata, position: i },
-        })) as UnifiedObject[],
+      setOptimisticObjects(() => {
+        const next = { ...projectionObjects };
+        reordered.forEach((act, i) => {
+          next[act.id] = { ...act, metadata: { ...act.metadata, position: i } } as UnifiedObject;
+        });
+        return next;
       });
 
       try {
-        const activeObject = previousActs.find((a) => a.id === active.id) as UnifiedObject | undefined;
+        const activeObject = selectedOutlineActs.find((a) => a.id === active.id) as UnifiedObject | undefined;
         const languageState = activeObject
           ? getLanguageState(activeObject)
           : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
-        await store.updateObject('outline', active.id as string, {
-          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
-          language: languageState.viewLanguage,
-          metadata: { parent_id: selectedOutlineId, position: newIndex },
-          create_new_version: false,
-          user_request: 'Reposition act',
+        await updateMutation.mutateAsync({
+          type: 'outline',
+          id: active.id as string,
+          request: {
+            data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+            language: languageState.viewLanguage,
+            metadata: { parent_id: selectedOutlineId, position: newIndex },
+            create_new_version: false,
+            user_request: 'Reposition act',
+          },
         });
       } catch (error) {
-        store.applyObjectChanges({ upserts: previousActs as UnifiedObject[] });
+        setOptimisticObjects(null);
         console.error('Failed to reorder acts:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder acts. Please try again.' });
       }
     },
-    [selectedOutlineActs, projectId, store, getLanguageState, globalDisplayLanguage, settings.mainLanguage, selectedOutlineId]
+    [selectedOutlineActs, projectionObjects, projectId, updateMutation, getLanguageState, settings.mainLanguage, selectedOutlineId]
   );
 
   const makeChapterDragEndHandler = useCallback(
@@ -609,37 +640,42 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const newIndex = ids.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      // Optimistic update: reorder and assign new positions immediately.
-      // Go through applyObjectChanges so both the flat and language projection
-      // caches stay in sync (the UI reads the language projection).
-      const previousChapters = actChapters;
+      // Optimistic update: reorder and assign new positions immediately by
+      // overlaying a locally-patched objects Record. The overlay clears once the
+      // outline query refetches (the update mutation invalidates the outline
+      // collection because the request carries structural metadata).
       const reordered = arrayMove(actChapters, oldIndex, newIndex);
-      store.applyObjectChanges({
-        upserts: reordered.map((ch, i) => ({
-          ...ch,
-          metadata: { ...ch.metadata, position: i },
-        })) as UnifiedObject[],
+      setOptimisticObjects(() => {
+        const next = { ...projectionObjects };
+        reordered.forEach((ch, i) => {
+          next[ch.id] = { ...ch, metadata: { ...ch.metadata, position: i } } as UnifiedObject;
+        });
+        return next;
       });
 
       try {
-        const activeObject = previousChapters.find((ch) => ch.id === active.id) as UnifiedObject | undefined;
+        const activeObject = actChapters.find((ch) => ch.id === active.id) as UnifiedObject | undefined;
         const languageState = activeObject
           ? getLanguageState(activeObject)
           : requestedLanguageStateFromProjection(undefined, settings.mainLanguage);
-        await store.updateObject('outline', active.id as string, {
-          data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
-          language: languageState.viewLanguage,
-          metadata: { parent_id: actId, position: newIndex },
-          create_new_version: false,
-          user_request: 'Reposition chapter',
+        await updateMutation.mutateAsync({
+          type: 'outline',
+          id: active.id as string,
+          request: {
+            data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+            language: languageState.viewLanguage,
+            metadata: { parent_id: actId, position: newIndex },
+            create_new_version: false,
+            user_request: 'Reposition chapter',
+          },
         });
       } catch (error) {
-        store.applyObjectChanges({ upserts: previousChapters as UnifiedObject[] });
+        setOptimisticObjects(null);
         console.error('Failed to reorder chapters:', error);
         showAlert({ title: 'Reorder Error', message: 'Failed to reorder chapters. Please try again.' });
       }
     },
-    [projectId, store, chaptersByActId, getLanguageState, globalDisplayLanguage, settings.mainLanguage]
+    [projectionObjects, projectId, updateMutation, chaptersByActId, getLanguageState, settings.mainLanguage]
   );
 
   // Handle version history
@@ -654,7 +690,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const targetId = versionHistoryTargetId ?? selectedOutlineId;
     if (!targetId) return;
     try {
-      await store.fetchObject('outline', targetId);
+      await Promise.all([outlineQuery.refetch(), outlineMarkdownQuery.refetch()]);
     } catch (error) {
       console.error('Failed to refresh after restore:', error);
     }
@@ -858,7 +894,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                       variant="act"
                                       name={actData.name || 'Untitled Act'}
                                       description={actData.description}
-                                      contentMarkdown={getRichTextMarkdown(act.id, actLanguageState.viewLanguage, 'content')}
+                                      contentMarkdown={getContentMarkdown(act.id)}
                                       meta={`${actChapters.length} Chapters`}
                                       expanded={isActExpanded}
                                       showFallbackWarning={actLanguageState.isFallbackView}
@@ -924,7 +960,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                     variant="chapter"
                                                     name={chData.name || 'Untitled Chapter'}
                                                     description={chData.description}
-                                                    contentMarkdown={getRichTextMarkdown(chapter.id, chapterLanguageState.viewLanguage, 'content')}
+                                                    contentMarkdown={getContentMarkdown(chapter.id)}
                                                     chapterIndex={globalChapterIndex}
                                                     expanded={isChapterExpanded}
                                                     showFallbackWarning={chapterLanguageState.isFallbackView}

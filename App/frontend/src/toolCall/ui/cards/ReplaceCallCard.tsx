@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import { computeChangedFields, pickChangedValues, pickProvidedValues } from './fieldDiff';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
@@ -61,7 +61,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useProjectObjectsMap(projectId, language);
 
   const snapshot = useMemo(
     () => getObjectSnapshot({ operation, objects, projectId, language }),

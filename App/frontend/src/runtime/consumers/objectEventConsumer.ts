@@ -3,7 +3,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectChangedEvent } from '../../api/sseClient';
-import { isRichPreviewType, useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { defaultRichTextFormatForType, isRichPreviewType } from '../../domain/objectFormat';
+import { writeObjectToCacheFromSSE, removeObjectFromCacheFromSSE } from '../../data/sse/sseObjectBridge';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 
 const FLUSH_DEBOUNCE_MS = 50;
@@ -26,8 +27,14 @@ type PendingUpsert = {
   revision: number;
 };
 
+type PendingDelete = {
+  projectId: string;
+  objectType: ObjectType;
+  objectId: string;
+};
+
 export class ObjectEventConsumer {
-  private readonly pendingDeleteIds = new Set<string>();
+  private readonly pendingDeletes = new Map<string, PendingDelete>();
   private readonly pendingDeleteKeys = new Set<string>();
   private readonly pendingUpserts = new Map<string, PendingUpsert>();
   private readonly revisionByKey = new Map<string, number>();
@@ -42,7 +49,7 @@ export class ObjectEventConsumer {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    this.pendingDeleteIds.clear();
+    this.pendingDeletes.clear();
     this.pendingDeleteKeys.clear();
     this.pendingUpserts.clear();
     this.revisionByKey.clear();
@@ -66,10 +73,10 @@ export class ObjectEventConsumer {
 
       const objectType = objectTypeRaw;
       const key = this.objectKey(objectType, objectId);
-      const revision = this.bumpRevision(key);
+      this.bumpRevision(key);
 
       if (action === 'deleted') {
-        this.pendingDeleteIds.add(objectId);
+        this.pendingDeletes.set(key, { projectId, objectType, objectId });
         this.pendingDeleteKeys.add(key);
         this.pendingUpserts.delete(key);
         continue;
@@ -77,7 +84,12 @@ export class ObjectEventConsumer {
 
       if (action === 'created' || action === 'updated') {
         if (this.pendingDeleteKeys.has(key)) continue;
-        this.pendingUpserts.set(key, { projectId, objectType, objectId, revision });
+        this.pendingUpserts.set(key, {
+          projectId,
+          objectType,
+          objectId,
+          revision: this.revisionByKey.get(key) ?? 0,
+        });
       }
     }
 
@@ -108,33 +120,41 @@ export class ObjectEventConsumer {
 
   private async flush(): Promise<void> {
     if (this.disposed) return;
-    const deletes = [...this.pendingDeleteIds];
+    const deletes = [...this.pendingDeletes.values()];
     const deleteKeys = new Set(this.pendingDeleteKeys);
     const upserts = [...this.pendingUpserts.values()];
 
-    this.pendingDeleteIds.clear();
+    this.pendingDeletes.clear();
     this.pendingDeleteKeys.clear();
     this.pendingUpserts.clear();
 
     if (!deletes.length && !upserts.length) return;
 
-    if (deletes.length > 0) {
-      useUnifiedObjectStore.getState().applyObjectChanges({ deletes });
+    for (const item of deletes) {
+      removeObjectFromCacheFromSSE({
+        type: item.objectType,
+        id: item.objectId,
+        projectId: item.projectId,
+      });
     }
     if (upserts.length === 0) return;
 
-    const fetched: UnifiedObject[] = [];
-    const fetchedMarkdown: UnifiedObject[] = [];
     const settings = useSettingsStore.getState().settings;
     const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
     const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
+
     await Promise.all(
       upserts.map(async (item) => {
         const key = this.objectKey(item.objectType, item.objectId);
         try {
           const isRich = isRichPreviewType(item.objectType);
           const [object, markdownObject] = await Promise.all([
-            unifiedObjectService.getObject(item.objectType, item.objectId, language),
+            unifiedObjectService.getObject(
+              item.objectType,
+              item.objectId,
+              language,
+              defaultRichTextFormatForType(item.objectType),
+            ),
             isRich
               ? unifiedObjectService.getObject(item.objectType, item.objectId, language, 'markdown')
               : Promise.resolve(null),
@@ -142,8 +162,7 @@ export class ObjectEventConsumer {
           const latestRevision = this.revisionByKey.get(key) ?? 0;
           if (latestRevision !== item.revision) return;
           if (deleteKeys.has(key) || this.pendingDeleteKeys.has(key)) return;
-          fetched.push(object);
-          if (markdownObject) fetchedMarkdown.push(markdownObject);
+          writeObjectToCacheFromSSE(object as UnifiedObject, markdownObject as UnifiedObject | null, language);
         } catch (error) {
           console.warn('Failed to fetch changed object from SSE event', {
             projectId: item.projectId,
@@ -154,12 +173,5 @@ export class ObjectEventConsumer {
         }
       }),
     );
-
-    if (fetched.length > 0 || fetchedMarkdown.length > 0) {
-      useUnifiedObjectStore.getState().applyObjectChanges({
-        upserts: fetched,
-        markdownUpserts: fetchedMarkdown,
-      });
-    }
   }
 }

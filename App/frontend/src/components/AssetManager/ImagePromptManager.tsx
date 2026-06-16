@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useObjectQuery } from '../../data/objects/useObjectQuery';
+import { useUpdateImagePromptMutation } from '../../data/objects/mutations/useUpdateImagePromptMutation';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useSettings } from '../../store/settingsStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
@@ -57,12 +58,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     objectId,
 }) => {
     const settings = useSettings();
-    const {
-        loading,
-        errors,
-        updateImagePrompt,
-        getObject,
-    } = useUnifiedObjectStore();
+    const objectQuery = useObjectQuery(objectType as ObjectType, objectId, settings.mainLanguage);
+    const updateImagePromptMutation = useUpdateImagePromptMutation();
 
     // Local state for editing
     const [naturalPrompt, setNaturalPrompt] = useState('');
@@ -137,8 +134,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         }
     }, []);
 
-    // Get object from store
-    const object = getObject(objectId);
+    // Get object from query
+    const object = objectQuery.data ?? null;
     const objectKind = object?.type === 'story_entity' ? object.kind : undefined;
     const objectMetadata = object?.metadata;
 
@@ -233,15 +230,15 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         setIsSaving(true);
         setSaveSuccess(false);
         try {
-            await updateImagePrompt(
-                objectType as ObjectType,
-                objectId,
-                {
+            await updateImagePromptMutation.mutateAsync({
+                type: objectType as ObjectType,
+                id: objectId,
+                prompts: {
                     image_prompt: naturalPrompt,
                     image_prompt_positive: positivePrompt,
                     image_prompt_negative: negativePrompt,
-                }
-            );
+                },
+            });
             setHasChanges(false);
             setSaveSuccess(true);
             // Clear success message after 2 seconds
@@ -295,8 +292,8 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const isStreamingNegative = streamingSessionId !== null && streamingMode === 'negative';
     const isStreaming = streamingSessionId !== null;
 
-    const isLoading = loading[objectId];
-    const error = errors[objectId];
+    const isLoading = objectQuery.isLoading;
+    const error = objectQuery.error ? (objectQuery.error.message || 'Failed to fetch object') : null;
 
     if (!object && isLoading) {
         return <div className="image-prompt-manager loading">Loading...</div>;

@@ -7,9 +7,10 @@ import { confirm as confirmDialog } from '../../store/dialogStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useTimelineStore } from '../../store/timelineStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useTimelineUiStore } from '../../store/timelineUiStore';
+import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
 import type { TimelineDate, TimelineEvent, TimelineTrack } from '../../types/timeline';
+import type { UnifiedObject } from '../../types/unifiedObject';
 import { DEFAULT_CALENDAR } from '../../utils/timelineCalendar';
 import { buildTimelineFromObjects } from '../../utils/timelineView';
 import { useIsMobile } from './hooks/useIsMobile';
@@ -92,8 +93,21 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
   const setTagFilter = useTimelineStore((s) => s.setTagFilter);
   const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
-  const unifiedObjects = useUnifiedObjectStore((s) => s.getObjectsForProject(pid, displayLanguage));
-  const getRichTextMarkdown = useUnifiedObjectStore((s) => s.getRichTextMarkdown);
+
+  const trackQuery = useObjectCollectionQuery(pid, 'timeline_track', displayLanguage, 'markdown');
+  const eventQuery = useObjectCollectionQuery(pid, 'timeline_event', displayLanguage, 'markdown');
+  const unifiedObjects = useMemo(() => {
+    const map: Record<string, UnifiedObject> = {};
+    for (const o of [...(trackQuery.data ?? []), ...(eventQuery.data ?? [])]) map[o.id] = o;
+    return map;
+  }, [trackQuery.data, eventQuery.data]);
+  const getRichTextMarkdown = useCallback(
+    (id: string, _lang: string, field: string): string | undefined => {
+      const v = (unifiedObjects[id]?.data as Record<string, unknown> | undefined)?.[field];
+      return typeof v === 'string' ? v : undefined;
+    },
+    [unifiedObjects],
+  );
 
   const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[pid]);
   const showAllTracks = useTimelineUiStore((s) => s.showAllTracks);

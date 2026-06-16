@@ -8,7 +8,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import './GuidelinesManager.css';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
+import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
 import { useSettings } from '../../store/settingsStore';
 import { alert as showAlert } from '../../store/dialogStore';
 import AIEditModal from '../Modal/AIEditModal';
@@ -35,21 +36,24 @@ interface GuidelinesManagerProps {
 
 const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
-  const loadingMap = useUnifiedObjectStore((state) => state.loading);
-  const errors = useUnifiedObjectStore((state) => state.errors);
-  const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
-  const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
   const settings = useSettings();
-  // Get guidelines from unified store
-  const [guidelinesId, setGuidelinesId] = useState<string | null>(null);
-  const guidelines = guidelinesId ? (objects[guidelinesId] as GuidelinesObject) : null;
-  const loading = guidelinesId ? (loadingMap[guidelinesId] || false) : false;
-  const error = guidelinesId ? (errors[guidelinesId] || null) : null;
-  const [initializing, setInitializing] = useState(false);
-  const [initializationError, setInitializationError] = useState<string | null>(null);
+  const updateMutation = useUpdateObjectMutation();
+
+  // Get guidelines from the project's guidelines collection (exactly one per project).
+  // Primary query fetches the TipTap doc (default format) used for editing/saving;
+  // a sibling markdown query supplies the rendered preview (replaces getRichTextMarkdown).
+  const guidelinesQuery = useObjectCollectionQuery(projectId, 'guidelines', globalDisplayLanguage);
+  const guidelinesMarkdownQuery = useObjectCollectionQuery(projectId, 'guidelines', globalDisplayLanguage, 'markdown');
+  const guidelines = (guidelinesQuery.data?.[0] as GuidelinesObject | undefined) ?? null;
+  const guidelinesId = guidelines?.id ?? null;
+  const loading = guidelinesQuery.isLoading;
+  const error = guidelinesQuery.error
+    ? (guidelinesQuery.error instanceof Error ? guidelinesQuery.error.message : 'Failed to load guidelines')
+    : null;
+  // Guidelines are auto-created with the project; an empty collection means it is missing.
+  const notFound = !guidelinesQuery.isLoading && !guidelinesQuery.error && !guidelines
+    ? 'Guidelines not found. This should not happen.'
+    : null;
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -79,56 +83,16 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
     () => getDataForLanguage(languageState.viewLanguage),
     [getDataForLanguage, languageState.viewLanguage],
   );
-  const currentAuthorNoteMarkdown = useMemo(
-    () => (
-      guidelinesId
-        ? getRichTextMarkdown(guidelinesId, languageState.viewLanguage, 'authorNote')
-        : undefined
-    ),
-    [getRichTextMarkdown, guidelinesId, languageState.viewLanguage],
-  );
+  const currentAuthorNoteMarkdown = useMemo(() => {
+    // Markdown-format query: data.authorNote is already rendered markdown text.
+    const data = guidelinesMarkdownQuery.data?.[0]?.data as Record<string, unknown> | undefined;
+    const md = data?.authorNote;
+    return typeof md === 'string' ? md : undefined;
+  }, [guidelinesMarkdownQuery.data]);
 
   const canTranslate = languageState.isTranslationView && !languageState.hasRequestedLanguage;
   const canRetranslate = languageState.isTranslationView && languageState.hasRequestedLanguage;
   const showAIEdit = languageState.isMainLanguage;
-
-  const initializeGuidelines = useCallback(async () => {
-    if (!projectId) {
-      setGuidelinesId(null);
-      return;
-    }
-
-    setInitializing(true);
-    setInitializationError(null);
-
-    try {
-      const existing = await listObjects('guidelines', projectId, globalDisplayLanguage);
-      if (existing.length > 0) {
-        setGuidelinesId(existing[0].id);
-      } else {
-        // Guidelines should be auto-created with the project
-        setInitializationError('Guidelines not found. This should not happen.');
-      }
-    } catch (err) {
-      console.error('Failed to initialize guidelines:', err);
-      setInitializationError(
-        err instanceof Error ? err.message : 'Failed to load guidelines'
-      );
-    } finally {
-      setInitializing(false);
-    }
-  }, [globalDisplayLanguage, projectId, listObjects]);
-
-  useEffect(() => {
-    setGuidelinesId(null);
-    initializeGuidelines();
-  }, [initializeGuidelines]);
-
-  useEffect(() => {
-    if (guidelinesId) {
-      fetchObject('guidelines', guidelinesId, globalDisplayLanguage);
-    }
-  }, [fetchObject, globalDisplayLanguage, guidelinesId]);
 
   useEffect(() => {
     if (currentData && !isEditing) {
@@ -147,11 +111,15 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
     setIsSaving(true);
     try {
-      await updateObject('guidelines', guidelinesId, {
-        data: editFormData,
-        language: languageState.requestedLanguage,
-        user_request: 'User Edit',
-        create_new_version: languageState.createNewVersion,
+      await updateMutation.mutateAsync({
+        type: 'guidelines',
+        id: guidelinesId,
+        request: {
+          data: editFormData,
+          language: languageState.requestedLanguage,
+          user_request: 'User Edit',
+          create_new_version: languageState.createNewVersion,
+        },
       });
 
       setIsEditing(false);
@@ -185,7 +153,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const handleRestoreVersion = async () => {
     if (!guidelinesId) return;
     try {
-      await fetchObject('guidelines', guidelinesId, globalDisplayLanguage);
+      await Promise.all([guidelinesQuery.refetch(), guidelinesMarkdownQuery.refetch()]);
     } catch (err) {
       console.error('Failed to refresh after restore:', err);
     }
@@ -214,9 +182,8 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && (!guidelines || isStaleLanguage)) return loadingView;
-  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId, globalDisplayLanguage)}>Retry</button></div>;
-  if (initializationError && !guidelines) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeGuidelines} disabled={initializing}>Retry</button></div>;
-  if (initializing && !guidelines) return loadingView;
+  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesQuery.refetch()}>Retry</button></div>;
+  if (notFound && !guidelines) return <div className="error-container"><p>{notFound}</p><button onClick={() => guidelinesQuery.refetch()} disabled={loading}>Retry</button></div>;
   if (!guidelines) return <div className="error-container">Guidelines not found.</div>;
 
   return (

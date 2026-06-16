@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useSettings, type ImageProviderType } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { assetService, type Asset, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
@@ -30,7 +30,7 @@ import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { alert as showAlert } from '../../store/dialogStore';
-import type { StoryEntityKind } from '../../types/unifiedObject';
+import type { ObjectType, StoryEntityKind } from '../../types/unifiedObject';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import { buildImageProviderSettingsDraft } from '../../imageRun/form/providerSettings';
 import './ImageGenerationModal.css';
@@ -113,7 +113,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const { t } = useTranslation();
     const { currentProjectId } = useProjectStore();
     const settings = useSettings();
-    const { getObject } = useUnifiedObjectStore();
+    const savedPromptQuery = useObjectQuery(objectType as ObjectType, objectId, settings.mainLanguage);
     const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);
     const [model, setModel] = useState(settings.imageGenConfig.model);
     const [aspectRatio, setAspectRatio] = useState(settings.imageGenConfig.aspect_ratio);
@@ -124,7 +124,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const isGenerating = session?.status === 'queued' || session?.status === 'running' || session?.status === 'applying';
     const error = session?.status === 'failed' ? session.error_message ?? 'Image generation failed' : null;
     // Get saved prompts from object metadata
-    const savedPromptObject = objectId ? getObject(objectId) : null;
+    const savedPromptObject = objectId ? (savedPromptQuery.data ?? null) : null;
     const savedPrompts = useMemo(() => {
         if (!savedPromptObject?.metadata) return null;
         return {

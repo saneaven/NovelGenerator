@@ -7,7 +7,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { readProjectObjectsFromCache } from '../../../data/objects/objectCache';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
 import { buildPromptProjectDataSkeleton, type PromptProjectData } from '../../../templateEngine/projectShape';
 import type { TaskType } from '../../../types/scenarios';
@@ -161,9 +161,7 @@ export function buildMinimalProjectData(languages: string[] = []): PromptProject
  */
 function getAllProjectObjectIds(projectId: string): string[] {
   try {
-    const store = useUnifiedObjectStore.getState();
-    const allObjects = Object.values(store.objects);
-    return allObjects
+    return readProjectObjectsFromCache(projectId)
       .filter(obj => obj.metadata.project_id === projectId)
       .map(obj => obj.id);
   } catch {
@@ -173,9 +171,7 @@ function getAllProjectObjectIds(projectId: string): string[] {
 
 function getAllProjectStoryEntityIds(projectId: string): string[] {
   try {
-    const store = useUnifiedObjectStore.getState();
-    const allObjects = Object.values(store.objects);
-    return allObjects
+    return readProjectObjectsFromCache(projectId)
       .filter(obj => obj.metadata.project_id === projectId && obj.type === 'story_entity')
       .map(obj => obj.id);
   } catch {

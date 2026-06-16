@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import { useAssetStore } from '../../../store/assetStore';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
@@ -22,8 +22,11 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const objects = useUnifiedObjectStore((state) => state.objects);
-  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
+  const objects = useProjectObjectsMap(projectId, language);
+  const getRichTextMarkdown = (id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
+    const value = (objects[id]?.data as Record<string, unknown> | undefined)?.[field];
+    return typeof value === 'string' ? value : undefined;
+  };
   const timelineLookup = useTimelineLookup(projectId);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);

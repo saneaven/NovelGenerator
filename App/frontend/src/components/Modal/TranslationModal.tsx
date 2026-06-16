@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
 import { useSettings } from '../../store/settingsStore';
 import { useTimelineStore } from '../../store/timelineStore';
 import type { AnyObjectType, TranslationStatus, UnifiedObject } from '../../types/unifiedObject';
@@ -135,14 +134,16 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const hasInitializedSelectionRef = useRef(false);
   const hasInitializedContextRef = useRef(false);
   const settings = useSettings();
-  // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const sourceProjectionLanguage = sourceLanguage || defaultSourceLanguage || settings.mainLanguage || 'English';
   const targetProjectionLanguage = targetLanguage || defaultTargetLanguage || '';
-  const objects = useUnifiedObjectStore(useShallow(state => state.getObjectsForProject(projectId, sourceProjectionLanguage)));
-  const targetObjects = useUnifiedObjectStore(useShallow(state => (
-    targetProjectionLanguage ? state.getObjectsForProject(projectId, targetProjectionLanguage) : EMPTY_OBJECT_CACHE
-  )));
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const objects = useProjectObjectsMap(projectId, sourceProjectionLanguage);
+  // Hooks must run unconditionally: always query with a real language, then gate
+  // usage so targetObjects stays empty until a target language is chosen.
+  const targetObjectsMap = useProjectObjectsMap(projectId, targetProjectionLanguage || sourceProjectionLanguage);
+  const targetObjects = useMemo(
+    () => (targetProjectionLanguage ? targetObjectsMap : EMPTY_OBJECT_CACHE),
+    [targetProjectionLanguage, targetObjectsMap],
+  );
   const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
 
@@ -177,30 +178,20 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     [translationStatuses],
   );
 
-  // Ensure all object types are available for translation selection without mutating the page timeline.
+  // Load the timeline projections + translation status for both languages.
+  // Object collections (story tree, outline, manuscript, etc.) auto-fetch via
+  // the useProjectObjectsMap / ObjectPicker queries above.
   useEffect(() => {
     if (!isOpen || !projectId) return;
 
     let cancelled = false;
     const sourceTimelineLanguage = sourceProjectionLanguage;
     const targetTimelineLanguage = targetProjectionLanguage;
-    const objectTypes: AnyObjectType[] = [
-      'basic_info',
-      'guidelines',
-      'story_entity_folder',
-      'story_entity',
-      'outline',
-      'manuscript',
-    ];
 
     setPickerLoading(true);
     setTranslationStatusReady(false);
 
     void Promise.all([
-      refreshProjectObjects(projectId, objectTypes, sourceTimelineLanguage),
-      targetTimelineLanguage
-        ? refreshProjectObjects(projectId, objectTypes, targetTimelineLanguage)
-        : Promise.resolve(),
       fetchTimeline(projectId, sourceTimelineLanguage, { force: true }),
       targetTimelineLanguage
         ? fetchTimeline(projectId, targetTimelineLanguage, { force: true })
@@ -208,7 +199,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       availableLanguages.length > 0
         ? translationService.getProjectTranslationStatus(projectId, availableLanguages)
         : Promise.resolve({ translation_status: [] }),
-    ]).then(([, , , , statusResult]) => {
+    ]).then(([, , statusResult]) => {
       if (cancelled) return;
       setTranslationStatuses(statusResult.translation_status);
       setTranslationStatusReady(true);
@@ -233,7 +224,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     isOpen,
     projectId,
     fetchTimeline,
-    refreshProjectObjects,
     settings.mainLanguage,
     sourceProjectionLanguage,
     targetProjectionLanguage,

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
+import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { SkeletonList } from '../../../components/common/Skeleton';
 import { alert as showAlert } from '../../../store/dialogStore';
-import type { OutlineObject } from '../../../types/unifiedObject';
+import type { OutlineObject, UnifiedObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
@@ -12,7 +13,7 @@ import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu'
 import { Close, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Refresh } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import { requestedLanguageStateFromProjection } from '../../../utils/requestedLanguage';
-import { sortOutlineObjects } from '../../../utils/outlineOrdering';
+import { sortOutlineObjects } from '../../../domain/outlineHierarchy';
 import './OutlineSidebar.css';
 
 interface OutlineSidebarProps {
@@ -40,17 +41,19 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   onDeleteOutline,
   canCreateOutline,
 }) => {
-  const store = useUnifiedObjectStore();
-  const projectionObjects = useUnifiedObjectStore(
-    (state) => state.getObjectsForProject(projectId, displayLanguage),
-  );
-  const { loading: outlineLoading, hydrated: outlineHydrated } = useObjectCollectionStatus(
-    projectId,
-    ['outline'],
-    displayLanguage,
-  );
-  const showSkeleton = outlineLoading && !outlineHydrated;
+  const createMutation = useCreateObjectMutation();
+  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage);
+  const showSkeleton = outlineQuery.isLoading;
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+
+  // Index objects by id for the per-id lookups the old store projection provided.
+  const projectionObjects = useMemo(() => {
+    const map: Record<string, UnifiedObject> = {};
+    for (const obj of outlineQuery.data ?? []) {
+      map[obj.id] = obj;
+    }
+    return map;
+  }, [outlineQuery.data]);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -71,15 +74,15 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     if (!formName.trim() || !canCreateOutline) return;
 
     try {
-      await store.createObject(
-        'outline',
+      await createMutation.mutateAsync({
+        type: 'outline',
         projectId,
-        { name: formName.trim(), description: formDescription.trim() },
-        mainLanguage,
-        { position: outlines.length },
-        'User Creation',
-        'outline'
-      );
+        data: { name: formName.trim(), description: formDescription.trim() },
+        language: mainLanguage,
+        metadata: { position: outlines.length },
+        userRequest: 'User Creation',
+        kind: 'outline',
+      });
       // Reset form and close
       setFormName('');
       setFormDescription('');

@@ -7,12 +7,13 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettings } from '../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStore } from '../../store/threadStore';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { journeyService } from '../../api/journeyService';
 import { isPausedLikeThreadStatus } from '../../types/thread';
+import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -73,14 +74,16 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
 }) => {
   const { currentProjectId } = useProjectStore();
   const settings = useSettings();
-  const unifiedStore = useUnifiedObjectStore();
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const objectQuery = useObjectQuery(
+    (objectType ?? 'story_entity') as ObjectType,
+    contextType === 'object' ? objectId : undefined,
+    settings.mainLanguage,
+  );
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>(
     defaultSelectedEntityIds ?? []
   );
-  const [pickerLoading, setPickerLoading] = useState(false);
   const [activeJourneyId, setActiveJourneyId] = useState<string | null>(null);
 
   // Get threadId from journey metadata
@@ -103,7 +106,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   );
 
   // Get object data for 'object' context
-  const objectData = objectId ? unifiedStore.objects[objectId] : null;
+  const objectData = objectId ? (objectQuery.data ?? null) : null;
   const targetObject = useMemo(() => {
     if (contextType !== 'object' || !objectId || !objectData) return null;
     const data = objectData.data && typeof objectData.data === 'object' && !Array.isArray(objectData.data)
@@ -119,28 +122,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     if (!isOpen) {
       setUserRequest(defaultUserRequest || '');
       setSelectedEntityIds(defaultSelectedEntityIds ?? []);
-      setPickerLoading(false);
     }
   }, [isOpen, defaultUserRequest, defaultSelectedEntityIds]);
-
-  useEffect(() => {
-    if (!isOpen || contextType !== 'scene' || !currentProjectId) return;
-
-    let cancelled = false;
-    setPickerLoading(true);
-
-    void refreshProjectObjects(currentProjectId, ['story_entity']).catch((loadError) => {
-      console.error('Failed to preload story entities for image prompt modal:', loadError);
-    }).finally(() => {
-      if (!cancelled) {
-        setPickerLoading(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, contextType, currentProjectId, refreshProjectObjects]);
 
   useEffect(() => {
     if (!activeJourneyId) return;
@@ -363,7 +346,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
               selectedIds={selectedEntityIds}
               onChange={(ids) => setSelectedEntityIds(Array.isArray(ids) ? ids : [ids])}
               selectionMode="multi"
-              loading={pickerLoading}
               maxHeight="200px"
               selectAllOnLoad={!defaultSelectedEntityIds?.length}
             />

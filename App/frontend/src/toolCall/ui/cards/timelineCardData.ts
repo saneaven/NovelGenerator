@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useTimelineStore } from '../../../store/timelineStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { defaultCalendar, formatDate } from '../../../utils/timelineCalendar';
 import { buildTimelineFromObjects } from '../../../utils/timelineView';
+import type { UnifiedObject } from '../../../types/unifiedObject';
 import type {
   CalendarConfig,
   FullTimeline,
@@ -51,11 +53,17 @@ function buildLookup(timeline: FullTimeline | null): TimelineLookup {
 
 /** Resolve a lookup of existing timeline tracks/events for the given project. */
 export function useTimelineLookup(projectId: string): TimelineLookup {
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language);
+  const events = useObjectCollectionQuery(projectId, 'timeline_event', language);
   const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
   const timeline = useMemo(
-    () => buildTimelineFromObjects(projectId, objects, timelineConfig),
-    [objects, projectId, timelineConfig],
+    () => {
+      const record: Record<string, UnifiedObject> = {};
+      for (const obj of [...(tracks.data ?? []), ...(events.data ?? [])]) record[obj.id] = obj;
+      return buildTimelineFromObjects(projectId, record, timelineConfig);
+    },
+    [tracks.data, events.data, projectId, timelineConfig],
   );
   return useMemo(() => buildLookup(timeline), [timeline]);
 }

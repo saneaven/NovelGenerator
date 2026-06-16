@@ -16,7 +16,11 @@ import {
 import { useDndSensors } from '../../hooks/useDndSensors';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../store/unifiedObjectStore';
+import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
+import { useCreateObjectMutation } from '../../data/objects/mutations/useCreateObjectMutation';
+import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
+import { useDeleteObjectMutation } from '../../data/objects/mutations/useDeleteObjectMutation';
+import { usePatchObjectStructureMutation } from '../../data/objects/mutations/usePatchObjectStructureMutation';
 import { useSettings } from '../../store/settingsStore';
 import { useAssetStore } from '../../store/assetStore';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
@@ -53,7 +57,7 @@ import {
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
 import type { TipTapDoc } from '../../types/tiptap';
-import type { StoryEntityData, StoryEntityKind, StoryEntityObject } from '../../types/unifiedObject';
+import type { StoryEntityData, StoryEntityKind, StoryEntityObject, UnifiedObject } from '../../types/unifiedObject';
 import type { ObjectAssetLink } from '../../api/assetService';
 import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import {
@@ -64,8 +68,6 @@ import {
 import {
   applyStoryEntityStructurePatch,
   buildFolderPathLabel,
-  getProjectStoryEntityFolders,
-  getProjectStoryEntities,
 } from '../../utils/storyEntityTree';
 import FolderTreeContent from './FolderTreeContent';
 import StoryEntityGridSkeleton from './StoryEntityGridSkeleton';
@@ -164,20 +166,47 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const { projectId } = useParams<{ projectId: string }>();
   const settings = useSettings();
 
-  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
-  const { loading: treeLoading, hydrated: treeHydrated } = useObjectCollectionStatus(
-    projectId,
-    ['story_entity', 'story_entity_folder'],
-    globalDisplayLanguage,
-  );
-  const showSkeleton = treeLoading && !treeHydrated;
-  const loading = useUnifiedObjectStore((state) => state.loading);
-  const refreshStoryEntityTree = useUnifiedObjectStore((state) => state.refreshStoryEntityTree);
-  const createObject = useUnifiedObjectStore((state) => state.createObject);
-  const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const patchObjectStructure = useUnifiedObjectStore((state) => state.patchObjectStructure);
-  const deleteObject = useUnifiedObjectStore((state) => state.deleteObject);
-  const getRichTextMarkdown = useUnifiedObjectStore((state) => state.getRichTextMarkdown);
+  // TipTap-format tree feeds the editor (entity.data.content is a TipTap doc);
+  // the markdown-format sibling supplies rendered card previews (replaces
+  // the old getRichTextMarkdown cache).
+  const tree = useStoryEntityTreeQuery(projectId, globalDisplayLanguage);
+  const treeMarkdown = useStoryEntityTreeQuery(projectId, globalDisplayLanguage, 'markdown');
+  const showSkeleton = tree.isLoading;
+
+  const createObjectMutation = useCreateObjectMutation();
+  const updateObjectMutation = useUpdateObjectMutation();
+  const deleteObjectMutation = useDeleteObjectMutation();
+  const patchObjectStructureMutation = usePatchObjectStructureMutation();
+
+  // Optimistic overlay for drag-and-drop reorder/move. While a structure patch
+  // is in flight we render this locally-patched objects Record for instant
+  // feedback, then clear it once the tree query refetches the server truth.
+  const [optimisticObjects, setOptimisticObjects] = useState<Record<string, UnifiedObject> | null>(null);
+
+  const serverObjects = useMemo<Record<string, UnifiedObject>>(() => {
+    const folders = tree.data?.folders ?? [];
+    const entities = tree.data?.entities ?? [];
+    return Object.fromEntries([...folders, ...entities].map((o) => [o.id, o]));
+  }, [tree.data]);
+
+  // Clear the optimistic overlay whenever fresh server data arrives.
+  useEffect(() => {
+    setOptimisticObjects(null);
+  }, [serverObjects]);
+
+  const objects = optimisticObjects ?? serverObjects;
+
+  // Rendered-markdown content keyed by entity id, from the markdown-format tree.
+  const markdownContentByEntityId = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const entity of treeMarkdown.data?.entities ?? []) {
+      const content = (entity.data as { content?: unknown } | undefined)?.content;
+      if (typeof content === 'string') {
+        map[entity.id] = content;
+      }
+    }
+    return map;
+  }, [treeMarkdown.data]);
 
   const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
   const objectAssetsByKey = useAssetStore((state) => state.objectAssetsByKey);
@@ -244,8 +273,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const sortEntities = useMemo(() => makeSortEntities(globalDisplayLanguage, settings.mainLanguage), [globalDisplayLanguage, settings.mainLanguage]);
 
   const folders = useMemo(
-    () => getProjectStoryEntityFolders(objects, projectId),
-    [objects, projectId],
+    () => Object.values(objects).filter(
+      (o): o is StoryEntityFolder => o.type === 'story_entity_folder',
+    ),
+    [objects],
   );
 
   const foldersById = useMemo(
@@ -253,8 +284,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     [folders],
   );
   const entities = useMemo(
-    () => getProjectStoryEntities(objects, projectId).sort(sortEntities),
-    [objects, projectId, sortEntities],
+    () => Object.values(objects)
+      .filter((o): o is StoryEntityObject => o.type === 'story_entity')
+      .sort(sortEntities),
+    [objects, sortEntities],
   );
 
   const effectiveFolderId = selectedFolderId;
@@ -436,36 +469,36 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const handleCreateEntity = useCallback(async (name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !newEntityDraft || !name.trim()) return;
     try {
-      await createObject(
-        'story_entity',
+      await createObjectMutation.mutateAsync({
+        type: 'story_entity',
         projectId,
-        { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
-        settings.mainLanguage,
-        { folder_id: newEntityDraft.folderId },
-        'User Creation',
-        newEntityDraft.kind,
-      );
+        data: { name: name.trim(), description: description.trim(), content: normalizeDoc(content) },
+        language: settings.mainLanguage,
+        metadata: { folder_id: newEntityDraft.folderId },
+        userRequest: 'User Creation',
+        kind: newEntityDraft.kind,
+      });
       setNewEntityDraft(null);
     } catch (error) {
       console.error('Failed to create story entity:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create story entity.' });
     }
-  }, [createObject, newEntityDraft, projectId, settings.mainLanguage]);
+  }, [createObjectMutation, newEntityDraft, projectId, settings.mainLanguage]);
 
   const handleCreateFolder = useCallback(async () => {
     if (!projectId || !newFolderName.trim()) return;
     try {
-      await createObject(
-        'story_entity_folder',
+      await createObjectMutation.mutateAsync({
+        type: 'story_entity_folder',
         projectId,
-        {
+        data: {
           name: newFolderName.trim(),
           description: newFolderDescription.trim(),
         },
-        settings.mainLanguage,
-        { parent_id: effectiveFolderId },
-        'User Creation',
-      );
+        language: settings.mainLanguage,
+        metadata: { parent_id: effectiveFolderId },
+        userRequest: 'User Creation',
+      });
       setIsCreatingFolder(false);
       setNewFolderName('');
       setNewFolderDescription('');
@@ -473,7 +506,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       console.error('Failed to create story entity folder:', error);
       showAlert({ title: 'Create Error', message: 'Failed to create folder.' });
     }
-  }, [createObject, effectiveFolderId, newFolderDescription, newFolderName, projectId, settings.mainLanguage]);
+  }, [createObjectMutation, effectiveFolderId, newFolderDescription, newFolderName, projectId, settings.mainLanguage]);
 
   const startRenameFolder = useCallback((folder: StoryEntityFolder) => {
     if (!isMainLanguageView) return;
@@ -503,22 +536,26 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     }
     try {
       const folder = foldersById[folderId];
-      await updateObject('story_entity_folder', folderId, {
-        language: settings.mainLanguage,
-        data: {
-          name: renameFolderValue.trim(),
-          description: folder
-            ? renameFolderDescription.trim()
-            : '',
+      await updateObjectMutation.mutateAsync({
+        type: 'story_entity_folder',
+        id: folderId,
+        request: {
+          language: settings.mainLanguage,
+          data: {
+            name: renameFolderValue.trim(),
+            description: folder
+              ? renameFolderDescription.trim()
+              : '',
+          },
+          user_request: 'User Edit',
         },
-        user_request: 'User Edit',
       });
       cancelRenameFolder();
     } catch (error) {
       console.error('Failed to rename story entity folder:', error);
       showAlert({ title: 'Rename Error', message: 'Failed to rename folder.' });
     }
-  }, [cancelRenameFolder, foldersById, renameFolderDescription, renameFolderValue, settings.mainLanguage, updateObject]);
+  }, [cancelRenameFolder, foldersById, renameFolderDescription, renameFolderValue, settings.mainLanguage, updateObjectMutation]);
 
   const handleSaveEntity = useCallback(async (name: string, description: string, content: TipTapDoc) => {
     if (!projectId || !expandedEntityId || !editingEntityDraft || !name.trim()) return;
@@ -527,24 +564,27 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     const languageState = getEntityLanguageState(entity, settings.mainLanguage);
     if (!languageState.canEdit) return;
     try {
-      await updateObject('story_entity', expandedEntityId, {
-        kind: editingEntityDraft.kind,
-        data: {
-          name: name.trim(),
-          description: description.trim(),
-          content: normalizeDoc(content),
+      await updateObjectMutation.mutateAsync({
+        type: 'story_entity',
+        id: expandedEntityId,
+        request: {
+          kind: editingEntityDraft.kind,
+          data: {
+            name: name.trim(),
+            description: description.trim(),
+            content: normalizeDoc(content),
+          },
+          language: languageState.requestedLanguage,
+          rich_text_format: 'tiptap',
+          user_request: 'User Edit',
+          create_new_version: languageState.createNewVersion,
         },
-        language: languageState.requestedLanguage,
-        rich_text_format: 'tiptap',
-        user_request: 'User Edit',
-        create_new_version: languageState.createNewVersion,
       });
       if ((entity.metadata.folder_id ?? null) !== editingEntityDraft.folderId) {
-        await patchObjectStructure('story_entity', expandedEntityId, {
-          folder_id: editingEntityDraft.folderId,
-        });
-        void refreshStoryEntityTree(projectId, { language: globalDisplayLanguage }).catch((error) => {
-          console.error('Failed to reconcile story entity tree after structure update:', error);
+        await patchObjectStructureMutation.mutateAsync({
+          type: 'story_entity',
+          id: expandedEntityId,
+          metadata: { folder_id: editingEntityDraft.folderId },
         });
       }
       closeEntityEditor();
@@ -552,7 +592,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       console.error('Failed to save story entity:', error);
       showAlert({ title: 'Save Error', message: 'Failed to save story entity.' });
     }
-  }, [closeEntityEditor, editingEntityDraft, entities, expandedEntityId, globalDisplayLanguage, patchObjectStructure, projectId, refreshStoryEntityTree, settings.mainLanguage, updateObject]);
+  }, [closeEntityEditor, editingEntityDraft, entities, expandedEntityId, patchObjectStructureMutation, projectId, settings.mainLanguage, updateObjectMutation]);
 
   const handleDeleteEntity = useCallback(async (entityId: string) => {
     const confirmed = await confirm({
@@ -562,9 +602,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       confirmLabel: 'Delete',
     });
     if (!confirmed) return;
+    if (!projectId) return;
 
     try {
-      await deleteObject('story_entity', entityId);
+      await deleteObjectMutation.mutateAsync({ type: 'story_entity', id: entityId, projectId });
       if (expandedEntityId === entityId) {
         closeEntityEditor();
       }
@@ -572,7 +613,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       console.error('Failed to delete story entity:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete story entity.' });
     }
-  }, [closeEntityEditor, deleteObject, expandedEntityId]);
+  }, [closeEntityEditor, deleteObjectMutation, expandedEntityId, projectId]);
 
   const handleDeleteFolder = useCallback(async (folder: StoryEntityFolder) => {
     const confirmed = await confirm({
@@ -582,9 +623,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       confirmLabel: 'Delete',
     });
     if (!confirmed) return;
+    if (!projectId) return;
 
     try {
-      await deleteObject('story_entity_folder', folder.id);
+      await deleteObjectMutation.mutateAsync({ type: 'story_entity_folder', id: folder.id, projectId });
       if (renamingFolderId === folder.id) {
         cancelRenameFolder();
       }
@@ -592,7 +634,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
       console.error('Failed to delete story entity folder:', error);
       showAlert({ title: 'Delete Error', message: 'Failed to delete folder.' });
     }
-  }, [cancelRenameFolder, deleteObject, renamingFolderId]);
+  }, [cancelRenameFolder, deleteObjectMutation, projectId, renamingFolderId]);
 
   const performStructureMove = useCallback(async (
     objectType: 'story_entity_folder' | 'story_entity',
@@ -601,26 +643,25 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     errorMessage: string,
   ) => {
     if (!projectId) return;
-    const previousObjects = useUnifiedObjectStore.getState().objects;
-    const optimisticObjects = applyStoryEntityStructurePatch(previousObjects, projectId, {
-      objectType,
-      objectId,
-      metadata,
-    });
-
-    useUnifiedObjectStore.setState({ objects: optimisticObjects });
+    // Optimistically reorder/move locally for instant feedback. The overlay is
+    // cleared when the patch mutation's tree invalidation delivers fresh data.
+    const baseObjects = objects;
+    setOptimisticObjects(
+      applyStoryEntityStructurePatch(baseObjects, projectId, {
+        objectType,
+        objectId,
+        metadata,
+      }),
+    );
 
     try {
-      await patchObjectStructure(objectType, objectId, metadata);
-      void refreshStoryEntityTree(projectId, { language: globalDisplayLanguage }).catch((error) => {
-        console.error('Failed to reconcile story entity tree after move:', error);
-      });
+      await patchObjectStructureMutation.mutateAsync({ type: objectType, id: objectId, metadata });
     } catch (error) {
-      useUnifiedObjectStore.setState({ objects: previousObjects });
+      setOptimisticObjects(null);
       showAlert({ title: 'Move Error', message: errorMessage });
       throw error;
     }
-  }, [patchObjectStructure, projectId, refreshStoryEntityTree]);
+  }, [objects, patchObjectStructureMutation, projectId]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDragId(String(event.active.id));
@@ -891,7 +932,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
                               entity={item.entity}
                               itemData={item.itemData}
                               description={item.description}
-                              contentMarkdown={getRichTextMarkdown(item.entity.id, item.languageState.viewLanguage, 'content')}
+                              contentMarkdown={markdownContentByEntityId[item.entity.id]}
                               imageUrl={mainAsset ? getAssetUrl(mainAsset) : null}
                               spanType={spanType}
                               dragHandle={dragHandle}
@@ -939,7 +980,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               versionNumber={currentExpandedEntity.version.number}
               objectType="story_entity"
               mainAsset={getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
-              loading={loading[currentExpandedEntity.id] || false}
+              loading={updateObjectMutation.isPending}
               readOnly={!currentExpandedEntityLanguageState?.canEdit}
               readOnlyReason={
                 currentExpandedEntityLanguageState && !currentExpandedEntityLanguageState.canEdit

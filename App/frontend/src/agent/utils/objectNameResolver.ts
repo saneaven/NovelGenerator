@@ -1,4 +1,4 @@
-import type { SimplifiedProjectObjects } from '../../store/unifiedObjectStore';
+import type { SimplifiedProjectObjects } from '../../domain/projectObjects';
 
 /** Generic act type for name resolution - only needs id, name, and chapters */
 interface ActLike {

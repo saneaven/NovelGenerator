@@ -1,5 +1,6 @@
 import { useSettingsStore } from '../store/settingsStore';
-import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { readObjectFromCache } from '../data/objects/objectCache';
+import type { ObjectType } from '../types/unifiedObject';
 import type { JourneySpec, EditingTargets } from './types';
 
 // =====================================================================
@@ -80,10 +81,8 @@ function objectEditLabel(input: ObjectEditInput): string {
     return `AI Edit: ${categoryLabel}`;
   }
 
-  const store = useUnifiedObjectStore.getState();
-
   if (input.category === 'outline') {
-    const outline = store.getObject(input.targetId);
+    const outline = readObjectFromCache('outline', input.targetId);
     if (outline?.type === 'outline') {
       if (outline.kind === 'act') categoryLabel = 'Act';
       else if (outline.kind === 'chapter') categoryLabel = 'Chapter';
@@ -91,13 +90,14 @@ function objectEditLabel(input: ObjectEditInput): string {
   }
 
   if (input.category === 'manuscript') {
-    const chapter = store.getObject(input.targetId);
+    const chapter = readObjectFromCache('manuscript', input.targetId)
+      ?? readObjectFromCache('outline', input.targetId);
     const langData = chapter?.data as Record<string, unknown> | undefined;
     const chapterName = (langData as any)?.name ?? '';
     return chapterName ? `AI Edit: ${categoryLabel} - ${chapterName}` : `AI Edit: ${categoryLabel}`;
   }
 
-  const obj = store.getObject(input.targetId);
+  const obj = readObjectFromCache(input.category as ObjectType, input.targetId);
   const data = obj?.data as Record<string, unknown> | undefined;
   const name =
     (data as any)?.name ??

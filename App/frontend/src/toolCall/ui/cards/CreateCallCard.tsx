@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
 import { OutlineItemCard, toOutlineItemVariant } from '../../../components/OutlineItemCard';
@@ -42,7 +42,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useProjectObjectsMap(projectId, language);
   const timelineLookup = useTimelineLookup(projectId);
 
   const fields = useMemo(() => {

@@ -26,7 +26,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
+import { useObjectQuery } from '../../../data/objects/useObjectQuery';
+import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
 import { useSettings } from '../../../store/settingsStore';
 import { alert as showAlert } from '../../../store/dialogStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
@@ -37,7 +39,7 @@ import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import { UnifiedImageModal } from '../../../components/AssetManager';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { assetService, type Asset } from '../../../api/assetService';
-import type { ManuscriptObject } from '../../../types/unifiedObject';
+import type { ManuscriptObject, UnifiedObject } from '../../../types/unifiedObject';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
 import type { ImageGenerationRecipe } from '../../../imageRun';
@@ -99,16 +101,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const { t } = useTranslation();
 
   // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
-  const storeObjects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, globalDisplayLanguage));
-  const storeLoading = useUnifiedObjectStore((state) => state.loading);
-  const storeErrors = useUnifiedObjectStore((state) => state.errors);
+  // Manuscripts + chapters (outline) come from TanStack Query collections.
+  const manuscriptCollection = useObjectCollectionQuery(projectId, 'manuscript', globalDisplayLanguage);
+  const outlineCollection = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage);
+  const storeObjects = useMemo<Record<string, UnifiedObject>>(() => {
+    const map: Record<string, UnifiedObject> = {};
+    for (const obj of [...(manuscriptCollection.data ?? []), ...(outlineCollection.data ?? [])]) {
+      map[obj.id] = obj;
+    }
+    return map;
+  }, [manuscriptCollection.data, outlineCollection.data]);
   // Whether the chapter (outline) collection has loaded for the current language.
   // Used to avoid a false "Failed to resolve linked manuscript" while chapters load.
-  const { hydrated: chaptersHydrated } = useObjectCollectionStatus(projectId, ['outline'], globalDisplayLanguage);
+  const chaptersHydrated = !outlineCollection.isLoading;
 
-  // Actions accessed via getState() - doesn't trigger re-renders
-  const fetchObject = useUnifiedObjectStore.getState().fetchObject;
-  const updateObject = useUnifiedObjectStore.getState().updateObject;
+  const updateObjectMutation = useUpdateObjectMutation();
   const settings = useSettings();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
@@ -119,6 +126,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // State
   const [manuscriptId, setManuscriptId] = useState<string | null>(null);
+  // Active manuscript content (tiptap). staleTime: Infinity + refetchOnMount: false —
+  // the editor owns the buffer, so the cache only changes via save (setQueryData) or an
+  // explicit refetch / SSE push; edits are never yanked mid-typing by a background refetch.
+  const manuscriptDetail = useObjectQuery('manuscript', manuscriptId ?? undefined, globalDisplayLanguage, {
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
   const [isResolvingContentId, setIsResolvingContentId] = useState(false);
   const [contentIdError, setContentIdError] = useState<string | null>(null);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
@@ -142,7 +156,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
@@ -158,7 +171,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (!aiEditSessionId || !aiEditSession) return;
     if (aiEditSession.status === 'success') {
       if (manuscriptId) {
-        fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
+        void manuscriptDetail.refetch();
       }
       setAiEditSessionId(null);
       return;
@@ -166,14 +179,17 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (aiEditSession.status === 'error' || aiEditSession.status === 'cancelled') {
       setAiEditSessionId(null);
     }
-  }, [aiEditSessionId, aiEditSession, manuscriptId, fetchObject, globalDisplayLanguage]);
+  }, [aiEditSessionId, aiEditSession, manuscriptId, manuscriptDetail]);
 
-  // Get manuscript from store
-  const manuscript = manuscriptId
-    ? (storeObjects[manuscriptId] as ManuscriptObject)
+  // Active manuscript: prefer the detail query (fresh after save via setQueryData),
+  // fall back to the collection copy while the detail is loading.
+  const manuscript = ((manuscriptDetail.data as ManuscriptObject | undefined)
+    ?? (manuscriptId ? (storeObjects[manuscriptId] as ManuscriptObject | undefined) : undefined))
+    ?? null;
+  const loading = manuscriptId ? manuscriptDetail.isLoading : false;
+  const error = manuscriptId
+    ? (manuscriptDetail.error ? (manuscriptDetail.error.message || 'Failed to load manuscript') : null)
     : null;
-  const loading = manuscriptId ? (storeLoading[manuscriptId] || false) : false;
-  const error = manuscriptId ? (storeErrors[manuscriptId] || null) : null;
   // True only when the currently shown manuscript is the projection for the active
   // display language. On language change `manuscript` may momentarily be the previous
   // language's object (served by getObjectsForProject's base-object fallback); we treat
@@ -328,6 +344,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // not in the store yet. Also refetch when the active language changes and the shown
   // manuscript is still the previous language's projection (stale), so switching language
   // immediately loads the new language instead of lingering on base-object fallback.
+  // The manuscript detail query auto-fetches when manuscriptId / language changes.
+  // Here we only mirror its state into the panel's resolving / error UI.
   useEffect(() => {
     if (!manuscriptId) return;
     if (manuscript && manuscriptLanguageReady) {
@@ -335,33 +353,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setIsResolvingContentId(false);
       return;
     }
-
-    // Set a timeout to prevent infinite loading
-    loadingTimeoutRef.current = setTimeout(() => {
-      if (!manuscript) {
-        console.error('Loading timeout - forcing error state');
-        setContentIdError('Loading timeout. The manuscript is taking too long to load. Please try refreshing.');
-      }
-    }, 10000); // 10 second timeout
-
-    // Defer to avoid flushSync conflict with TipTap editor during React render phase
-    queueMicrotask(() => {
-      // Fetch without language parameter - API returns all languages
-      // effectiveLanguage (with fallback logic) will pick the right content
-      fetchObject('manuscript', manuscriptId, globalDisplayLanguage).catch((err: Error) => {
-        console.error('Failed to fetch manuscript:', err);
-        setContentIdError(err.message || 'Failed to load manuscript');
-      }).finally(() => {
-        setIsResolvingContentId(false);
-      });
-    });
-
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, [manuscriptId, manuscript, manuscriptLanguageReady, globalDisplayLanguage, fetchObject]); // Fetch when manuscript is missing or stale for the active language
+    if (manuscriptDetail.isError) {
+      const message = manuscriptDetail.error instanceof Error
+        ? manuscriptDetail.error.message
+        : 'Failed to load manuscript';
+      setContentIdError(message || 'Failed to load manuscript');
+      setIsResolvingContentId(false);
+    }
+  }, [manuscriptId, manuscript, manuscriptLanguageReady, manuscriptDetail.isError, manuscriptDetail.error]);
 
   // Note: RichTextEditor now handles baseline tracking internally via hasChanges()
   // No need to track baselineSetRef here anymore
@@ -476,15 +475,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       lastSavedDocHashRef.current = getDocHash(latestDoc);
 
       try {
-        await updateObject('manuscript', manuscriptId, {
-          data: {
-            content: latestDoc,
-            wordCount: latestWordCount,
+        await updateObjectMutation.mutateAsync({
+          type: 'manuscript',
+          id: manuscriptId,
+          request: {
+            data: {
+              content: latestDoc,
+              wordCount: latestWordCount,
+            },
+            language: languageState.requestedLanguage,
+            rich_text_format: 'tiptap',
+            user_request: reason,
+            create_new_version: languageState.createNewVersion,
           },
-          language: languageState.requestedLanguage,
-          rich_text_format: 'tiptap',
-          user_request: reason,
-          create_new_version: languageState.createNewVersion,
         });
 
         setDoc(latestDoc);
@@ -504,7 +507,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, setIsSaving, updateObject]
+    [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, setIsSaving, updateObjectMutation]
   );
 
   // ============================================================================
@@ -714,7 +717,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         <p>{error}</p>
         <TextButton
           variant="secondary"
-          onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId, globalDisplayLanguage)}
+          onClick={() => { if (manuscriptId) void manuscriptDetail.refetch(); }}
         >
           {t('novelEditor.error.retry')}
         </TextButton>
@@ -982,7 +985,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           onRestoreVersion={() => {
             // Reload manuscript after restore
             if (manuscriptId) {
-              fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
+              void manuscriptDetail.refetch();
             }
           }}
         />

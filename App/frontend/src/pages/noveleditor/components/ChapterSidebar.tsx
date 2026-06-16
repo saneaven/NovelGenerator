@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useUnifiedObjectStore, useObjectCollectionStatus } from '../../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
-import type { ActObject, ChapterObject, OutlineObject } from '../../../types/unifiedObject';
+import type { ActObject, ChapterObject, OutlineObject, UnifiedObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { Close, ChevronDown } from '../../../components/icons';
 import { SkeletonList } from '../../../components/common/Skeleton';
-import { sortOutlineObjects } from '../../../utils/outlineOrdering';
+import { sortOutlineObjects } from '../../../domain/outlineHierarchy';
 import './ChapterSidebar.css';
 
 interface ChapterSidebarProps {
@@ -27,16 +27,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   displayLanguage,
 }) => {
   const { t } = useTranslation();
-  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const projectionObjects = useUnifiedObjectStore(
-    (state) => state.getObjectsForProject(projectId, displayLanguage),
+  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage);
+  const projectionObjects = useMemo<Record<string, UnifiedObject>>(
+    () => Object.fromEntries((outlineQuery.data ?? []).map((o) => [o.id, o])),
+    [outlineQuery.data],
   );
-  const { loading: chaptersLoading, hydrated: chaptersHydrated } = useObjectCollectionStatus(
-    projectId,
-    ['outline'],
-    displayLanguage,
-  );
-  const showSkeleton = chaptersLoading && !chaptersHydrated;
+  const showSkeleton = outlineQuery.isLoading;
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
@@ -73,19 +69,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     }
     setCollapsedActs(newCollapsed);
   };
-
-  // Load data
-  useEffect(() => {
-    const loadOutlineData = async () => {
-      if (!projectId) return;
-      try {
-        await listObjects('outline', projectId, displayLanguage);
-      } catch (error) {
-        console.error('Failed to load outline data:', error);
-      }
-    };
-    loadOutlineData();
-  }, [displayLanguage, projectId, listObjects]);
 
   // Get outlines for dropdown
   const outlines = useMemo(() => {

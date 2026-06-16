@@ -8,7 +8,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import './BasicInfoManager.css';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
+import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
 import { useSettings } from '../../store/settingsStore';
 import { alert as showAlert } from '../../store/dialogStore';
 import { useAssetStore } from '../../store/assetStore';
@@ -44,20 +45,21 @@ const EMPTY_BASIC_INFO_DATA: BasicInfoData = {
 
 const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const objects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId ?? '', globalDisplayLanguage));
-  const loadingMap = useUnifiedObjectStore((state) => state.loading);
-  const errors = useUnifiedObjectStore((state) => state.errors);
-  const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
-  const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const settings = useSettings();
-  // Get basic info from unified store
-  const [basicInfoId, setBasicInfoId] = useState<string | null>(null);
-  const basicInfo = basicInfoId ? (objects[basicInfoId] as BasicInfoObject) : null;
-  const loading = basicInfoId ? (loadingMap[basicInfoId] || false) : false;
-  const error = basicInfoId ? (errors[basicInfoId] || null) : null;
-  const [initializing, setInitializing] = useState(false);
-  const [initializationError, setInitializationError] = useState<string | null>(null);
+  const updateMutation = useUpdateObjectMutation();
+
+  // Get basic info from the project's basic_info collection (exactly one per project).
+  const basicInfoQuery = useObjectCollectionQuery(projectId, 'basic_info', globalDisplayLanguage);
+  const basicInfo = (basicInfoQuery.data?.[0] as BasicInfoObject | undefined) ?? null;
+  const basicInfoId = basicInfo?.id ?? null;
+  const loading = basicInfoQuery.isLoading;
+  const error = basicInfoQuery.error
+    ? (basicInfoQuery.error instanceof Error ? basicInfoQuery.error.message : 'Failed to load basic info')
+    : null;
+  // The basic_info object is auto-created with the project; an empty collection means it is missing.
+  const notFound = !basicInfoQuery.isLoading && !basicInfoQuery.error && !basicInfo
+    ? 'BasicInfo not found. This should not happen.'
+    : null;
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -91,44 +93,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const canRetranslate = languageState.isTranslationView && languageState.hasRequestedLanguage;
   const showAIEdit = languageState.isMainLanguage;
 
-  const initializeBasicInfo = useCallback(async () => {
-    if (!projectId) {
-      setBasicInfoId(null);
-      return;
-    }
-
-    setInitializing(true);
-    setInitializationError(null);
-
-    try {
-      const existing = await listObjects('basic_info', projectId, globalDisplayLanguage);
-      if (existing.length > 0) {
-        setBasicInfoId(existing[0].id);
-      } else {
-        // BasicInfo should be auto-created with the project
-        setInitializationError('BasicInfo not found. This should not happen.');
-      }
-    } catch (err) {
-      console.error('Failed to initialize basic info:', err);
-      setInitializationError(
-        err instanceof Error ? err.message : 'Failed to load basic info'
-      );
-    } finally {
-      setInitializing(false);
-    }
-  }, [globalDisplayLanguage, projectId, listObjects]);
-
-  useEffect(() => {
-    setBasicInfoId(null);
-    initializeBasicInfo();
-  }, [initializeBasicInfo]);
-
-  useEffect(() => {
-    if (basicInfoId) {
-      fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
-    }
-  }, [basicInfoId, fetchObject, globalDisplayLanguage]);
-
   useEffect(() => {
     if (currentData && !isEditing) {
       setEditFormData(currentData);
@@ -146,11 +110,15 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
     setIsSaving(true);
     try {
-      await updateObject('basic_info', basicInfoId, {
-        data: editFormData,
-        language: languageState.requestedLanguage,
-        user_request: 'User Edit',
-        create_new_version: languageState.createNewVersion,
+      await updateMutation.mutateAsync({
+        type: 'basic_info',
+        id: basicInfoId,
+        request: {
+          data: editFormData,
+          language: languageState.requestedLanguage,
+          user_request: 'User Edit',
+          create_new_version: languageState.createNewVersion,
+        },
       });
 
       setIsEditing(false);
@@ -188,7 +156,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const handleRestoreVersion = async () => {
     if (!basicInfoId) return;
     try {
-      await fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
+      await basicInfoQuery.refetch();
     } catch (err) {
       console.error('Failed to refresh after restore:', err);
     }
@@ -226,9 +194,8 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && (!basicInfo || isStaleLanguage)) return loadingView;
-  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId, globalDisplayLanguage)}>Retry</button></div>;
-  if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
-  if (initializing && !basicInfo) return loadingView;
+  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoQuery.refetch()}>Retry</button></div>;
+  if (notFound && !basicInfo) return <div className="error-container"><p>{notFound}</p><button onClick={() => basicInfoQuery.refetch()} disabled={loading}>Retry</button></div>;
   if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
 
   return (
@@ -503,7 +470,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           onClose={() => setShowAssetPicker(false)}
           objectType="basic_info"
           objectId={basicInfoId}
-          onAssetChange={() => fetchObject('basic_info', basicInfoId, globalDisplayLanguage)}
+          onAssetChange={() => basicInfoQuery.refetch()}
           title="Manage Cover Image"
         />
       )}

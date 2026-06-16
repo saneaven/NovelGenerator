@@ -5,7 +5,6 @@ import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useUnifiedObjectStore, type SimplifiedProjectObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useTimelineStore } from '../../store/timelineStore';
 import { useSettings } from '../../store/settingsStore';
@@ -13,10 +12,8 @@ import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { alert as showAlert } from '../../store/dialogStore';
 import { translationService } from '../../api/unifiedObjectService';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
-import { normalizeBasicInfoData } from '../../utils/basicInfo';
-import { sortOutlineObjects } from '../../utils/outlineOrdering';
-import type { StoryEntityObject, OutlineObject } from '../../types/unifiedObject';
-import { normalizeDoc } from '../../editor/manuscript/doc';
+import { useProjectObjectsQuery } from '../../data/objects/useProjectObjectsQuery';
+import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
 
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/TranslationModal';
@@ -64,9 +61,6 @@ const UnifiedWorkspace: React.FC = () => {
 
   const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading, setCurrentProject } = useProjectStore();
   const { fetchAgents } = useAgentStore();
-  const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
-  const changeRevision = useUnifiedObjectStore(state => state.changeRevision);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const timelineChangeRevision = useTimelineStore((state) => state.changeRevision);
   const timelineLoadedProjectId = useTimelineStore((state) => state.loadedProjectId);
@@ -126,18 +120,6 @@ const UnifiedWorkspace: React.FC = () => {
   // Translation count (missing any sub-language)
   const [objectsNeedingTranslation, setObjectsNeedingTranslation] = useState(0);
 
-  // NovelEditor objects state
-  const [projectObjects, setProjectObjects] = useState<SimplifiedProjectObjects>({
-    basicInfo: null,
-    storyEntities: [],
-    characters: [],
-    organizations: [],
-    locations: [],
-    lorebook: [],
-    outline: { outlines: [] },
-  });
-  const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
-
   // Build available languages list
   const availableLanguages = useMemo(() => {
     const languages = [mainLanguage];
@@ -153,7 +135,18 @@ const UnifiedWorkspace: React.FC = () => {
     }
     return mainLanguage;
   }, [preferredDisplayLanguage, availableLanguages, mainLanguage]);
-  const unifiedObjects = useUnifiedObjectStore(state => state.getObjectsForProject(projectId ?? '', currentDisplayLanguage));
+
+  // Composite query: the SimplifiedProjectObjects structure (replaces the old
+  // inline builder). Auto-fetches; `isLoading` is false once all collections resolve.
+  const { data: projectObjects, isLoading: isOutlineLoading } = useProjectObjectsQuery(
+    projectId,
+    currentDisplayLanguage,
+  );
+  // Raw id→object map for chapter lookups (replaces the god-store selector).
+  const unifiedObjects = useProjectObjectsMap(projectId, currentDisplayLanguage);
+
+  // The outline tree is considered initialized once the composite query resolves.
+  const isOutlineInitialized = !isOutlineLoading;
 
   // Refresh count of objects needing translation
   const refreshTranslationCount = useCallback(() => {
@@ -176,7 +169,7 @@ const UnifiedWorkspace: React.FC = () => {
   // Calculate count of objects needing translation (not tied to current sub-page)
   useEffect(() => {
     refreshTranslationCount();
-  }, [refreshTranslationCount, changeRevision, timelineChangeRevision]);
+  }, [refreshTranslationCount, timelineChangeRevision]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -202,13 +195,6 @@ const UnifiedWorkspace: React.FC = () => {
   }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
 
   const hasChapters = projectObjects.outline.outlines.some(outline => outline.acts.some(act => act.chapters.length > 0));
-
-  // Helper to get data for a specific language
-  const getDataForLanguage = (obj: any, _language: string): Record<string, any> => {
-    return obj?.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
-      ? obj.data
-      : {};
-  };
 
   // Set current project when projectId changes
   useEffect(() => {
@@ -236,30 +222,6 @@ const UnifiedWorkspace: React.FC = () => {
     }
   }, [projectId, projects.length, fetchProjects]);
 
-  // Populate unified store cache when projectId changes
-  useEffect(() => {
-    if (!projectId) return;
-
-    const populateStoreCache = async () => {
-      try {
-        await refreshProjectObjects(projectId, [
-          'basic_info',
-          'story_entity_folder',
-          'story_entity',
-          'outline',
-        ], currentDisplayLanguage);
-      } catch (error) {
-        console.error('Failed to load objects:', error);
-        const errorStatus = (error as any)?.status || (error as any)?.response?.status;
-        if (errorStatus !== 404) {
-          showAlert({ title: 'Data Error', message: 'Failed to load objects. Please try again.' });
-        }
-      }
-    };
-
-    populateStoreCache();
-  }, [currentDisplayLanguage, projectId, refreshProjectObjects]);
-
   useEffect(() => {
     if (!projectId) return;
     if (timelineLoadedProjectId === projectId && timelineLoadedLanguage === currentDisplayLanguage) return;
@@ -269,163 +231,25 @@ const UnifiedWorkspace: React.FC = () => {
     });
   }, [currentDisplayLanguage, fetchTimeline, projectId, timelineLoadedLanguage, timelineLoadedProjectId]);
 
-  // Build objects for NovelEditor (when in novel-editor mode)
+  // Auto-select the first chapter for NovelEditor once the outline has loaded.
+  // (The data itself comes from useProjectObjectsQuery above.)
   useEffect(() => {
-    if (!projectId || currentSubPage !== 'novel-editor') return;
+    if (!projectId || currentSubPage !== 'novel-editor' || isOutlineLoading) return;
 
-    setIsOutlineInitialized(false);
-    const activeProjectId = projectId;
-    let isActive = true;
+    const allActs = projectObjects.outline.outlines.flatMap(o => o.acts);
+    const firstActWithChapters = allActs.find(act => act.chapters.length > 0);
+    const firstChapter = firstActWithChapters?.chapters[0];
+    if (!firstChapter) return;
 
-    const buildProjectObjects = async () => {
-      try {
-        const [basicInfoList, storyEntities, outlineItems] = await Promise.all([
-          listObjects('basic_info', projectId, currentDisplayLanguage),
-          listObjects('story_entity', projectId, currentDisplayLanguage),
-          listObjects('outline', projectId, currentDisplayLanguage),
-        ]);
+    const existingSelection = getSelectedChapterId(projectId);
+    const selectionStillExists = existingSelection
+      ? allActs.some(act => act.chapters.some(ch => ch.id === existingSelection))
+      : false;
 
-        const basicInfo = basicInfoList.length > 0 ? (() => {
-          const data = normalizeBasicInfoData(getDataForLanguage(basicInfoList[0], currentDisplayLanguage));
-          return {
-            id: basicInfoList[0].id,
-            title: data.title,
-            logline: data.logline,
-            genres: data.genres,
-            tags: data.tags,
-          };
-        })() : null;
-
-        const storyEntityItems = storyEntities.filter(
-          (item): item is StoryEntityObject => item.type === 'story_entity'
-        );
-        const outlineNodes = outlineItems.filter(
-          (item): item is OutlineObject => item.type === 'outline'
-        );
-
-        const outlines = sortOutlineObjects(
-          outlineNodes.filter((item): item is OutlineObject => item.kind === 'outline')
-        );
-        const acts = sortOutlineObjects(
-          outlineNodes.filter((item): item is OutlineObject => item.kind === 'act')
-        );
-        const chapters = sortOutlineObjects(
-          outlineNodes.filter((item): item is OutlineObject => item.kind === 'chapter')
-        );
-
-        // Build outline hierarchy: Outline > Acts > Chapters
-        const outlineData = {
-          outlines: outlines
-            .map(outline => {
-              const oData = getDataForLanguage(outline, currentDisplayLanguage);
-              const outlineActs = sortOutlineObjects(
-                acts.filter(act => act.metadata.parent_id === outline.id)
-              );
-              return {
-                id: outline.id,
-                name: oData.name || '',
-                description: oData.description || '',
-                content: normalizeDoc(oData.content),
-                position: outline.metadata.position || 0,
-                acts: outlineActs.map(act => {
-                  const actData = getDataForLanguage(act, currentDisplayLanguage);
-                  return {
-                    id: act.id,
-                    name: actData.name || '',
-                    description: actData.description || '',
-                    content: normalizeDoc(actData.content),
-                    position: act.metadata.position || 0,
-                    parentId: act.metadata.parent_id || '',
-                    chapters: sortOutlineObjects(
-                      chapters.filter(ch => ch.metadata.parent_id === act.id)
-                    )
-                      .map(chapter => {
-                        const chapterData = getDataForLanguage(chapter, currentDisplayLanguage);
-                        return {
-                          id: chapter.id,
-                          name: chapterData.name || '',
-                          description: chapterData.description || '',
-                          content: normalizeDoc(chapterData.content),
-                          position: chapter.metadata.position || 0,
-                          parentId: chapter.metadata.parent_id || '',
-                        };
-                      }),
-                  };
-                }),
-              };
-            }),
-        };
-
-        if (isActive) {
-          setProjectObjects({
-            basicInfo,
-            storyEntities: storyEntityItems.map((entity) => {
-              const data = getDataForLanguage(entity, currentDisplayLanguage);
-              return {
-                id: entity.id,
-                kind: entity.kind,
-                name: data.name || '',
-                description: data.description || '',
-                content: normalizeDoc(data.content),
-              };
-            }),
-            characters: storyEntityItems
-              .filter((entity) => entity.kind === 'character')
-              .map((entity) => {
-                const data = getDataForLanguage(entity, currentDisplayLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
-              }),
-            organizations: storyEntityItems
-              .filter((entity) => entity.kind === 'organization')
-              .map((entity) => {
-                const data = getDataForLanguage(entity, currentDisplayLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
-              }),
-            locations: storyEntityItems
-              .filter((entity) => entity.kind === 'location')
-              .map((entity) => {
-                const data = getDataForLanguage(entity, currentDisplayLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
-              }),
-            lorebook: storyEntityItems
-              .filter((entity) => entity.kind === 'lorebook')
-              .map((entity) => {
-                const data = getDataForLanguage(entity, currentDisplayLanguage);
-                return { id: entity.id, name: data.name || '', description: data.description || '', content: normalizeDoc(data.content) };
-              }),
-            outline: outlineData,
-          });
-
-          if (activeProjectId) {
-            const allActs = outlineData.outlines.flatMap(o => o.acts);
-            const firstActWithChapters = allActs.find(act => act.chapters.length > 0);
-            const firstChapter = firstActWithChapters?.chapters[0];
-            if (firstChapter) {
-              const existingSelection = getSelectedChapterId(activeProjectId);
-              const selectionStillExists = existingSelection
-                ? allActs.some(act => act.chapters.some(ch => ch.id === existingSelection))
-                : false;
-
-              if (!selectionStillExists) {
-                selectChapter(activeProjectId, firstChapter.id);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load objects:', error);
-      } finally {
-        if (isActive) {
-          setIsOutlineInitialized(true);
-        }
-      }
-    };
-
-    buildProjectObjects();
-    return () => {
-      isActive = false;
-    };
-  }, [currentDisplayLanguage, projectId, currentSubPage, listObjects, getSelectedChapterId, selectChapter]);
+    if (!selectionStillExists) {
+      selectChapter(projectId, firstChapter.id);
+    }
+  }, [projectId, currentSubPage, isOutlineLoading, projectObjects, getSelectedChapterId, selectChapter]);
 
   // Fetch agents when projectId changes
   useEffect(() => {

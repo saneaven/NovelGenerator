@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
+import { readProjectObjectsFromCache } from '../../data/objects/objectCache';
 import { useSettings } from '../../store/settingsStore';
-import type { ObjectType, OutlineObject } from '../../types/unifiedObject';
+import type { ObjectType, OutlineObject, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import type { ObjectEditInput } from '../../llmTaskJourney/journeySpecs';
 import type { JourneySpec } from '../../llmTaskJourney/types';
@@ -60,27 +61,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [rawMode, setRawMode] = useState(false);
 
-  const unifiedStore = useUnifiedObjectStore();
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
   const settings = useSettings();
 
   const isManuscriptMode = category === 'manuscript';
   const editTypeText = 'Item';
   const mainLanguage = settings.mainLanguage;
+  const projectObjects = useProjectObjectsMap(projectId, mainLanguage);
   const targetOutline = (!isManuscriptMode && category === 'outline' && targetId)
-    ? unifiedStore.getObject(targetId) as OutlineObject | null
+    ? (projectObjects[targetId] as OutlineObject | undefined) ?? null
     : null;
   const categoryDisplayName = targetOutline?.kind
     ? getCategoryDisplayName(targetOutline.kind)
     : getCategoryDisplayName(category);
 
-  // Get item name for title (fetch from store)
+  // Get item name for title (fetch from query cache)
   const itemName = useMemo(() => {
     if (!targetId) return null;
 
     if (isManuscriptMode) {
       // For manuscript, targetId is chapterId - get chapter name
-      const chapter = unifiedStore.getObject(targetId) as OutlineObject | null;
+      const chapter = projectObjects[targetId] as OutlineObject | undefined;
       if (chapter?.data) {
         const langData = chapter.data as Record<string, any>;
         return langData?.name || null;
@@ -89,13 +89,13 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
 
     // For other categories, get object name
-    const obj = unifiedStore.getObject(targetId);
+    const obj = projectObjects[targetId];
     if (obj?.data) {
       const langData = obj.data as Record<string, any>;
       return langData?.name || langData?.title || null;
     }
     return null;
-  }, [targetId, isManuscriptMode, mainLanguage, unifiedStore]);
+  }, [targetId, isManuscriptMode, mainLanguage, projectObjects]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -108,29 +108,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   }, [isOpen, defaultUserRequest]);
 
-  useEffect(() => {
-    if (!isOpen || !projectId) return;
-
-    let cancelled = false;
-    setPickerLoading(true);
-
-    void refreshProjectObjects(projectId, [
-      'story_entity',
-      'outline',
-      'manuscript',
-    ]).catch((loadError) => {
-      console.error('Failed to preload AI edit context objects:', loadError);
-    }).finally(() => {
-      if (!cancelled) {
-        setPickerLoading(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, projectId, refreshProjectObjects]);
-
   // Simple handler for context selection
   const handleContextChange = useCallback((ids: string[] | string) => {
     setSelectedContextIds(Array.isArray(ids) ? ids : [ids]);
@@ -142,12 +119,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
     if (isManuscriptMode) {
       // For manuscript, exclude the manuscript object (not the chapter)
-      const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetId);
+      const manuscriptObj = Object.values(projectObjects).find(
+        (obj) => obj.type === 'manuscript' && obj.metadata?.chapter_id === targetId,
+      );
       return manuscriptObj ? [manuscriptObj.id] : [];
     }
 
     return [targetId];
-  }, [targetId, isManuscriptMode, unifiedStore]);
+  }, [targetId, isManuscriptMode, projectObjects]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,6 +169,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       updatedAt: Date.now(),
     });
 
+    const objectsById: Record<string, UnifiedObject> = {};
+    for (const obj of readProjectObjectsFromCache(projectId)) {
+      objectsById[obj.id] = obj;
+    }
+
     try {
       const created = await journeyService.create(projectId, {
         kind: journeyKind,
@@ -198,7 +182,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         input_payload: inputPayload,
         surface: 'story-entity',
         journey_target_ids: [targetId],
-        context_object_ids: computeParentClosure(selectedContextIds, unifiedStore.objects),
+        context_object_ids: computeParentClosure(selectedContextIds, objectsById),
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
@@ -255,7 +239,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               projectId={projectId}
               language={mainLanguage}
               excludedIds={excludedIds}
-              loading={pickerLoading}
+              onLoadComplete={() => setPickerLoading(false)}
               showSearch={true}
               maxHeight="300px"
               emptyMessage="No context objects available"

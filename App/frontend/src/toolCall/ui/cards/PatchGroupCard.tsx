@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { TextButton } from '../../../components/TextButton';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import type { ToolCallDecisionMap } from '../../types';
 import type { ObjectOperationVM, PatchDecision } from '../vmTypes';
 import { useFunctionCallUIStore } from '../store';
@@ -54,7 +54,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   metaChanges,
 }) => {
   const language = useSettingsStore((state) => state.getSettings().mainLanguage);
-  const objects = useUnifiedObjectStore((state) => state.objects);
+  const objects = useProjectObjectsMap(projectId, language);
 
   const displayName = useMemo(() => {
     const firstOp = operations[0];

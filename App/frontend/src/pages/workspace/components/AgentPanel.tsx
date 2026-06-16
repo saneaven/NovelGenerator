@@ -5,7 +5,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore } from '../../../store/agentStore';
 import { useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettings } from '../../../store/settingsStore';
 import { usePresetStore } from '../../../store/presetStore';
 import { useMcpStore } from '../../../store/mcpStore';
@@ -15,6 +14,7 @@ import { useThreadStore } from '../../../store/threadStore';
 import { useTimelineStore } from '../../../store/timelineStore';
 import { computeParentClosure } from '../../../utils/parentClosure';
 import { buildTimelineFromObjects } from '../../../utils/timelineView';
+import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import {
   cancelThread,
   sendThreadMessage,
@@ -432,8 +432,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const runMode = useAgentUIStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
   const setRunMode = useAgentUIStore((state) => state.setRunMode);
   const setInput = useAgentUIStore((state) => state.setInput);
-  const unifiedObjects = useUnifiedObjectStore((state) => state.getObjectsForProject(projectId, sourceLanguage));
-  const refreshProjectObjects = useUnifiedObjectStore((state) => state.refreshProjectObjects);
+  const unifiedObjects = useProjectObjectsMap(projectId, sourceLanguage);
   const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
@@ -696,27 +695,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     let cancelled = false;
     setIsContextPickerLoading(true);
 
-    void Promise.all([
-      refreshProjectObjects(projectId, [
-        'story_entity',
-        'outline',
-        'manuscript',
-      ], sourceLanguage).catch((loadError) => {
-        console.error('Failed to preload agent context objects:', loadError);
-      }),
-      fetchTimeline(projectId, sourceLanguage, { force: true }).catch((loadError) => {
+    void fetchTimeline(projectId, sourceLanguage, { force: true })
+      .catch((loadError) => {
         console.error('Failed to preload agent timeline context:', loadError);
-      }),
-    ]).finally(() => {
-      if (!cancelled) {
-        setIsContextPickerLoading(false);
-      }
-    });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsContextPickerLoading(false);
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [fetchTimeline, isContextDropdownOpen, projectId, refreshProjectObjects, sourceLanguage]);
+  }, [fetchTimeline, isContextDropdownOpen, projectId, sourceLanguage]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 768);
