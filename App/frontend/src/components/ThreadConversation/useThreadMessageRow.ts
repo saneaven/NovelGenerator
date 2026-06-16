@@ -8,7 +8,7 @@ import { resolveRunMessageDisplay } from '../../types/thread';
 import { threadService } from '../../api/threadService';
 import { DefaultDisplayProcessor } from '../../agent/processors/DisplayProcessor';
 import { runMessageTranslation } from '../../agent/messageTranslation';
-import { useAgentUIStore } from '../../store/agentUIStore';
+import { useUiStore } from '../../store/uiStore';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { alert as showAlert, confirm } from '../../store/dialogStore';
 import {
@@ -178,7 +178,7 @@ export function useThreadMessageRows({
   }, [secondaryLanguage]);
 
   const showTranslationErrorToast = useCallback((message: string) => {
-    useAgentUIStore.getState().showPreflightToast(projectId, {
+    useUiStore.getState().showPreflightToast(projectId, {
       type: 'error',
       message,
     });

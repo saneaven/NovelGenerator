@@ -3,7 +3,7 @@ import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
 import { useSettings } from '../../data/settings';
-import { useTimelineStore } from '../../store/timelineStore';
+import { useTimelineConfig, ensureTimelineLoaded } from '../../data/timeline';
 import type { AnyObjectType, TranslationStatus, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
@@ -144,8 +144,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     () => (targetProjectionLanguage ? targetObjectsMap : EMPTY_OBJECT_CACHE),
     [targetProjectionLanguage, targetObjectsMap],
   );
-  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
-  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
+  const timelineConfig = useTimelineConfig(projectId).data ?? null;
 
   const projectFolders = useMemo(
     () => getProjectStoryEntityFolders(objects, projectId),
@@ -192,9 +191,9 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     setTranslationStatusReady(false);
 
     void Promise.all([
-      fetchTimeline(projectId, sourceTimelineLanguage, { force: true }),
+      ensureTimelineLoaded(projectId, sourceTimelineLanguage),
       targetTimelineLanguage
-        ? fetchTimeline(projectId, targetTimelineLanguage, { force: true })
+        ? ensureTimelineLoaded(projectId, targetTimelineLanguage)
         : Promise.resolve(),
       availableLanguages.length > 0
         ? translationService.getProjectTranslationStatus(projectId, availableLanguages)
@@ -223,7 +222,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     defaultTargetLanguage,
     isOpen,
     projectId,
-    fetchTimeline,
     settings.mainLanguage,
     sourceProjectionLanguage,
     targetProjectionLanguage,

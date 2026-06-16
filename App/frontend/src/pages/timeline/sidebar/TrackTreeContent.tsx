@@ -8,8 +8,8 @@ import { DropdownMenu, DropdownItem, DropdownDivider } from '../../../components
 import TextButton from '../../../components/TextButton/TextButton';
 import { ChevronRight, Edit, Eye, GripVertical, MoreHorizontal, Plus, Trash } from '../../../components/icons';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
-import { useTimelineStore } from '../../../store/timelineStore';
-import { useTimelineUiStore } from '../../../store/timelineUiStore';
+import { moveTrack, deleteTrack } from '../../../data/timeline';
+import { useUiStore } from '../../../store/uiStore';
 import type { TimelineTrack } from '../../../types/timeline';
 import { resolveEntityText } from '../layout/computeTimelineLayout';
 import { trackColorProps } from '../timelineColors';
@@ -215,11 +215,11 @@ const TrackTreeContent: React.FC<TrackTreeContentProps> = ({
 }) => {
   const { t } = useTranslation();
   const sensors = useDndSensors();
-  const moveTrackAction = useTimelineStore((s) => s.moveTrack);
-  const deleteTrackAction = useTimelineStore((s) => s.deleteTrack);
-  const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[projectId]);
-  const toggleTrackHidden = useTimelineUiStore((s) => s.toggleTrackHidden);
-  const showAllTracks = useTimelineUiStore((s) => s.showAllTracks);
+  const moveTrackAction = moveTrack;
+  const deleteTrackAction = deleteTrack;
+  const hiddenIds = useUiStore((s) => s.hiddenTrackIdsByProject[projectId]);
+  const toggleTrackHidden = useUiStore((s) => s.toggleTrackHidden);
+  const showAllTracks = useUiStore((s) => s.showAllTracks);
   const hiddenSet = useMemo(() => new Set(hiddenIds ?? []), [hiddenIds]);
 
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => new Set());

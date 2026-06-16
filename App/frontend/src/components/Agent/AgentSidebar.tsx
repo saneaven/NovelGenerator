@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAgentStore } from '../../store/agentStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import {
   useAgents,
   useSelectedAgentId,
@@ -11,8 +11,7 @@ import {
   getAgentLastActivityAt,
   type Agent,
 } from '../../data/agents';
-import { makeProjectAgentKey, useAgentUIStore } from '../../store/agentUIStore';
-import { useSidebarStore } from '../../store/sidebarStore';
+import { makeProjectAgentKey, useUiStore } from '../../store/uiStore';
 import { useSettings } from '../../data/settings';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { useMergedThreadMaps } from '../../data/threads';
@@ -40,11 +39,11 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
   onSelectAgent,
 }) => {
   const { t } = useTranslation();
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
-  const markAgentViewed = useAgentUIStore((state) => state.markAgentViewed);
-  const loadingByProjectAgent = useAgentUIStore((state) => state.loadingByProjectAgent);
-  const lastViewedAtByProjectAgent = useAgentUIStore((state) => state.lastViewedAtByProjectAgent);
-  const selectAgent = useAgentStore((s) => s.selectAgent);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
+  const markAgentViewed = useUiStore((state) => state.markAgentViewed);
+  const loadingByProjectAgent = useUiStore((state) => state.loadingByProjectAgent);
+  const lastViewedAtByProjectAgent = useUiStore((state) => state.lastViewedAtByProjectAgent);
+  const selectAgent = useSelectionStore((s) => s.selectAgent);
   const agents = useAgents(projectId);
   const selectedAgentId = useSelectedAgentId(projectId);
   const createAgentMutation = useCreateAgentMutation(projectId);
@@ -349,7 +348,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
                           await deleteAgentMutation.mutateAsync(agent.id);
                           const remainingAgents = readAgentsFromCache(projectId);
                           if (remainingAgents.length > 0) {
-                            const newSelectedId = useAgentStore.getState().getSelectedAgentId(projectId);
+                            const newSelectedId = useSelectionStore.getState().getSelectedAgentId(projectId);
                             if (newSelectedId) {
                               onSelectAgent(newSelectedId);
                             }

@@ -11,7 +11,7 @@ import { RichTextEditor } from '../../../components/RichTextEditor';
 import { Close, Plus, Trash } from '../../../components/icons';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { createEvent, updateEvent, deleteEvent, createEventLink, deleteEventLink } from '../../../data/timeline';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type {
   CalendarConfig,
@@ -103,11 +103,6 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   // Story-entity editor pattern: details and content are separate tabs on
   // mobile; on desktop both are visible (content fills the remaining height).
   const [activeTab, setActiveTab] = useState<'details' | 'content'>('details');
-  const createEvent = useTimelineStore((s) => s.createEvent);
-  const updateEvent = useTimelineStore((s) => s.updateEvent);
-  const deleteEvent = useTimelineStore((s) => s.deleteEvent);
-  const createEventLink = useTimelineStore((s) => s.createEventLink);
-  const deleteEventLink = useTimelineStore((s) => s.deleteEventLink);
 
   const isCreating = event === null;
   const canEditProjection = isCreating || Boolean(event?.languageState?.has_requested_language);

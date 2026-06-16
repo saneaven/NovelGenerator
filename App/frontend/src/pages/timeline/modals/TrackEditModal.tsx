@@ -6,7 +6,7 @@ import { Close } from '../../../components/icons';
 import { RichTextEditor } from '../../../components/RichTextEditor';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { createTrack, updateTrack } from '../../../data/timeline';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type { TimelineTrack } from '../../../types/timeline';
 import { SWATCH_COLORS, oklchToHex } from '../timelineColors';
@@ -38,8 +38,6 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   const isMobile = useIsMobile();
   // Story-entity editor pattern: details/content tabs on mobile, both visible on desktop.
   const [activeTab, setActiveTab] = useState<'details' | 'content'>('details');
-  const createTrack = useTimelineStore((s) => s.createTrack);
-  const updateTrack = useTimelineStore((s) => s.updateTrack);
 
   const isCreating = track === null;
   const canEditProjection = isCreating || Boolean(track?.languageState?.has_requested_language);

@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAgentStore } from '../../store/agentStore';
-import { useAgentUIStore } from '../../store/agentUIStore';
+import { useSelectionStore } from '../../store/selectionStore';
+import { useUiStore } from '../../store/uiStore';
 import { useNotificationUiStore } from '../../store/notificationUiStore';
 import { readNotificationFromCache } from '../../data/notifications';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
@@ -23,8 +23,8 @@ const NotificationStatusToast: React.FC = () => {
     if (notification.target.kind === 'agent' && notification.target.project_id) {
       const agentId = notification.target.agent_id;
       if (agentId) {
-        useAgentStore.getState().selectAgent(notification.target.project_id, agentId);
-        useAgentUIStore.getState().setAgentVisible(notification.target.project_id, true);
+        useSelectionStore.getState().selectAgent(notification.target.project_id, agentId);
+        useUiStore.getState().setAgentVisible(notification.target.project_id, true);
       }
       if (notification.source.kind === 'subAgent' && notification.meta) {
         const parentThreadId = notification.meta.parent_thread_id as string | undefined;

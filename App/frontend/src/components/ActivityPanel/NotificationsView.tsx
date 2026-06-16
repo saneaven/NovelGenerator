@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useAgentStore } from '../../store/agentStore';
-import { useAgentUIStore } from '../../store/agentUIStore';
+import { useSelectionStore } from '../../store/selectionStore';
+import { useUiStore } from '../../store/uiStore';
 import { useNotificationUiStore } from '../../store/notificationUiStore';
 import {
   useDeleteNotificationMutation,
@@ -63,8 +63,8 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
         document.dispatchEvent(new Event('activity-panel:close'));
         const agentId = notification.target.agent_id;
         if (agentId) {
-          useAgentStore.getState().selectAgent(notification.target.project_id, agentId);
-          useAgentUIStore.getState().setAgentVisible(notification.target.project_id, true);
+          useSelectionStore.getState().selectAgent(notification.target.project_id, agentId);
+          useUiStore.getState().setAgentVisible(notification.target.project_id, true);
         }
         // Open peek dock for sub agent notifications
         if ((notification.source as { kind: string }).kind === 'subAgent' && notification.meta) {

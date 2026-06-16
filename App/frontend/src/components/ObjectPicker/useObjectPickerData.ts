@@ -24,7 +24,7 @@ import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
 import { formatDate } from '../../utils/timelineCalendar';
 import { buildTimelineFromObjects } from '../../utils/timelineView';
-import { useTimelineStore } from '../../store/timelineStore';
+import { useTimelineConfig } from '../../data/timeline';
 import {
   getStoryEntityFolderDescription,
   getStoryEntityFolderName,
@@ -609,7 +609,7 @@ export function useObjectPickerData({
   const events = useObjectCollectionQuery(projectId, 'timeline_event', language, 'markdown');
   const tree = useStoryEntityTreeQuery(projectId, language, 'markdown');
 
-  const timelineConfig = useTimelineStore((state) => (projectId ? state.configByProject[projectId] : null));
+  const timelineConfig = useTimelineConfig(projectId).data ?? null;
 
   const folders = useMemo<StoryEntityFolder[]>(
     () => ((tree.data?.folders ?? []) as unknown as StoryEntityFolder[]),

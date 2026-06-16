@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { useSidebarStore } from '../../store/sidebarStore';
+import { useUiStore } from '../../store/uiStore';
 import type { BaseSidebarProps } from './types';
 import './BaseSidebar.css';
 
@@ -14,8 +14,8 @@ const BaseSidebar: React.FC<BaseSidebarProps> = ({
   closeOnEscape = true,
   zIndex,
 }) => {
-  const isVisible = useSidebarStore((state) => state.isOpen(projectId, id));
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const isVisible = useUiStore((state) => state.isOpen(projectId, id));
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
 
   // Handle close action
   const handleClose = useCallback(() => {

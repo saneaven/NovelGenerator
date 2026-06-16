@@ -9,7 +9,7 @@ import { useMutation } from '@tanstack/react-query';
 import { agentService } from '../../../api';
 import { queryClient } from '../../queryClient';
 import { agentKeys } from '../../keys/agentKeys';
-import { useAgentStore } from '../../../store/agentStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import {
   convertBackendAgent,
   readAgentsFromCache,
@@ -36,7 +36,7 @@ export function useCreateAgentMutation(projectId: string | null | undefined) {
       queryClient.setQueryData<Agent[]>(agentKeys.list(pid), (prev) =>
         sortAgentsByLastActivity([...(prev ?? []), agent]),
       );
-      useAgentStore.getState().selectAgent(pid, agent.id);
+      useSelectionStore.getState().selectAgent(pid, agent.id);
     },
   });
 }
@@ -72,7 +72,7 @@ export function useDeleteAgentMutation(projectId: string | null | undefined) {
       const pid = requireProjectId(projectId);
       const remaining = readAgentsFromCache(pid).filter((a) => a.id !== agentId);
       queryClient.setQueryData<Agent[]>(agentKeys.list(pid), remaining);
-      const store = useAgentStore.getState();
+      const store = useSelectionStore.getState();
       if (store.getSelectedAgentId(pid) === agentId && remaining.length > 0) {
         store.selectAgent(pid, remaining[0].id);
       }

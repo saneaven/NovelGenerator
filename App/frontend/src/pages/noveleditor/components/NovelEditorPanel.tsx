@@ -31,8 +31,8 @@ import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
 import { useSettings } from '../../../data/settings';
 import { alert as showAlert } from '../../../store/dialogStore';
-import { useNovelEditorStore } from '../../../store/novelEditorStore';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useEditorStore } from '../../../store/editorStore';
+import { useUiStore } from '../../../store/uiStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import TranslationModal from '../../../components/Modal/TranslationModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
@@ -118,11 +118,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const updateObjectMutation = useUpdateObjectMutation();
   const settings = useSettings();
   // Get stable action references to avoid infinite loops in effects
-  const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
-  const setIsSavingAction = useNovelEditorStore((state) => state.setIsSaving);
+  const setHasUnsavedChangesAction = useEditorStore((state) => state.setHasUnsavedChanges);
+  const setIsSavingAction = useEditorStore((state) => state.setIsSaving);
 
   // Sidebar state from unified sidebar store
-  const toggleSidebar = useSidebarStore((state) => state.toggleSidebar);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   // State
   const [manuscriptId, setManuscriptId] = useState<string | null>(null);
@@ -148,7 +148,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Editor state
   const [doc, setDoc] = useState<TipTapDoc>(emptyDoc());
-  const isSaving = useNovelEditorStore((state) => state.isSavingByProject[projectId] ?? false);
+  const isSaving = useEditorStore((state) => state.isSavingByProject[projectId] ?? false);
   const setIsSaving = useCallback((saving: boolean) => {
     setIsSavingAction(projectId, saving);
   }, [projectId, setIsSavingAction]);

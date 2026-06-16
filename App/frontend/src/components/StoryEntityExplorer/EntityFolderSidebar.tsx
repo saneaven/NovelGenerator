@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { useSidebarStore } from '../../store/sidebarStore';
+import { useUiStore } from '../../store/uiStore';
 import { BaseSidebar } from '../BaseSidebar';
 import { IconButton } from '../IconButton';
 import { Close } from '../icons';
@@ -19,7 +19,7 @@ const EntityFolderSidebar: React.FC<EntityFolderSidebarProps> = ({
   onSelectFolder,
   displayLanguage,
 }) => {
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
 
   const handleClose = () => closeSidebar(projectId);
 

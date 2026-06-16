@@ -1,5 +1,5 @@
 import type { AssetChangedChange, AssetChangedEvent } from '../../api/sseClient';
-import { useProjectStore } from '../../store/projectStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import {
   invalidateProjectAssetsList,
   invalidateObjectAssetLinks,
@@ -41,7 +41,7 @@ export class AssetEventConsumer {
     if (this.disposed) return;
     const payload = event.data;
     const projectId = String(payload?.project_id ?? '');
-    const currentProjectId = useProjectStore.getState().currentProjectId;
+    const currentProjectId = useSelectionStore.getState().currentProjectId;
     if (!payload || !projectId || currentProjectId !== projectId) return;
     this.activeProjectId = projectId;
     if (!Array.isArray(payload.changes) || payload.changes.length === 0) return;

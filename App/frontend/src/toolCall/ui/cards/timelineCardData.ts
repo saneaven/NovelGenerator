@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { useTimelineConfig } from '../../../data/timeline';
 import { useMainLanguage } from '../../../data/settings';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { defaultCalendar, formatDate } from '../../../utils/timelineCalendar';
@@ -56,7 +56,7 @@ export function useTimelineLookup(projectId: string): TimelineLookup {
   const language = useMainLanguage();
   const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language);
   const events = useObjectCollectionQuery(projectId, 'timeline_event', language);
-  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
+  const timelineConfig = useTimelineConfig(projectId).data ?? null;
   const timeline = useMemo(
     () => {
       const record: Record<string, UnifiedObject> = {};

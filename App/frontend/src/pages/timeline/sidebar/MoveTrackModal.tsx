@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { moveTrack } from '../../../data/timeline';
 import type { TimelineTrack } from '../../../types/timeline';
 import { resolveEntityText } from '../layout/computeTimelineLayout';
 import { trackColorProps } from '../timelineColors';
@@ -27,7 +27,6 @@ interface TargetOption {
 /** “Move to…” — re-parenting picker; same-parent ordering stays in the tree. */
 const MoveTrackModal: React.FC<MoveTrackModalProps> = ({ projectId, track, tracks, displayLanguage, onClose }) => {
   const { t } = useTranslation();
-  const moveTrack = useTimelineStore((s) => s.moveTrack);
   const [selected, setSelected] = useState<string | null | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import { useMainLanguage } from '../../../data/settings';
 import { SkeletonList } from '../../../components/common/Skeleton';
 import { alert as showAlert } from '../../../store/dialogStore';
@@ -44,7 +44,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
   const createMutation = useCreateObjectMutation();
   const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage);
   const showSkeleton = outlineQuery.isLoading;
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
 
   // Index objects by id for the per-id lookups the old store projection provided.
   const projectionObjects = useMemo(() => {

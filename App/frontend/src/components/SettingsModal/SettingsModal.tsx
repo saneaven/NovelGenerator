@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettings, useSaveSettingsMutation, setThemeInSettingsCache } from '../../data/settings';
-import { useSidebarStore } from '../../store/sidebarStore';
+import { useUiStore } from '../../store/uiStore';
 import type { ProviderCredentials, Settings, AITaskType, SearchMemoryTarget } from '../../data/settings';
 import { buildLockedSectionReset } from '../../store/settingsUpdatePayload';
 import { hasTaskOverride, resolveAllTaskConfigs, TASK_CONFIG_TASK_TYPES } from '../../store/taskConfigSettings';
@@ -135,8 +135,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   );
 
   // Mobile sidebar state from store
-  const openSidebar = useSidebarStore((state) => state.openSidebar);
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const openSidebar = useUiStore((state) => state.openSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
   const isAdmin = Boolean(user?.is_admin);
 
   useEffect(() => {

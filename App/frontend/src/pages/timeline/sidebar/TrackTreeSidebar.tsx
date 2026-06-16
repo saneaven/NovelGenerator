@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
 import { Close } from '../../../components/icons';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import TrackTreeContent, { type TrackTreeContentProps } from './TrackTreeContent';
 
 /**
@@ -12,7 +12,7 @@ import TrackTreeContent, { type TrackTreeContentProps } from './TrackTreeContent
  */
 const TrackTreeSidebar: React.FC<TrackTreeContentProps> = (props) => {
   const { t } = useTranslation();
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
   const handleClose = () => closeSidebar(props.projectId);
 
   return (

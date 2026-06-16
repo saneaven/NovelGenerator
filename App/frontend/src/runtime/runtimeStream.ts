@@ -1,6 +1,6 @@
 import { assetService } from '../api/assetService';
 import { connectUserStream, type RuntimeSSEEvent } from '../api/sseClient';
-import { useProjectStore } from '../store/projectStore';
+import { useSelectionStore } from '../store/selectionStore';
 import { queryClient } from '../data/queryClient';
 import { notificationsQueryOptions } from '../data/notifications';
 import { seedImageRunsInCache } from '../data/imageRuns';
@@ -125,7 +125,7 @@ class UserRuntimeConnection {
   }
 
   private async doRehydrateRuntimeState(source: string): Promise<void> {
-    const currentProjectId = useProjectStore.getState().currentProjectId;
+    const currentProjectId = useSelectionStore.getState().currentProjectId;
 
     try {
       // Force a fresh notifications fetch into the query cache (staleTime: 0

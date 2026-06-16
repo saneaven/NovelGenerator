@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
-import { useProjectStore } from '../../store/projectStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { useSettings } from '../../data/settings';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useJourneyStore } from '../../store/journeyStore';
@@ -73,7 +73,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   defaultUserRequest,
   defaultSelectedEntityIds,
 }) => {
-  const { currentProjectId } = useProjectStore();
+  const { currentProjectId } = useSelectionStore();
   const settings = useSettings();
   const objectQuery = useObjectQuery(
     (objectType ?? 'story_entity') as ObjectType,

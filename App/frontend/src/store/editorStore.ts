@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 /**
- * NovelEditorStore - UI State for Novel Editor
+ * EditorStore - UI State for Novel Editor
  *
  * This store handles all UI state for the novel editor:
  * - Selected chapter per project
@@ -12,7 +12,7 @@ import { create } from 'zustand';
  * All manuscript (content) data is managed by unifiedObjectStore.
  */
 
-interface NovelEditorUIState {
+interface EditorUIState {
   // Outline selection per project
   selectedOutlineByProject: Record<string, string | undefined>;
 
@@ -31,7 +31,7 @@ interface NovelEditorUIState {
 
 }
 
-interface NovelEditorActions {
+interface EditorActions {
   // Outline selection
   selectOutline: (projectId: string, outlineId: string) => void;
   getSelectedOutlineId: (projectId: string) => string | undefined;
@@ -61,9 +61,9 @@ interface NovelEditorActions {
   resetProjectState: (projectId: string) => void;
 }
 
-type NovelEditorStore = NovelEditorUIState & NovelEditorActions;
+type EditorStore = EditorUIState & EditorActions;
 
-const initialState: NovelEditorUIState = {
+const initialState: EditorUIState = {
   selectedOutlineByProject: {},
   selectedChapterByProject: {},
   isAIEditModalOpen: false,
@@ -74,7 +74,7 @@ const initialState: NovelEditorUIState = {
   hasUnsavedChangesByProject: {},
 };
 
-export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
+export const useEditorStore = create<EditorStore>()((set, get) => ({
   ...initialState,
 
   // Outline selection

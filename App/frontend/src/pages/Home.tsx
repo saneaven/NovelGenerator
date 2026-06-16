@@ -1,15 +1,14 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../store/projectStore';
+import { useSelectionStore } from '../store/selectionStore';
 import {
   useProjectsQuery,
   useCreateProjectMutation,
   useImportProjectMutation,
   useDeleteProjectMutation,
 } from '../data/projects';
-import { useAgentStore } from '../store/agentStore';
-import { useAgentUIStore } from '../store/agentUIStore';
+import { useUiStore } from '../store/uiStore';
 import { useNotificationUiStore } from '../store/notificationUiStore';
 import { useNotificationsMap } from '../data/notifications';
 import { useFunctionCallUIStore } from '../toolCall/ui';
@@ -30,7 +29,7 @@ import { confirm, alert as showAlert } from '../store/dialogStore';
 const Home: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const setCurrentProject = useSelectionStore((s) => s.setCurrentProject);
   const projectsQuery = useProjectsQuery();
   const projects = projectsQuery.data ?? [];
   const isLoading = projectsQuery.isLoading;
@@ -123,8 +122,8 @@ const Home: React.FC = () => {
     if (notification.target.kind === 'agent' && notification.target.project_id) {
       const agentId = notification.target.agent_id;
       if (agentId) {
-        useAgentStore.getState().selectAgent(notification.target.project_id, agentId);
-        useAgentUIStore.getState().setAgentVisible(notification.target.project_id, true);
+        useSelectionStore.getState().selectAgent(notification.target.project_id, agentId);
+        useUiStore.getState().setAgentVisible(notification.target.project_id, true);
       }
       if (notification.source.kind === 'subAgent' && notification.meta) {
         const parentThreadId = notification.meta.parent_thread_id as string | undefined;

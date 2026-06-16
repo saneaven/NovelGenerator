@@ -8,7 +8,7 @@ import { useMutation } from '@tanstack/react-query';
 import { projectService } from '../../../api';
 import { queryClient } from '../../queryClient';
 import { projectKeys } from '../../keys/projectKeys';
-import { useProjectStore, type Project } from '../../../store/projectStore';
+import { useSelectionStore, type Project } from '../../../store/selectionStore';
 
 function appendProjectToCache(created: Project): void {
   queryClient.setQueryData<Project[]>(projectKeys.list(), (prev) =>
@@ -60,8 +60,8 @@ export function useDeleteProjectMutation() {
       queryClient.setQueryData<Project[]>(projectKeys.list(), (prev) =>
         prev?.filter((p) => p.id !== id),
       );
-      if (useProjectStore.getState().currentProjectId === id) {
-        useProjectStore.getState().setCurrentProject(null);
+      if (useSelectionStore.getState().currentProjectId === id) {
+        useSelectionStore.getState().setCurrentProject(null);
       }
     },
   });

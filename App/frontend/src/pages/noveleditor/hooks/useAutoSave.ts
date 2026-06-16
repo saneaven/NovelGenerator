@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useEditorStore } from '../../../store/editorStore';
 
 interface UseAutoSaveOptions {
   content: string;
@@ -18,7 +18,7 @@ export function useAutoSave(
 ) {
   const { content, onSave, debounceMs = 1500, enabled = true } = options;
 
-  const store = useNovelEditorStore();
+  const store = useEditorStore();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedContentRef = useRef<string>(content);
   const isInitializedRef = useRef(false);

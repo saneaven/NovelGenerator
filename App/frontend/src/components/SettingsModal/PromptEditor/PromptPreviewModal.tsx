@@ -11,7 +11,7 @@ import { CustomSelect } from '../../ui/CustomSelect';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { NumberInput } from '../../ui/NumberInput';
 import { usePromptPreview } from '../hooks/usePromptPreview';
-import { useProjectStore } from '../../../store/projectStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import { getPromptTypeFields, type PromptTypeField } from './promptTypeFields';
 import type { TaskType } from '../../../types/scenarios';
 import type { ConfigData } from '../../../templateEngine/schema';
@@ -35,7 +35,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
   injectedInputKey,
 }) => {
   const { t } = useTranslation();
-  const currentProjectId = useProjectStore(state => state.currentProjectId);
+  const currentProjectId = useSelectionStore(state => state.currentProjectId);
   const [promptTypeExpanded, setPromptTypeExpanded] = useState(false);
   const [configExpanded, setConfigExpanded] = useState(false);
   const [variablesExpanded, setVariablesExpanded] = useState(false);

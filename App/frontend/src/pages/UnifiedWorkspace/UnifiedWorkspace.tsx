@@ -2,14 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { useEnsureAgentSelection } from '../../data/agents';
-import { useAgentUIStore } from '../../store/agentUIStore';
-import { useSidebarStore } from '../../store/sidebarStore';
-import { useProjectStore } from '../../store/projectStore';
+import { useUiStore } from '../../store/uiStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { useProjectsQuery, useCurrentProject } from '../../data/projects';
-import { useNovelEditorStore } from '../../store/novelEditorStore';
-import { useTimelineStore } from '../../store/timelineStore';
+import { useEditorStore } from '../../store/editorStore';
+import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
 import { useSettings } from '../../data/settings';
-import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { translationService } from '../../api/unifiedObjectService';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { useProjectObjectsQuery } from '../../data/objects/useProjectObjectsQuery';
@@ -59,36 +57,32 @@ const UnifiedWorkspace: React.FC = () => {
   const { projectId, subPage: urlSubPage } = useParams<{ projectId: string; subPage?: string }>();
   const { currentSubPage, navigateToSubPage } = useWorkspaceSubPage(projectId, urlSubPage);
 
-  const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const setCurrentProject = useSelectionStore((s) => s.setCurrentProject);
   const projectsQuery = useProjectsQuery();
   const projectsLoading = projectsQuery.isLoading;
   const currentProject = useCurrentProject();
   useEnsureAgentSelection(projectId);
-  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
-  const timelineChangeRevision = useTimelineStore((state) => state.changeRevision);
-  const timelineLoadedProjectId = useTimelineStore((state) => state.loadedProjectId);
-  const timelineLoadedLanguage = useTimelineStore((state) => state.loadedLanguage);
 
   // NovelEditor specific stores
-  const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
-  const isSavingByProject = useNovelEditorStore(state => state.isSavingByProject);
-  const hasUnsavedChangesByProject = useNovelEditorStore(state => state.hasUnsavedChangesByProject);
-  const getSelectedChapterId = useNovelEditorStore(state => state.getSelectedChapterId);
-  const selectChapter = useNovelEditorStore(state => state.selectChapter);
+  const selectedChapterByProject = useEditorStore(state => state.selectedChapterByProject);
+  const isSavingByProject = useEditorStore(state => state.isSavingByProject);
+  const hasUnsavedChangesByProject = useEditorStore(state => state.hasUnsavedChangesByProject);
+  const getSelectedChapterId = useEditorStore(state => state.getSelectedChapterId);
+  const selectChapter = useEditorStore(state => state.selectChapter);
 
   // Settings
   const settings = useSettings();
   const mainLanguage = settings.mainLanguage;
-  const preferredDisplayLanguage = useDisplayLanguageStore((state) => state.preferredDisplayLanguage);
-  const setPreferredDisplayLanguage = useDisplayLanguageStore((state) => state.setPreferredDisplayLanguage);
+  const preferredDisplayLanguage = useSelectionStore((state) => state.preferredDisplayLanguage);
+  const setPreferredDisplayLanguage = useSelectionStore((state) => state.setPreferredDisplayLanguage);
   const subLanguages = settings.subLanguages;
 
 
   // UI stores - use selector to avoid re-renders when other agentUIStore properties change
-  const isAgentVisibleState = useAgentUIStore(
+  const isAgentVisibleState = useUiStore(
     (state) => state.agentVisibleByProject[projectId ?? ''] ?? false
   );
-  const sidebarStore = useSidebarStore();
+  const sidebarStore = useUiStore();
 
   // Desktop/mobile detection
   const isDesktopView = typeof window !== 'undefined' && window.innerWidth > 768;
@@ -147,6 +141,11 @@ const UnifiedWorkspace: React.FC = () => {
   );
   // Raw id→object map for chapter lookups (replaces the god-store selector).
   const unifiedObjects = useProjectObjectsMap(projectId, currentDisplayLanguage);
+  // Preload timeline collections for the workspace + provide a reactive change
+  // signal (replaces the former timelineStore preload + changeRevision).
+  const timelineTrackQuery = useObjectCollectionQuery(projectId, 'timeline_track', currentDisplayLanguage, 'markdown');
+  const timelineEventQuery = useObjectCollectionQuery(projectId, 'timeline_event', currentDisplayLanguage, 'markdown');
+  const timelineUpdatedAt = Math.max(timelineTrackQuery.dataUpdatedAt, timelineEventQuery.dataUpdatedAt);
 
   // The outline tree is considered initialized once the composite query resolves.
   const isOutlineInitialized = !isOutlineLoading;
@@ -169,10 +168,12 @@ const UnifiedWorkspace: React.FC = () => {
       });
   }, [projectId, subLanguages]);
 
-  // Calculate count of objects needing translation (not tied to current sub-page)
+  // Calculate count of objects needing translation (not tied to current sub-page).
+  // Re-runs when timeline objects change (timelineUpdatedAt), matching the old
+  // changeRevision trigger.
   useEffect(() => {
     refreshTranslationCount();
-  }, [refreshTranslationCount, timelineChangeRevision]);
+  }, [refreshTranslationCount, timelineUpdatedAt]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -217,15 +218,6 @@ const UnifiedWorkspace: React.FC = () => {
       cancelled = true;
     };
   }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    if (timelineLoadedProjectId === projectId && timelineLoadedLanguage === currentDisplayLanguage) return;
-
-    void fetchTimeline(projectId, currentDisplayLanguage, { force: true }).catch((error) => {
-      console.error('Failed to load timeline:', error);
-    });
-  }, [currentDisplayLanguage, fetchTimeline, projectId, timelineLoadedLanguage, timelineLoadedProjectId]);
 
   // Auto-select the first chapter for NovelEditor once the outline has loaded.
   // (The data itself comes from useProjectObjectsQuery above.)
@@ -386,9 +378,9 @@ const UnifiedWorkspace: React.FC = () => {
         isAgentVisible={isAgentVisible}
         onAgentToggle={() => {
           if (isAgentVisible) {
-            useAgentUIStore.getState().setAgentVisible(projectId ?? '', false);
+            useUiStore.getState().setAgentVisible(projectId ?? '', false);
           } else {
-            useAgentUIStore.getState().toggleAgentVisible(projectId ?? '');
+            useUiStore.getState().toggleAgentVisible(projectId ?? '');
           }
           sidebarStore.closeSidebar(projectId ?? '');
         }}

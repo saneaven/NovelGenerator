@@ -11,7 +11,7 @@ import {
     invalidateObjectAssetLinks,
     invalidateSceneAssets,
 } from '../../data/assets';
-import { useProjectStore } from '../../store/projectStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
@@ -102,7 +102,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     onImageGenerated: onImageGeneratedProp,
     initialGenerationRecipe,
 }) => {
-    const { currentProjectId } = useProjectStore();
+    const { currentProjectId } = useSelectionStore();
     const imageRuns = useImageRunsMap(currentProjectId);
 
     const uploadMutation = useUploadAssetMutation();

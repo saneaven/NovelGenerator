@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { agentService, type AgentResponse } from '../../api';
 import { queryClient } from '../queryClient';
 import { agentKeys } from '../keys/agentKeys';
-import { useAgentStore } from '../../store/agentStore';
+import { useSelectionStore } from '../../store/selectionStore';
 
 export interface Agent {
   id: string;
@@ -90,7 +90,7 @@ export function useAgent(projectId: string | null | undefined, agentId: string |
 
 /** Reactive selected-agent id for a project (selection lives in the slim store). */
 export function useSelectedAgentId(projectId: string): string | undefined {
-  return useAgentStore((s) => s.selectedAgentByProject[projectId]);
+  return useSelectionStore((s) => s.selectedAgentByProject[projectId]);
 }
 
 /** The selected agent (selection from the store + list from the query). */

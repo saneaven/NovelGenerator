@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings, type ImageProviderType } from '../../data/settings';
-import { useProjectStore } from '../../store/projectStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { assetService, type Asset, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
@@ -112,7 +112,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     assetType = 'object',
 }) => {
     const { t } = useTranslation();
-    const { currentProjectId } = useProjectStore();
+    const { currentProjectId } = useSelectionStore();
     const settings = useSettings();
     const savedPromptQuery = useObjectQuery(objectType as ObjectType, objectId, settings.mainLanguage);
     const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);

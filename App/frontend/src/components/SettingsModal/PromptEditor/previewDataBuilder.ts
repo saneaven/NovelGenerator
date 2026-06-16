@@ -4,8 +4,7 @@
  */
 
 import { requireSettingsFromCache } from '../../../data/settings';
-import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
-import { useProjectStore } from '../../../store/projectStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import { readProjectObjectsFromCache } from '../../../data/objects/objectCache';
 import { readVariablesForTemplate, readVariablesFromCache } from '../../../data/presets/presetSelectors';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
@@ -423,7 +422,7 @@ export function buildModeSpecificData(
  */
 function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
   const settings = requireSettingsFromCache();
-  const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+  const preferredDisplayLanguage = useSelectionStore.getState().preferredDisplayLanguage;
   const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
   const displayLanguage =
     preferredDisplayLanguage && allowedDisplayLanguages.has(preferredDisplayLanguage)
@@ -567,7 +566,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
  * Get current project ID from store.
  */
 export function getCurrentProjectId(): string | null {
-  return useProjectStore.getState().currentProjectId;
+  return useSelectionStore.getState().currentProjectId;
 }
 
 /**

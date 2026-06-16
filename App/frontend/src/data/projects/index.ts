@@ -14,4 +14,4 @@ export {
   type CreateProjectVars,
   type UpdateProjectVars,
 } from './mutations/useProjectMutations';
-export type { Project } from '../../store/projectStore';
+export type { Project } from '../../store/selectionStore';

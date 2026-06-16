@@ -21,7 +21,7 @@ import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpda
 import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
 import { useDeleteObjectMutation } from '../../../data/objects/mutations/useDeleteObjectMutation';
 import { useSettings } from '../../../data/settings';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import OutlinePanelSkeleton from './OutlinePanelSkeleton';
 import AIEditModal from '../../../components/Modal/AIEditModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
@@ -61,7 +61,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const outlineMarkdownQuery = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage, 'markdown');
   const showSkeleton = outlineQuery.isLoading;
   const settings = useSettings();
-  const openSidebar = useSidebarStore((state) => state.openSidebar);
+  const openSidebar = useUiStore((state) => state.openSidebar);
 
   // Index objects by id for the per-id lookups the old store projection provided.
   const serverObjects = useMemo(() => {

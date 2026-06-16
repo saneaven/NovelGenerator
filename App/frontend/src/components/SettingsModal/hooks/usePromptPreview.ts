@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { renderTemplate } from '../../../templateEngine/engine';
 
-import { useProjectStore } from '../../../store/projectStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import { useActivePresetId, useVariables } from '../../../data/presets';
 import { useResolvedTaskConfigs } from '../../../data/settings';
 import { useTokenCount } from '../../../hooks/useTokenCount';
@@ -68,7 +68,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
   const { templateContent, taskType, taskSubtype, injectedInputKey } = options;
 
   // Store access
-  const currentProjectId = useProjectStore(state => state.currentProjectId);
+  const currentProjectId = useSelectionStore(state => state.currentProjectId);
   const activePresetId = useActivePresetId();
   const userVariables = useVariables(activePresetId);
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { Close, Clipboard, Document } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
@@ -22,7 +22,7 @@ const ProjectHomeSidebar: React.FC<ProjectHomeSidebarProps> = ({
   activeTab,
   onTabChange,
 }) => {
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
 
   const handleTabSelect = (tabId: ProjectHomeTab) => {
     onTabChange(tabId);

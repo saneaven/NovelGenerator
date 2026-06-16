@@ -4,7 +4,7 @@ import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
 import { NumberInput } from '../../../components/ui/NumberInput';
 import { Plus, Trash, Timeline } from '../../../components/icons';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { updateCalendar } from '../../../data/timeline';
 import type { CalendarConfig, CalendarUnit } from '../../../types/timeline';
 import { formatDate, fromBaseUnits } from '../../../utils/timelineCalendar';
 import './CalendarConfigModal.css';
@@ -25,7 +25,6 @@ const CalendarConfigModal: React.FC<CalendarConfigModalProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
-  const updateCalendar = useTimelineStore((s) => s.updateCalendar);
   const [units, setUnits] = useState<CalendarUnit[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 

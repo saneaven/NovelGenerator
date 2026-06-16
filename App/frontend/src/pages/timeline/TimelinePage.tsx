@@ -4,11 +4,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Close, Warning } from '../../components/icons';
 import { useObjectPickerData } from '../../components/ObjectPicker/useObjectPickerData';
 import { confirm as confirmDialog } from '../../store/dialogStore';
-import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
-import { useSidebarStore } from '../../store/sidebarStore';
-import { useTimelineStore } from '../../store/timelineStore';
-import { useTimelineUiStore } from '../../store/timelineUiStore';
+import { useSelectionStore } from '../../store/selectionStore';
+import { useUiStore } from '../../store/uiStore';
 import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
+import { useTimelineConfig } from '../../data/timeline/useTimelineConfigQuery';
+import { deleteEvent } from '../../data/timeline/timelineCommands';
 import type { TimelineDate, TimelineEvent, TimelineTrack } from '../../types/timeline';
 import type { UnifiedObject } from '../../types/unifiedObject';
 import { DEFAULT_CALENDAR } from '../../utils/timelineCalendar';
@@ -84,18 +84,15 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
-  const timelineConfig = useTimelineStore((s) => s.configByProject[pid]);
-  const isLoading = useTimelineStore((s) => s.isLoading);
-  const fetchTimeline = useTimelineStore((s) => s.fetchTimeline);
-  const loadedProjectId = useTimelineStore((s) => s.loadedProjectId);
-  const loadedLanguage = useTimelineStore((s) => s.loadedLanguage);
-  const deleteEvent = useTimelineStore((s) => s.deleteEvent);
-  const activeTagFilter = useTimelineStore((s) => s.activeTagFilter);
-  const setTagFilter = useTimelineStore((s) => s.setTagFilter);
-  const displayLanguage = useDisplayLanguageStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
+  const activeTagFilter = useUiStore((s) => s.activeTagFilter);
+  const setTagFilter = useUiStore((s) => s.setTagFilter);
+  const displayLanguage = useSelectionStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
 
+  const configQuery = useTimelineConfig(pid);
+  const timelineConfig = configQuery.data ?? null;
   const trackQuery = useObjectCollectionQuery(pid, 'timeline_track', displayLanguage, 'markdown');
   const eventQuery = useObjectCollectionQuery(pid, 'timeline_event', displayLanguage, 'markdown');
+  const isLoading = configQuery.isLoading || trackQuery.isLoading || eventQuery.isLoading;
   const unifiedObjects = useMemo(() => {
     const map: Record<string, UnifiedObject> = {};
     for (const o of [...(trackQuery.data ?? []), ...(eventQuery.data ?? [])]) map[o.id] = o;
@@ -109,20 +106,14 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
     [unifiedObjects],
   );
 
-  const hiddenIds = useTimelineUiStore((s) => s.hiddenTrackIdsByProject[pid]);
-  const showAllTracks = useTimelineUiStore((s) => s.showAllTracks);
-  const unhideAncestorChain = useTimelineUiStore((s) => s.unhideAncestorChain);
-  const pruneHiddenTracks = useTimelineUiStore((s) => s.pruneHiddenTracks);
-  const dismissedWarningsKey = useTimelineUiStore((s) => s.dismissedWarningsKey);
-  const setDismissedWarningsKey = useTimelineUiStore((s) => s.setDismissedWarningsKey);
+  const hiddenIds = useUiStore((s) => s.hiddenTrackIdsByProject[pid]);
+  const showAllTracks = useUiStore((s) => s.showAllTracks);
+  const unhideAncestorChain = useUiStore((s) => s.unhideAncestorChain);
+  const pruneHiddenTracks = useUiStore((s) => s.pruneHiddenTracks);
+  const dismissedWarningsKey = useUiStore((s) => s.dismissedWarningsKey);
+  const setDismissedWarningsKey = useUiStore((s) => s.setDismissedWarningsKey);
 
-  const sidebarOpen = useSidebarStore((s) => s.isOpen(pid, 'timeline'));
-
-  useEffect(() => {
-    if (!pid) return;
-    if (loadedProjectId === pid && loadedLanguage === displayLanguage) return;
-    void fetchTimeline(pid, displayLanguage, { force: true }).catch(() => undefined);
-  }, [pid, displayLanguage, fetchTimeline, loadedLanguage, loadedProjectId]);
+  const sidebarOpen = useUiStore((s) => s.isOpen(pid, 'timeline'));
 
   const timeline = useMemo(
     () => buildTimelineFromObjects(pid, unifiedObjects, timelineConfig),
@@ -341,7 +332,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
       />
 
       <div className="timeline-page__body">
-        {isLoading && (!timelineConfig || loadedLanguage !== displayLanguage) ? (
+        {isLoading && tracks.length === 0 ? (
           <TimelineSkeleton />
         ) : emptyKind ? (
           <TimelineEmptyState

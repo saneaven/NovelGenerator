@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { useProjectStore } from '../../../store/projectStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import { DropdownMenu, DropdownItem, DropdownSection } from '../../ui/DropdownMenu';
 import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal, Save, Plus } from '../../icons';
 import { IconButton } from '../../IconButton';
@@ -70,7 +70,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     onDelete,
     onAssetChange,
 }) => {
-    const { currentProjectId } = useProjectStore();
+    const { currentProjectId } = useSelectionStore();
     const [isMobile, setIsMobile] = useState(
         () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
     );

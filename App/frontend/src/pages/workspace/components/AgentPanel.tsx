@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useAgentStore } from '../../../store/agentStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import { useSelectedAgent } from '../../../data/agents';
-import { useAgentUIStore } from '../../../store/agentUIStore';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import { useSettings } from '../../../data/settings';
 import {
   useActivePresetId,
@@ -12,9 +11,9 @@ import {
   useSubAgentsQuery,
   useSyncMcpServerMutation,
 } from '../../../data/presets';
-import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useEditorStore } from '../../../store/editorStore';
 import { useThreadView } from '../../../data/threads';
-import { useTimelineStore } from '../../../store/timelineStore';
+import { useTimelineConfig, ensureTimelineLoaded } from '../../../data/timeline';
 import { computeParentClosure } from '../../../utils/parentClosure';
 import { buildTimelineFromObjects } from '../../../utils/timelineView';
 import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
@@ -277,8 +276,8 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
   onStop,
 }) => {
   const { t } = useTranslation();
-  const input = useAgentUIStore((state) => state.inputByProject[projectId] ?? '');
-  const setInput = useAgentUIStore((state) => state.setInput);
+  const input = useUiStore((state) => state.inputByProject[projectId] ?? '');
+  const setInput = useUiStore((state) => state.setInput);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     if (isMessageRunActive || isSendBlocked || !hasSelectedAgent) {
@@ -415,10 +414,10 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
 export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, displayLanguage }) => {
   const { t } = useTranslation();
   const settings = useSettings();
-  const sidebarStore = useSidebarStore();
+  const sidebarStore = useUiStore();
   const sourceLanguage = displayLanguage || settings.mainLanguage;
 
-  const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
+  const selectedAgentId = useSelectionStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useSelectedAgent(projectId);
   const activePresetId = useActivePresetId();
   const mcpServers = useMcpServers(activePresetId);
@@ -426,17 +425,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   // Keep sub-agents warm while the agent panel is mounted (replaces the old
   // imperative subAgentStore.ensureLoaded()).
   useSubAgentsQuery(activePresetId);
-  const markAgentViewed = useAgentUIStore((state) => state.markAgentViewed);
-  const setAgentVisible = useAgentUIStore((state) => state.setAgentVisible);
-  const agentVisibleState = useAgentUIStore((state) => state.agentVisibleByProject[projectId] ?? false);
-  const preflightToast = useAgentUIStore((state) => state.preflightToastByProject[projectId] ?? null);
-  const runMode = useAgentUIStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
-  const setRunMode = useAgentUIStore((state) => state.setRunMode);
-  const setInput = useAgentUIStore((state) => state.setInput);
+  const markAgentViewed = useUiStore((state) => state.markAgentViewed);
+  const setAgentVisible = useUiStore((state) => state.setAgentVisible);
+  const agentVisibleState = useUiStore((state) => state.agentVisibleByProject[projectId] ?? false);
+  const preflightToast = useUiStore((state) => state.preflightToastByProject[projectId] ?? null);
+  const runMode = useUiStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
+  const setRunMode = useUiStore((state) => state.setRunMode);
+  const setInput = useUiStore((state) => state.setInput);
   const unifiedObjects = useProjectObjectsMap(projectId, sourceLanguage);
-  const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);
-  const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
-  const selectedChapterId = useNovelEditorStore((state) => state.selectedChapterByProject[projectId]);
+  const timelineConfig = useTimelineConfig(projectId).data ?? null;
+  const selectedChapterId = useEditorStore((state) => state.selectedChapterByProject[projectId]);
 
   const [isDesktop, setIsDesktop] = useState(() => (
     typeof window === 'undefined' ? true : window.innerWidth > 768
@@ -682,7 +680,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     let cancelled = false;
     setIsContextPickerLoading(true);
 
-    void fetchTimeline(projectId, sourceLanguage, { force: true })
+    void ensureTimelineLoaded(projectId, sourceLanguage)
       .catch((loadError) => {
         console.error('Failed to preload agent timeline context:', loadError);
       })
@@ -695,7 +693,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     return () => {
       cancelled = true;
     };
-  }, [fetchTimeline, isContextDropdownOpen, projectId, sourceLanguage]);
+  }, [isContextDropdownOpen, projectId, sourceLanguage]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 768);
@@ -942,7 +940,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [projectId, setAgentVisible]);
 
   const handleSelectAgentFromSidebar = useCallback(() => {
-    useSidebarStore.getState().closeSidebar(projectId);
+    useUiStore.getState().closeSidebar(projectId);
   }, [projectId]);
 
   const panelContent = (

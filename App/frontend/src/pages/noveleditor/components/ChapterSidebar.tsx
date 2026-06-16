@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
-import { useSidebarStore } from '../../../store/sidebarStore';
+import { useUiStore } from '../../../store/uiStore';
 import { useMainLanguage } from '../../../data/settings';
-import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useEditorStore } from '../../../store/editorStore';
 import type { ActObject, ChapterObject, OutlineObject, UnifiedObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
@@ -33,9 +33,9 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     [outlineQuery.data],
   );
   const showSkeleton = outlineQuery.isLoading;
-  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
+  const closeSidebar = useUiStore((state) => state.closeSidebar);
   const mainLanguage = useMainLanguage();
-  const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
+  const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useEditorStore();
 
   // Sync outline selection from localStorage on mount (avoids setState during render)
   useEffect(() => {

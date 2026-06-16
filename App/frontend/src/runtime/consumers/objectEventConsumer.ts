@@ -1,6 +1,5 @@
 import { unifiedObjectService } from '../../api/unifiedObjectService';
-import { useProjectStore } from '../../store/projectStore';
-import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { readSettingsFromCache } from '../../data/settings';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { defaultRichTextFormatForType, isRichPreviewType } from '../../domain/objectFormat';
@@ -59,7 +58,7 @@ export class ObjectEventConsumer {
     if (this.disposed) return;
     const payload = event.data;
     const projectId = String(payload?.project_id ?? '');
-    const currentProjectId = useProjectStore.getState().currentProjectId;
+    const currentProjectId = useSelectionStore.getState().currentProjectId;
     if (!payload || !projectId || currentProjectId !== projectId) return;
     if (!Array.isArray(payload.changes) || payload.changes.length === 0) return;
 
@@ -140,7 +139,7 @@ export class ObjectEventConsumer {
     if (upserts.length === 0) return;
 
     const settings = readSettingsFromCache();
-    const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+    const preferredDisplayLanguage = useSelectionStore.getState().preferredDisplayLanguage;
     const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
 
     await Promise.all(

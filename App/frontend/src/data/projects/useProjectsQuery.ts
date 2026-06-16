@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { projectService } from '../../api';
 import { queryClient } from '../queryClient';
 import { projectKeys } from '../keys/projectKeys';
-import { useProjectStore, type Project } from '../../store/projectStore';
+import { useSelectionStore, type Project } from '../../store/selectionStore';
 
 const EMPTY: Project[] = [];
 
@@ -37,7 +37,7 @@ export function useProject(projectId: string | null | undefined): Project | unde
 
 /** The currently-selected project (selection from the store + list from the query). */
 export function useCurrentProject(): Project | null {
-  const currentProjectId = useProjectStore((s) => s.currentProjectId);
+  const currentProjectId = useSelectionStore((s) => s.currentProjectId);
   const projects = useProjects();
   return currentProjectId ? projects.find((p) => p.id === currentProjectId) ?? null : null;
 }

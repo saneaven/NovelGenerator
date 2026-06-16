@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useAgentStore } from '../../store/agentStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { useAgentsQuery } from './useAgentsQuery';
 import { useCreateAgentMutation } from './mutations/useAgentMutations';
 
@@ -21,7 +21,7 @@ export function useEnsureAgentSelection(projectId: string | null | undefined): v
   useEffect(() => {
     if (!projectId || !isSuccess) return;
     const agents = data ?? [];
-    const store = useAgentStore.getState();
+    const store = useSelectionStore.getState();
 
     if (agents.length === 0) {
       // Auto-create the first agent (guard against duplicate in-flight creates).

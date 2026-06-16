@@ -25,7 +25,7 @@ import TemplateEditor from './TemplateEditor';
 import PromptPreviewModal from './PromptPreviewModal';
 import { buildPreviewData } from './previewDataBuilder';
 import { scenarioService } from '../../../api/scenarioService';
-import { useProjectStore } from '../../../store/projectStore';
+import { useSelectionStore } from '../../../store/selectionStore';
 import type { ScenarioBlock, ScenarioDocument, TaskType } from '../../../types/scenarios';
 import './ScenarioBlocksEditor.css';
 
@@ -141,7 +141,7 @@ const ScenarioBlocksEditor: React.FC<ScenarioBlocksEditorProps> = ({
   onOpenVersionHistory,
   versionHistoryDisabled = false,
 }) => {
-  const currentProjectId = useProjectStore((s) => s.currentProjectId);
+  const currentProjectId = useSelectionStore((s) => s.currentProjectId);
 
   // Force re-render once the portal target ref is available
   const [, setPortalReady] = useState(false);
