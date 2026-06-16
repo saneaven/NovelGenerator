@@ -3,7 +3,7 @@
  */
 
 import { tokenService } from '../api/tokenService';
-import type { ProviderType, TokenizerOverride } from '../store/settingsStore';
+import type { ProviderType, TokenizerOverride } from '../domain/settings';
 
 export type TokenizerType = TokenizerOverride;
 

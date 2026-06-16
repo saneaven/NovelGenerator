@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { useVariableStore } from '../../../store/variableStore';
+import React from 'react';
+import { useActivePresetId, useVariablesQuery, useReorderVariablesMutation } from '../../../data/presets';
 import type { PromptVariable, VariableType } from '../../../types/variables';
 import { Plus, Text, Hash, Toggle, List, GripVertical } from '../../icons';
 import { TextButton } from '../../TextButton';
@@ -90,12 +90,10 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
   isNewDraftSelected,
   onSelectNewDraft,
 }) => {
-  const { variables, isLoading, loadVariables, reorderVariables } = useVariableStore();
+  const activePresetId = useActivePresetId();
+  const { data: variables = [], isLoading } = useVariablesQuery(activePresetId);
+  const reorderVariables = useReorderVariablesMutation(activePresetId);
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
-
-  useEffect(() => {
-    loadVariables();
-  }, [loadVariables]);
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedId(id);
@@ -128,7 +126,7 @@ const VariableListNav: React.FC<VariableListNavProps> = ({
     newOrder.splice(draggedIndex, 1);
     newOrder.splice(targetIndex, 0, draggedId);
 
-    reorderVariables(newOrder);
+    reorderVariables.mutate(newOrder);
     setDraggedId(null);
   };
 

@@ -9,9 +9,16 @@ import { threadService } from '../../api/threadService';
 import { DefaultDisplayProcessor } from '../../agent/processors/DisplayProcessor';
 import { runMessageTranslation } from '../../agent/messageTranslation';
 import { useAgentUIStore } from '../../store/agentUIStore';
-import { useThreadStore } from '../../store/threadStore';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { alert as showAlert, confirm } from '../../store/dialogStore';
-import { fetchAndReplaceThreadSnapshot } from '../../runtime/threadHydration';
+import {
+  refetchThreadSnapshot,
+  patchSnapshotMessage,
+  removeSnapshotMessage,
+  removeSnapshotToolCall,
+  getMergedThreadView,
+  getMergedThreadMessages,
+} from '../../data/threads';
 import { applyOptimisticDeletePause, getThreadDeletePauseContext } from '../../runtime/threadDeleteState';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { isUuid } from '../../utils/idUtils';
@@ -150,7 +157,7 @@ export function useThreadMessageRows({
     return [...ids];
   }, [translatingByMessageId]);
 
-  const activeJourneyThreads = useThreadStore(useShallow((state) => {
+  const activeJourneyThreads = useThreadStreamStore(useShallow((state) => {
     if (activeJourneyThreadIds.length === 0) return EMPTY_ACTIVE_JOURNEY_THREADS;
     const next: Record<string, ThreadInfo | undefined> = {};
     for (const journeyThreadId of activeJourneyThreadIds) {
@@ -351,8 +358,7 @@ export function useThreadMessageRows({
     const content = editingText.trim();
     if (!content) return;
 
-    const state = useThreadStore.getState();
-    const existing = state.getMessages(threadId).find((message) => message.id === editingMessageId);
+    const existing = getMergedThreadMessages(threadId).find((message) => message.id === editingMessageId);
     if (!existing) {
       cancelEdit();
       return;
@@ -368,7 +374,7 @@ export function useThreadMessageRows({
     };
 
     setEditingSaving(true);
-    state.patchMessage(threadId, editingMessageId, {
+    patchSnapshotMessage(threadId, editingMessageId, {
       data: {
         ...(existing.data ?? {}),
         [sourceLanguage]: entry,
@@ -381,11 +387,11 @@ export function useThreadMessageRows({
         content_parts: entry.contentParts,
         reasoning_detail: entry.reasoningDetail as any,
       });
-      await fetchAndReplaceThreadSnapshot(threadId);
+      await refetchThreadSnapshot(threadId);
       cancelEdit();
     } catch (error: any) {
       showAlert({ title: t('agent.edit'), message: error?.message ?? 'Failed to update message.' });
-      await fetchAndReplaceThreadSnapshot(threadId).catch(() => {});
+      await refetchThreadSnapshot(threadId).catch(() => {});
     } finally {
       setEditingSaving(false);
     }
@@ -483,9 +489,8 @@ export function useThreadMessageRows({
     });
     if (!confirmed) return;
 
-    const state = useThreadStore.getState();
     const deletePauseContext = getThreadDeletePauseContext(threadId);
-    const linkedToolCalls = Object.values(state.toolCallsById)
+    const linkedToolCalls = Object.values(getMergedThreadView(threadId).toolCallsById)
       .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
       .filter((toolCall) => toolCall.threadId === threadId && (
         toolCall.assistantMessageId === message.id
@@ -493,20 +498,21 @@ export function useThreadMessageRows({
       ));
 
     for (const toolCall of linkedToolCalls) {
-      if (toolCall.messageId) state.removeMessage(threadId, toolCall.messageId);
-      state.removeToolCall(toolCall.id);
+      if (toolCall.messageId) removeSnapshotMessage(threadId, toolCall.messageId);
+      removeSnapshotToolCall(threadId, toolCall.id);
     }
-    state.removeMessage(threadId, message.id);
+    removeSnapshotMessage(threadId, message.id);
+    useThreadStreamStore.getState().removeOverlayMessage(threadId, message.id);
     applyOptimisticDeletePause(threadId, deletePauseContext);
 
     if (!isUuid(message.id)) return;
 
     try {
       await threadService.deleteMessage(threadId, message.id);
-      await fetchAndReplaceThreadSnapshot(threadId);
+      await refetchThreadSnapshot(threadId);
     } catch (error) {
       console.error('Failed to delete message:', error);
-      await fetchAndReplaceThreadSnapshot(threadId).catch(() => {});
+      await refetchThreadSnapshot(threadId).catch(() => {});
     }
   }, [threadId]);
 

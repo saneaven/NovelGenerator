@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { useSettings, useSettingsStore } from '../store/settingsStore';
+import { useSettings, setThemeInSettingsCache } from '../data/settings';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -9,7 +9,6 @@ export type ThemeMode = 'light' | 'dark' | 'system';
  */
 export function useTheme() {
   const { theme } = useSettings();
-  const setTheme = useSettingsStore((state) => state.setTheme);
 
   /**
    * Get the system's preferred color scheme
@@ -53,15 +52,15 @@ export function useTheme() {
   const toggleTheme = useCallback(() => {
     const currentEffective = getEffectiveTheme();
     const newTheme = currentEffective === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-  }, [getEffectiveTheme, setTheme]);
+    setThemeInSettingsCache(newTheme);
+  }, [getEffectiveTheme]);
 
   /**
    * Set specific theme mode
    */
   const setThemeMode = useCallback((mode: ThemeMode) => {
-    setTheme(mode);
-  }, [setTheme]);
+    setThemeInSettingsCache(mode);
+  }, []);
 
   // Apply theme on mount and when theme changes
   useEffect(() => {

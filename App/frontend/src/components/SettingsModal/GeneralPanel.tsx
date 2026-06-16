@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../IconButton';
-import type { AITaskType, CustomThinkingTemplate, TaskConfigSettings } from '../../store/settingsStore';
+import type { AITaskType, CustomThinkingTemplate, TaskConfigSettings } from '../../domain/settings';
 import {
   TASK_CONFIG_TASK_TYPES,
   hasTaskOverride,

@@ -1,4 +1,4 @@
-import type { TaskAIConfig } from '../store/settingsStore';
+import type { TaskAIConfig } from '../domain/settings';
 
 export type SubAgentAllowedInvocation = 'planMode' | 'agentMode' | 'subAgent';
 export type ToolCategory = 'read' | 'write' | 'delete' | 'translate' | 'sub_agent' | 'generate' | 'mcp';

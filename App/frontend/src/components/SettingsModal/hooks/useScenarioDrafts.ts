@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { fetchScenario, invalidateScenario } from '../../../data/settings';
 import { scenarioService } from '../../../api/scenarioService';
 import { makeScenarioDraftKey, type DirtyItem, type SaveFailure, type ScenarioDraft } from '../PromptEditor/draftTypes';
 import { toErrorMessage } from '../PromptEditor/draftUtils';
 import type { ScenarioDocument, TaskType } from '../../../types/scenarios';
 
 export function useScenarioDrafts() {
-  const { loadScenario, invalidateScenarioCache } = useSettingsStore();
+  const loadScenario = fetchScenario;
+  const invalidateScenarioCache = invalidateScenario;
 
   const [scenarioDrafts, setScenarioDrafts] = useState<Record<string, ScenarioDraft>>({});
 

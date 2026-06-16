@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderType, ProviderPreference, CustomKind } from '../../store/settingsStore';
+import type { ProviderType, ProviderPreference, CustomKind } from '../../domain/settings';
 import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../api/providerService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { useProviderSpec } from '../../data/providers/useProviderSpecsQuery';
 import './ModelBrowser.css';
 
 interface ModelBrowserProps {
@@ -394,8 +394,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   autoExpand = false,
 }) => {
   const { t } = useTranslation();
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-  const providerSpec = useProviderSpecStore((state) => state.specs[provider]);
+  const providerSpec = useProviderSpec(provider);
   const [modelsData, setModelsData] = useState<any>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -415,10 +414,6 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       loadModels();
     }
   }, [autoExpand]);
-
-  useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
 
   // Reset access tier filter when provider changes
   useEffect(() => {

@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useShallow } from 'zustand/react/shallow';
-import { useMcpStore } from '../../../store/mcpStore';
-import { usePresetStore } from '../../../store/presetStore';
-import { useResolvedTaskConfig, useSettings } from '../../../store/settingsStore';
-import { useSubAgentStore } from '../../../store/subAgentStore';
+import {
+  useActivePresetId,
+  useMcpServers,
+  useSubAgents,
+  useDeleteSubAgentMutation,
+} from '../../../data/presets';
+import { useResolvedTaskConfig, useSettings } from '../../../data/settings';
 import type {
   SubAgentAllowedInvocation,
   SubAgentCreatePayload,
@@ -12,7 +14,7 @@ import type {
   SubAgentToolGrant,
   SubAgentToolGrantCatalogItem,
 } from '../../../types/subAgents';
-import type { TaskAIConfig } from '../../../store/settingsStore';
+import type { TaskAIConfig } from '../../../data/settings';
 import TaskConfigForm from '../TaskConfigForm';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { Trash, Clock, Eye } from '../../icons';
@@ -456,13 +458,11 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   onToggleSidebar,
 }) => {
   const { t } = useTranslation();
-  const { subAgents, deleteSubAgent } = useSubAgentStore();
+  const activePresetId = useActivePresetId();
+  const subAgents = useSubAgents(activePresetId);
+  const deleteSubAgentMutation = useDeleteSubAgentMutation(activePresetId);
   const settings = useSettings();
-  const activePresetId = usePresetStore((state) => state.activePresetId);
-  const { servers: mcpServers, ensureLoaded: ensureMcpLoaded } = useMcpStore(useShallow((state) => ({
-    servers: state.servers,
-    ensureLoaded: state.ensureLoaded,
-  })));
+  const mcpServers = useMcpServers(activePresetId);
   const globalSubAgentConfig = useResolvedTaskConfig('subAgent');
 
   const agent = useMemo(() => {
@@ -473,11 +473,6 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   useEffect(() => {
     subAgentService.listToolGrantCatalog().then(setToolGrantCatalog).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!activePresetId) return;
-    void ensureMcpLoaded(activePresetId).catch(() => {});
-  }, [activePresetId, ensureMcpLoaded]);
 
   const [activeTab, setActiveTab] = useState<SubAgentEditorTab>('general');
 
@@ -566,7 +561,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     });
     if (!ok) return;
     try {
-      await deleteSubAgent(draft.subAgentId);
+      await deleteSubAgentMutation.mutateAsync(draft.subAgentId);
       onDeleted?.(draft.subAgentId);
     } catch (err: any) {
       await showAlert({

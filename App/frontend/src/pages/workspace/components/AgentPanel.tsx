@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore } from '../../../store/agentStore';
+import { useSelectedAgent } from '../../../data/agents';
 import { useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useSettings } from '../../../store/settingsStore';
-import { usePresetStore } from '../../../store/presetStore';
-import { useMcpStore } from '../../../store/mcpStore';
+import { useSettings } from '../../../data/settings';
+import {
+  useActivePresetId,
+  useMcpServers,
+  useSubAgentsQuery,
+  useSyncMcpServerMutation,
+} from '../../../data/presets';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
-import { useSubAgentStore } from '../../../store/subAgentStore';
-import { useThreadStore } from '../../../store/threadStore';
+import { useThreadView } from '../../../data/threads';
 import { useTimelineStore } from '../../../store/timelineStore';
 import { computeParentClosure } from '../../../utils/parentClosure';
 import { buildTimelineFromObjects } from '../../../utils/timelineView';
@@ -22,7 +25,7 @@ import {
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import type { AgentRunMode } from '../../../types/agentRuntime';
-import type { ThreadMessage, ThreadToolCall } from '../../../types/thread';
+import type { ThreadToolCall } from '../../../types/thread';
 import type { TimelineTrack } from '../../../types/timeline';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
@@ -60,8 +63,6 @@ import {
   type PendingAttachment,
 } from '../../../utils/threadAttachments';
 import type { McpCatalogPrompt, McpCatalogResource, McpSelection, McpServerResponse } from '../../../types/mcp';
-
-const EMPTY_MESSAGES: ThreadMessage[] = [];
 
 interface AgentPanelProps {
   projectId: string;
@@ -418,13 +419,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const sourceLanguage = displayLanguage || settings.mainLanguage;
 
   const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
-  const selectedAgent = useAgentStore((state) => state.getSelectedAgent(projectId));
-  const activePresetId = usePresetStore((state) => state.activePresetId);
-  const { mcpServers, ensureMcpLoaded, syncMcpServer } = useMcpStore(useShallow((state) => ({
-    mcpServers: state.servers,
-    ensureMcpLoaded: state.ensureLoaded,
-    syncMcpServer: state.syncServer,
-  })));
+  const selectedAgent = useSelectedAgent(projectId);
+  const activePresetId = useActivePresetId();
+  const mcpServers = useMcpServers(activePresetId);
+  const syncMcpServer = useSyncMcpServerMutation(activePresetId ?? '');
+  // Keep sub-agents warm while the agent panel is mounted (replaces the old
+  // imperative subAgentStore.ensureLoaded()).
+  useSubAgentsQuery(activePresetId);
   const markAgentViewed = useAgentUIStore((state) => state.markAgentViewed);
   const setAgentVisible = useAgentUIStore((state) => state.setAgentVisible);
   const agentVisibleState = useAgentUIStore((state) => state.agentVisibleByProject[projectId] ?? false);
@@ -462,13 +463,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     thread,
     messages,
     toolCallsByMessageId,
-  } = useThreadStore(
-    useShallow((state) => ({
-      thread: threadId ? state.threadsById[threadId] : undefined,
-      messages: threadId ? state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
-      toolCallsByMessageId: state.toolCallsByMessageId,
-    })),
-  );
+  } = useThreadView(threadId);
   const liveView = useThreadLiveViewState(threadId);
   const timeline = useMemo(
     () => buildTimelineFromObjects(projectId, unifiedObjects, timelineConfig),
@@ -588,10 +583,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [sendBlockingState]);
 
   useEffect(() => {
-    void useSubAgentStore.getState().ensureLoaded();
-  }, []);
-
-  useEffect(() => {
     if (!projectId || !selectedAgentId) return;
     markAgentViewed(projectId, selectedAgentId);
   }, [projectId, selectedAgentId, markAgentViewed]);
@@ -625,22 +616,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
 
   const prepareMcpMenu = useCallback(() => {
     if (!activePresetId) return;
-    void ensureMcpLoaded(activePresetId)
-      .then(() => {
-        const now = Date.now();
-        availableMcpServers.forEach((server) => {
-          if (!server.snapshot.synced_at) {
-            void syncMcpServer(activePresetId, server.id).catch(() => {});
-            return;
-          }
-          const ageMs = now - new Date(server.snapshot.synced_at).getTime();
-          if (ageMs > 10 * 60 * 1000) {
-            void syncMcpServer(activePresetId, server.id).catch(() => {});
-          }
-        });
-      })
-      .catch(() => {});
-  }, [activePresetId, availableMcpServers, ensureMcpLoaded, syncMcpServer]);
+    const now = Date.now();
+    availableMcpServers.forEach((server) => {
+      if (!server.snapshot.synced_at) {
+        void syncMcpServer.mutateAsync(server.id).catch(() => {});
+        return;
+      }
+      const ageMs = now - new Date(server.snapshot.synced_at).getTime();
+      if (ageMs > 10 * 60 * 1000) {
+        void syncMcpServer.mutateAsync(server.id).catch(() => {});
+      }
+    });
+  }, [activePresetId, availableMcpServers, syncMcpServer]);
 
   const appendMcpSelection = useCallback((selection: McpSelection) => {
     setSelectedMcpSelections((prev) => [...prev, selection]);

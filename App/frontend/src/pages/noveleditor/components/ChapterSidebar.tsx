@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import type { ActObject, ChapterObject, OutlineObject, UnifiedObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
@@ -34,7 +34,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   );
   const showSkeleton = outlineQuery.isLoading;
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
-  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const mainLanguage = useMainLanguage();
   const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
 
   // Sync outline selection from localStorage on mount (avoids setState during render)

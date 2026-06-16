@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BaseModal } from '../BaseModal';
 import AuthenticatedImage from '../common/AuthenticatedImage';
-import { useNotificationStore } from '../../store/notificationStore';
+import { useNotificationUiStore } from '../../store/notificationUiStore';
+import { useNotificationsMap } from '../../data/notifications';
 import JourneyNotificationDetail from './JourneyNotificationDetail';
 import { formatNotificationStatusLabel } from './notificationPresentation';
 
@@ -40,14 +41,21 @@ const ImageRunNotificationDetail: React.FC<{
 
 export const NotificationModals: React.FC = () => {
   const navigate = useNavigate();
-  const notifications = useNotificationStore((state) => state.notifications);
-  const detailNotificationId = useNotificationStore((state) => state.detailNotificationId);
-  const closeDetail = useNotificationStore((state) => state.closeDetail);
+  const notifications = useNotificationsMap();
+  const detailNotificationId = useNotificationUiStore((state) => state.detailNotificationId);
+  const closeDetail = useNotificationUiStore((state) => state.closeDetail);
 
   const notification = detailNotificationId ? notifications[detailNotificationId] : undefined;
   const projectTargetId = notification?.target.kind === 'project'
     ? notification.target.project_id ?? null
     : null;
+
+  // Auto-close when the open detail's notification disappears (e.g. deleted via SSE).
+  useEffect(() => {
+    if (detailNotificationId && !notifications[detailNotificationId]) {
+      closeDetail();
+    }
+  }, [closeDetail, detailNotificationId, notifications]);
 
   useEffect(() => {
     if (!projectTargetId) return;

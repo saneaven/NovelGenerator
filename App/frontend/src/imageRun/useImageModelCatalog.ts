@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { assetService, type ImageModelInfo } from '../api/assetService';
-import { useProviderSpecStore } from '../providerEngine/store';
+import { useProviderSpec } from '../data/providers/useProviderSpecsQuery';
 import { projectImageModels, toImageModelInfo } from '../providerEngine/utils';
 import {
   resolveAspectRatio,
@@ -25,8 +25,7 @@ export {
 };
 
 export function useImageModelCatalog(provider: string, currentModel: string) {
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-  const providerSpec = useProviderSpecStore((state) => state.specs[provider]);
+  const providerSpec = useProviderSpec(provider);
   const staticModels = useMemo(
     () => (
       providerSpec?.image && !providerSpec.image.has_dynamic_models
@@ -49,10 +48,6 @@ export function useImageModelCatalog(provider: string, currentModel: string) {
     return shouldUseCache ? !catalogCache.has(provider) : shouldFetchDynamicModels;
   });
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
 
   useEffect(() => {
     if (!providerSpec) {

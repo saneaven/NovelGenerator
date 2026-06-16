@@ -1,9 +1,21 @@
 import { threadService, type ToolCallDecisionResponse } from '../../api/threadService';
 import type { ThreadRuntimeEvent } from '../../api/sseClient';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useSettingsStore } from '../../store/settingsStore';
-import { useThreadStore } from '../../store/threadStore';
-import { fetchAndReplaceThreadSnapshot } from '../threadHydration';
+import { requireSettingsFromCache } from '../../data/settings';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
+import {
+  refetchThreadSnapshot,
+  readThreadSnapshotFromCache,
+  removeThreadSnapshotFromCache,
+  upsertSnapshotMessage,
+  upsertSnapshotMessages,
+  patchSnapshotMessage,
+  upsertSnapshotToolCall,
+  patchSnapshotToolCall,
+  replaceSnapshotToolCallsForAssistant,
+  getMergedThreadView,
+  getMergedThreadMessages,
+} from '../../data/threads';
 import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
   toThreadType,
@@ -16,7 +28,7 @@ import {
   type ToolCallStatus,
 } from '../../types/thread';
 import { getByDotPath, setByDotPath } from '../../utils/dotPath';
-import { revokeMessageAttachmentObjectUrls, toMessageAttachment } from '../../utils/threadAttachments';
+import { toMessageAttachment } from '../../utils/threadAttachments';
 
 type AutoApproveConfig = Record<string, boolean>;
 
@@ -70,6 +82,29 @@ function pickExistingReasoningDetail(message: ThreadMessage): ReasoningDetail | 
     if (detail && typeof detail === 'object') return detail;
   }
   return undefined;
+}
+
+function hasMessageData(data: ThreadMessage['data'] | undefined): boolean {
+  return Boolean(data && Object.keys(data).length > 0);
+}
+
+function fallbackDataFromStreaming(message: ThreadMessage | undefined): ThreadMessage['data'] | undefined {
+  const streaming = message?.streamingData;
+  if (!streaming) return undefined;
+  const hasContentParts = Array.isArray(streaming.contentParts) && streaming.contentParts.length > 0;
+  const hasReasoning = streaming.reasoningDetail !== undefined;
+  if (!hasContentParts && !hasReasoning) return undefined;
+  const preferLanguage = Object.keys(message.data ?? {})[0];
+  const entry = {
+    contentParts: streaming.contentParts ?? [],
+    ...(streaming.reasoningDetail !== undefined
+      ? { reasoningDetail: streaming.reasoningDetail }
+      : {}),
+  };
+  return {
+    ...(message.data ?? {}),
+    [preferLanguage]: entry,
+  };
 }
 
 function readOptionalIndex(value: unknown): number | null {
@@ -143,7 +178,7 @@ export class ThreadEventConsumer {
   }
 
   private ensureThread(threadId: string, partial?: Partial<ThreadInfo>): void {
-    const store = useThreadStore.getState();
+    const store = useThreadStreamStore.getState();
     const existing = store.threadsById[threadId];
     if (existing) {
       if (partial) store.patchThread(threadId, partial);
@@ -169,34 +204,17 @@ export class ThreadEventConsumer {
     });
   }
 
-  private ensureAssistantMessage(params: {
-    threadId: string;
-    messageId: string;
-    runId: string;
-    seq?: number;
-    seqInThread?: number;
-  }): ThreadMessage {
-    const store = useThreadStore.getState();
-    const existing = store.getMessages(params.threadId).find((m) => m.id === params.messageId);
-    if (existing) return existing;
-
-    const message: ThreadMessage = {
-      id: params.messageId,
-      threadId: params.threadId,
-      runId: params.runId,
-      role: 'assistant',
-      seq: params.seq ?? 0,
-      seqInThread: params.seqInThread ?? 0,
-      data: {},
-      attachments: [],
-      streamingData: {
-        contentParts: [],
-      },
-      isStreaming: true,
-      createdAt: nowIso(),
-    };
-    store.upsertMessage(message);
-    return message;
+  /**
+   * Resolve the live streaming assistant message for delta application. Returns
+   * null when the message is already finalized in the snapshot (replayed delta).
+   */
+  private ensureStreamingMessage(threadId: string, messageId: string, runId: string): ThreadMessage | null {
+    const store = useThreadStreamStore.getState();
+    const overlay = store.getOverlayMessage(threadId, messageId);
+    if (overlay) return overlay.isStreaming ? overlay : null;
+    const finalized = readThreadSnapshotFromCache(threadId).messages.some((m) => m.id === messageId);
+    if (finalized) return null;
+    return store.ensureStreamingAssistantMessage({ threadId, messageId, runId });
   }
 
   private getStreamingToolMap(sessionKey: string): Map<string, string> {
@@ -227,11 +245,11 @@ export class ThreadEventConsumer {
       if (direct) return { streamKey: desiredKey, tempId: direct };
     }
 
-    const store = useThreadStore.getState();
+    const store = useThreadStreamStore.getState();
     const llmCallId = readNonEmptyString(payload.tool_call_id);
     if (llmCallId) {
       for (const [existingKey, tempId] of toolMap) {
-        const existing = store.toolCallsById[tempId];
+        const existing = store.streamingToolCallsById[tempId];
         if (!existing || existing.llmCallId !== llmCallId) continue;
         if (desiredKey) {
           this.rekeyStreamingTool(sessionKey, existingKey, desiredKey, tempId);
@@ -245,7 +263,7 @@ export class ThreadEventConsumer {
     const assistantMessageId = readNonEmptyString(payload.assistant_message_id);
     if (index !== null) {
       for (const [existingKey, tempId] of toolMap) {
-        const existing = store.toolCallsById[tempId];
+        const existing = store.streamingToolCallsById[tempId];
         if (!existing || existing.callSeq !== index) continue;
         if (assistantMessageId && existing.assistantMessageId !== assistantMessageId) continue;
         if (desiredKey) {
@@ -282,7 +300,7 @@ export class ThreadEventConsumer {
   }
 
   private patchThreadFromRunStatus(threadId: string, status: ThreadStatus, error: string | null, payload: Record<string, unknown>): void {
-    const store = useThreadStore.getState();
+    const store = useThreadStreamStore.getState();
     const existing = store.threadsById[threadId];
     const projectId = payload.project_id ? String(payload.project_id) : existing?.projectId;
     const partial: Partial<ThreadInfo> = {
@@ -318,7 +336,7 @@ export class ThreadEventConsumer {
   }
 
   private isSuppressed(threadId: string): boolean {
-    const state = useThreadStore.getState();
+    const state = useThreadStreamStore.getState();
     const thread = state.threadsById[threadId];
     return state.isPreexistingLiveThread(threadId) && isLiveThreadStatus(thread?.status);
   }
@@ -329,13 +347,9 @@ export class ThreadEventConsumer {
     runId: string;
     text: string;
   }): void {
-    const store = useThreadStore.getState();
-    const message = this.ensureAssistantMessage({
-      threadId: params.threadId,
-      messageId: params.messageId,
-      runId: params.runId,
-    });
-    if (!message.isStreaming) return; // Already finalized (e.g. hydrated from API); skip replayed deltas
+    const store = useThreadStreamStore.getState();
+    const message = this.ensureStreamingMessage(params.threadId, params.messageId, params.runId);
+    if (!message) return; // Already finalized (e.g. hydrated from API); skip replayed deltas
     const streaming = message.streamingData ?? { contentParts: [] };
     const parts = [...(streaming.contentParts ?? [])];
     const last = parts[parts.length - 1];
@@ -344,7 +358,7 @@ export class ThreadEventConsumer {
     } else {
       parts.push({ type: 'content', text: params.text });
     }
-    store.patchMessage(params.threadId, params.messageId, {
+    store.patchStreamingMessage(params.threadId, params.messageId, {
       streamingData: {
         contentParts: parts,
         reasoningDetail: streaming.reasoningDetail,
@@ -361,13 +375,9 @@ export class ThreadEventConsumer {
     text: string;
     thinkingDisplay: string;
   }): void {
-    const store = useThreadStore.getState();
-    const message = this.ensureAssistantMessage({
-      threadId: params.threadId,
-      messageId: params.messageId,
-      runId: params.runId,
-    });
-    if (!message.isStreaming) return;
+    const store = useThreadStreamStore.getState();
+    const message = this.ensureStreamingMessage(params.threadId, params.messageId, params.runId);
+    if (!message) return;
 
     const streaming = message.streamingData ?? { contentParts: [] };
     const existing = pickExistingReasoningDetail(message);
@@ -389,7 +399,7 @@ export class ThreadEventConsumer {
       token_count: typeof existing?.token_count === 'number' ? existing.token_count : 0,
     };
 
-    store.patchMessage(params.threadId, params.messageId, {
+    store.patchStreamingMessage(params.threadId, params.messageId, {
       streamingData: {
         contentParts: streaming.contentParts ?? [],
         reasoningDetail,
@@ -471,16 +481,61 @@ export class ThreadEventConsumer {
   }
 
   private refreshUnresolvedCount(threadId: string): void {
-    const state = useThreadStore.getState();
+    const view = getMergedThreadView(threadId);
     let count = 0;
-    for (const toolCall of Object.values(state.toolCallsById)) {
-      if (!toolCall || toolCall.threadId !== threadId) continue;
+    for (const toolCall of Object.values(view.toolCallsById)) {
+      if (!toolCall) continue;
       if (isPendingToolStatus(toolCall.status)) count += 1;
     }
-    state.setThreadRuntime(threadId, {
+    useThreadStreamStore.getState().setThreadRuntime(threadId, {
       unresolvedToolCallCount: count,
       updatedAt: nowIso(),
     });
+  }
+
+  /** message:end — convert the live streaming assistant message into finalized snapshot truth. */
+  private finalizeAssistantMessage(params: {
+    threadId: string;
+    messageId: string;
+    runId: string;
+    seqInThread?: number;
+    data?: ThreadMessage['data'];
+    ts?: string;
+  }): void {
+    const store = useThreadStreamStore.getState();
+    const existing = store.getOverlayMessage(params.threadId, params.messageId)
+      ?? readThreadSnapshotFromCache(params.threadId).messages.find((m) => m.id === params.messageId);
+    const fallbackData = fallbackDataFromStreaming(existing);
+    const finalData = hasMessageData(params.data)
+      ? params.data!
+      : (fallbackData ?? existing?.data ?? {});
+
+    const finalized: ThreadMessage = existing
+      ? {
+          ...existing,
+          runId: params.runId,
+          data: finalData,
+          seqInThread: Number(params.seqInThread ?? existing.seqInThread ?? 0),
+          streamingData: undefined,
+          isStreaming: false,
+        }
+      : {
+          id: params.messageId,
+          threadId: params.threadId,
+          runId: params.runId,
+          role: 'assistant',
+          seq: 0,
+          seqInThread: Number(params.seqInThread ?? 0),
+          data: finalData,
+          attachments: [],
+          streamingData: undefined,
+          isStreaming: false,
+          createdAt: params.ts ?? nowIso(),
+        };
+
+    upsertSnapshotMessage(finalized);
+    store.removeOverlayMessage(params.threadId, params.messageId);
+    store.setThreadStreamActive(params.threadId, false);
   }
 
   private clearThreadStreamingState(threadId: string): void {
@@ -563,7 +618,7 @@ export class ThreadEventConsumer {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
-    useThreadStore.getState().upsertToolCall(toolCall);
+    useThreadStreamStore.getState().upsertStreamingToolCall(toolCall);
     this.refreshUnresolvedCount(threadId);
   }
 
@@ -571,8 +626,8 @@ export class ThreadEventConsumer {
     const { tempId } = this.resolveStreamingTempIdForThread(threadId, payload);
     if (!tempId) return;
 
-    const store = useThreadStore.getState();
-    const existing = store.toolCallsById[tempId];
+    const store = useThreadStreamStore.getState();
+    const existing = store.streamingToolCallsById[tempId];
     if (!existing) return;
 
     const argsDelta = String(payload.arguments_delta ?? '');
@@ -594,7 +649,7 @@ export class ThreadEventConsumer {
     const patch: Partial<ThreadToolCall> = { arguments: parsed, updatedAt: nowIso() };
     if (name) patch.toolName = name;
     if (payload.tool_call_id) patch.llmCallId = String(payload.tool_call_id);
-    store.patchToolCall(tempId, patch);
+    store.patchStreamingToolCall(tempId, patch);
   }
 
   private handleToolCallEnd(threadId: string, payload: Record<string, unknown>): void {
@@ -602,9 +657,10 @@ export class ThreadEventConsumer {
     if (!toolCallId) return;
 
     const index = readOptionalIndex(payload.index);
+    const store = useThreadStreamStore.getState();
     const { sessionKey, streamKey, tempId } = this.resolveStreamingTempIdForThread(threadId, payload);
     if (tempId) {
-      useThreadStore.getState().removeToolCall(tempId);
+      store.removeStreamingToolCall(tempId);
       if (sessionKey && streamKey) {
         this.getStreamingToolMap(sessionKey).delete(streamKey);
       }
@@ -632,12 +688,11 @@ export class ThreadEventConsumer {
       updatedAt: nowIso(),
     };
 
-    const store = useThreadStore.getState();
-    store.upsertToolCall(toolCall);
+    upsertSnapshotToolCall(toolCall);
 
     const toolCallMessageId = String(payload.message_id ?? '');
     if (toolCallMessageId) {
-      store.upsertMessage({
+      upsertSnapshotMessage({
         id: toolCallMessageId,
         threadId,
         runId: toolCall.runId,
@@ -655,14 +710,13 @@ export class ThreadEventConsumer {
   }
 
   private applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
-    const store = useThreadStore.getState();
-    store.upsertToolCall(response.toolCall);
+    upsertSnapshotToolCall(response.toolCall);
     this.refreshUnresolvedCount(response.toolCall.threadId);
   }
 
   private getAutoApproveConfig(): AutoApproveConfig | null {
     try {
-      return useSettingsStore.getState().getSettings().toolCallAutoApprove;
+      return requireSettingsFromCache().toolCallAutoApprove;
     } catch {
       return null;
     }
@@ -678,8 +732,7 @@ export class ThreadEventConsumer {
     const config = this.getAutoApproveConfig();
     if (!config) return;
 
-    const store = useThreadStore.getState();
-    const toolCalls = store.getToolCallsForAssistantMessage(assistantMessageId);
+    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(assistantMessageId);
     const pending = toolCalls.filter((tc) => tc.status === 'pending');
     if (pending.length === 0) return;
 
@@ -704,10 +757,10 @@ export class ThreadEventConsumer {
     }
     this.autoContinueLockByThread.add(threadId);
     try {
-      const store = useThreadStore.getState();
+      const store = useThreadStreamStore.getState();
       const thread = store.threadsById[threadId];
       const latestRunId = thread?.latestRunId ?? null;
-      const messages = store.getMessages(threadId);
+      const messages = getMergedThreadMessages(threadId);
       const latestAssistant = [...messages]
         .sort((a, b) => b.seqInThread - a.seqInThread)
         .find((m) => m.role === 'assistant');
@@ -728,7 +781,7 @@ export class ThreadEventConsumer {
         return;
       }
 
-      const toolCalls = store.getToolCallsForAssistantMessage(latestAssistant.id);
+      const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(latestAssistant.id);
       if (toolCalls.length === 0) {
         console.debug('[AutoContinue] Skipped: no tool calls for assistant', { threadId, assistantId: latestAssistant.id });
         return;
@@ -764,7 +817,7 @@ export class ThreadEventConsumer {
         // Re-read fresh state: SSE may have advanced this resumed run while the
         // resume HTTP call was in flight. Don't let the run-creation snapshot
         // (running/processing) regress a status SSE already settled for the same run.
-        const current = useThreadStore.getState().threadsById[threadId];
+        const current = useThreadStreamStore.getState().threadsById[threadId];
         const sameRun = Boolean(current && response.runId && current.latestRunId === response.runId);
         const wouldRegressToLive = current != null
           && sameRun
@@ -795,7 +848,8 @@ export class ThreadEventConsumer {
     if (event.event === 'thread:delete') {
       const threadId = payload.id ? String(payload.id) : '';
       if (!threadId) return;
-      useThreadStore.getState().removeThreadCascade(threadId);
+      useThreadStreamStore.getState().removeThreadMetadata(threadId);
+      removeThreadSnapshotFromCache(threadId);
       useJourneyStore.getState().clearByThreadId(threadId);
       this.clearThreadStreamingState(threadId);
       this.autoContinueLockByThread.delete(threadId);
@@ -808,15 +862,16 @@ export class ThreadEventConsumer {
     if (event.event === 'thread:bulk_delete') {
       const ids = Array.isArray(payload.ids) ? payload.ids.map((id) => String(id)).filter(Boolean) : [];
       if (ids.length === 0) return;
-      useThreadStore.getState().removeThreadsCascade(ids);
-      useJourneyStore.getState().clearByThreadIds(ids);
+      useThreadStreamStore.getState().removeThreadsMetadata(ids);
       for (const threadId of ids) {
+        removeThreadSnapshotFromCache(threadId);
         this.clearThreadStreamingState(threadId);
         this.autoContinueLockByThread.delete(threadId);
         this.inFlightResumeByThread.delete(threadId);
         this.autoAcceptLockByThread.delete(threadId);
         this.autoContinuedAssistantByThread.delete(threadId);
       }
+      useJourneyStore.getState().clearByThreadIds(ids);
       return;
     }
 
@@ -836,14 +891,14 @@ export class ThreadEventConsumer {
     this.ensureThread(threadId, threadPartial);
 
     if (event.event === 'thread:snapshot_invalidated') {
-      void fetchAndReplaceThreadSnapshot(threadId);
+      void refetchThreadSnapshot(threadId);
       return;
     }
 
     if (event.event === 'run:stage') {
       const stage = typeof payload.stage === 'string' ? payload.stage : null;
       if (!stage) return;
-      useThreadStore.getState().setThreadStage(threadId, stage);
+      useThreadStreamStore.getState().setThreadStage(threadId, stage);
       return;
     }
 
@@ -851,7 +906,7 @@ export class ThreadEventConsumer {
       const d = event.data as Record<string, unknown>;
       const retryCount = typeof d.retry_count === 'number' ? d.retry_count : Number(d.retry_count ?? 0);
       if (Number.isFinite(retryCount) && retryCount > 0) {
-        useThreadStore.getState().setThreadStage(threadId, 'retrying');
+        useThreadStreamStore.getState().setThreadStage(threadId, 'retrying');
       }
       const runId = d.run_id ? String(d.run_id) : 'n/a';
       const requestId = d.request_id ? String(d.request_id) : 'n/a';
@@ -885,11 +940,11 @@ export class ThreadEventConsumer {
       const error = payload.error ? String(payload.error) : null;
       this.patchThreadFromRunStatus(threadId, status, error, payload);
       if (isNonLiveThreadStatus(status)) {
-        useThreadStore.getState().setThreadStreamActive(threadId, false);
-        useThreadStore.getState().setThreadStage(threadId, null);
+        useThreadStreamStore.getState().setThreadStreamActive(threadId, false);
+        useThreadStreamStore.getState().setThreadStage(threadId, null);
       }
-      if (isNonLiveThreadStatus(status) && useThreadStore.getState().isPreexistingLiveThread(threadId)) {
-        void fetchAndReplaceThreadSnapshot(threadId);
+      if (isNonLiveThreadStatus(status) && useThreadStreamStore.getState().isPreexistingLiveThread(threadId)) {
+        void refetchThreadSnapshot(threadId);
       }
       this.refreshUnresolvedCount(threadId);
       void this.checkAutoContinue(threadId);
@@ -901,16 +956,14 @@ export class ThreadEventConsumer {
       const runId = payload.run_id ? String(payload.run_id) : '';
       if (!messageId || !runId) return;
 
-      const store = useThreadStore.getState();
-      const existing = store.getMessages(threadId);
-      for (const message of existing) {
+      const store = useThreadStreamStore.getState();
+      for (const message of [...store.getOverlayMessages(threadId)]) {
         if (message.id.startsWith('optimistic:user:') && message.role === 'user') {
-          revokeMessageAttachmentObjectUrls(message);
-          store.removeMessage(threadId, message.id);
+          store.removeOverlayMessage(threadId, message.id);
         }
       }
 
-      store.upsertMessage({
+      upsertSnapshotMessage({
         id: messageId,
         threadId,
         runId,
@@ -932,19 +985,19 @@ export class ThreadEventConsumer {
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       if (!messageId || !runId) return;
-      this.ensureAssistantMessage({
+      useThreadStreamStore.getState().ensureStreamingAssistantMessage({
         threadId,
         messageId,
         runId,
         seq: Number(payload.seq ?? 0),
         seqInThread: Number(payload.seq_in_thread ?? 0),
       });
-      useThreadStore.getState().setThreadStreamActive(threadId, true);
+      useThreadStreamStore.getState().setThreadStreamActive(threadId, true);
       return;
     }
 
     if (event.event === 'content:delta') {
-      useThreadStore.getState().setThreadStage(threadId, null);
+      useThreadStreamStore.getState().setThreadStage(threadId, null);
       if (this.isSuppressed(threadId)) return;
       const requestId = readRequestId(payload);
       const messageId = String(payload.message_id ?? '');
@@ -988,12 +1041,12 @@ export class ThreadEventConsumer {
       const toolCallId = String(payload.tool_call_id ?? '');
       if (!toolCallId) return;
 
-      const store = useThreadStore.getState();
-      const existing = store.toolCallsById[toolCallId];
+      const store = useThreadStreamStore.getState();
+      const existing = readThreadSnapshotFromCache(threadId).toolCalls.find((tc) => tc.id === toolCallId);
       const childThreadId = payload.child_thread_id ? String(payload.child_thread_id) : null;
       const assistantMsgId = payload.assistant_message_id ? String(payload.assistant_message_id) : null;
       if (!existing) {
-        store.upsertToolCall({
+        upsertSnapshotToolCall({
           id: toolCallId,
           threadId,
           runId: payload.run_id ? String(payload.run_id) : '',
@@ -1014,8 +1067,8 @@ export class ThreadEventConsumer {
           updatedAt: nowIso(),
         });
       } else if (assistantMsgId && !existing.assistantMessageId) {
-        // Re-index via upsertToolCall when recovering a missing assistantMessageId
-        store.upsertToolCall({
+        // Re-index via upsert when recovering a missing assistantMessageId
+        upsertSnapshotToolCall({
           ...existing,
           status: toToolCallStatus(payload.status),
           extraContent: (payload.extra_content ?? existing.extraContent ?? null) as Record<string, unknown> | null,
@@ -1036,7 +1089,7 @@ export class ThreadEventConsumer {
           updatedAt: nowIso(),
         };
         if (childThreadId) patch.childThreadId = childThreadId;
-        store.patchToolCall(toolCallId, patch);
+        patchSnapshotToolCall(threadId, toolCallId, patch);
       }
 
       if (childThreadId) {
@@ -1055,10 +1108,11 @@ export class ThreadEventConsumer {
     }
 
     if (event.event === 'message:update') {
-      const store = useThreadStore.getState();
+      const store = useThreadStreamStore.getState();
       const messageId = String(payload.message_id ?? '');
       if (!messageId) return;
-      const existing = store.getMessages(threadId).find((m) => m.id === messageId);
+      const overlayMsg = store.getOverlayMessage(threadId, messageId);
+      const existing = overlayMsg ?? readThreadSnapshotFromCache(threadId).messages.find((m) => m.id === messageId);
       if (!existing) return;
 
       const patchData = (payload.data ?? {}) as ThreadMessage['data'];
@@ -1076,12 +1130,9 @@ export class ThreadEventConsumer {
       }
 
       if (Object.keys(filtered).length > 0) {
-        store.patchMessage(threadId, messageId, {
-          data: {
-            ...(existing.data ?? {}),
-            ...filtered,
-          },
-        });
+        const nextData = { ...(existing.data ?? {}), ...filtered };
+        if (overlayMsg) store.patchStreamingMessage(threadId, messageId, { data: nextData });
+        else patchSnapshotMessage(threadId, messageId, { data: nextData });
       }
       store.setThreadRuntime(threadId, {
         latestMessageAt: payload.ts ? String(payload.ts) : nowIso(),
@@ -1092,12 +1143,12 @@ export class ThreadEventConsumer {
 
     if (event.event === 'message:end') {
       this.flushDeltaBuffer();
-      const store = useThreadStore.getState();
+      const store = useThreadStreamStore.getState();
       const messageId = String(payload.message_id ?? '');
       const runId = payload.run_id ? String(payload.run_id) : '';
       if (!messageId || !runId) return;
 
-      store.finalizeMessageFromEnd({
+      this.finalizeAssistantMessage({
         threadId,
         messageId,
         runId,
@@ -1108,7 +1159,7 @@ export class ThreadEventConsumer {
 
       // message:end is the authoritative final state. Wipe all existing
       // tool calls for this assistant message and replace with the payload
-      // in a single batched store update to avoid per-item re-renders.
+      // in a single batched cache update to avoid per-item re-renders.
       const toolCalls = Array.isArray(payload.tool_calls) ? payload.tool_calls as Record<string, unknown>[] : [];
       const requestId = readRequestId(payload);
       if (requestId) {
@@ -1163,10 +1214,12 @@ export class ThreadEventConsumer {
         }
       }
 
-      // Batch: single store update for tool calls, single for messages
-      store.replaceToolCallsForAssistant(messageId, newToolCalls);
+      // Drop any leftover streaming temp tool calls for this assistant, then
+      // commit the authoritative finalized set + tool-call messages to the cache.
+      store.clearStreamingToolCallsForAssistant(threadId, messageId);
+      replaceSnapshotToolCallsForAssistant(threadId, messageId, newToolCalls);
       if (newMessages.length > 0) {
-        store.upsertMessages(newMessages);
+        upsertSnapshotMessages(newMessages);
       }
 
       store.setThreadRuntime(threadId, {
@@ -1192,8 +1245,7 @@ export class ThreadEventConsumer {
         this.clearStreamingSession(buildSessionKey(threadId, requestId));
       }
       this.clearStreamingAssistantBuffers(threadId, messageId);
-      const store = useThreadStore.getState();
-      store.discardStreamingAssistantMessage(threadId, messageId);
+      useThreadStreamStore.getState().discardStreamingAssistantMessage(threadId, messageId);
       this.refreshUnresolvedCount(threadId);
       return;
     }
@@ -1202,9 +1254,9 @@ export class ThreadEventConsumer {
       this.flushDeltaBuffer();
       const finalStatus = String(payload.final_status ?? 'done') as ThreadStatus;
       this.patchThreadFromRunStatus(threadId, finalStatus, null, payload);
-      useThreadStore.getState().setThreadStreamActive(threadId, false);
-      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
-        void fetchAndReplaceThreadSnapshot(threadId);
+      useThreadStreamStore.getState().setThreadStreamActive(threadId, false);
+      if (useThreadStreamStore.getState().isPreexistingLiveThread(threadId)) {
+        void refetchThreadSnapshot(threadId);
       }
       this.refreshUnresolvedCount(threadId);
       void this.checkAutoContinue(threadId);
@@ -1215,9 +1267,9 @@ export class ThreadEventConsumer {
       this.flushDeltaBuffer();
       const error = String(payload.error ?? 'Unknown error');
       this.patchThreadFromRunStatus(threadId, 'error', error, payload);
-      useThreadStore.getState().setThreadStreamActive(threadId, false);
-      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
-        void fetchAndReplaceThreadSnapshot(threadId);
+      useThreadStreamStore.getState().setThreadStreamActive(threadId, false);
+      if (useThreadStreamStore.getState().isPreexistingLiveThread(threadId)) {
+        void refetchThreadSnapshot(threadId);
       }
       return;
     }
@@ -1225,10 +1277,10 @@ export class ThreadEventConsumer {
     if (event.event === 'run:canceled') {
       this.flushDeltaBuffer();
       this.patchThreadFromRunStatus(threadId, 'canceled', null, payload);
-      useThreadStore.getState().setThreadStreamActive(threadId, false);
-      useThreadStore.getState().clearThreadStreamingState(threadId);
-      if (useThreadStore.getState().isPreexistingLiveThread(threadId)) {
-        void fetchAndReplaceThreadSnapshot(threadId);
+      useThreadStreamStore.getState().setThreadStreamActive(threadId, false);
+      useThreadStreamStore.getState().clearThreadStreamingState(threadId);
+      if (useThreadStreamStore.getState().isPreexistingLiveThread(threadId)) {
+        void refetchThreadSnapshot(threadId);
       }
     }
   }

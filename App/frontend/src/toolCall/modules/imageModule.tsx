@@ -1,12 +1,12 @@
 import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
-import { useSettingsStore } from '../../store/settingsStore';
+import { requireSettingsFromCache } from '../../data/settings';
 import { readAnyObjectFromCache } from '../../data/objects/objectCache';
 import { ImageToolCard } from '../ui/cards/ImageToolCard';
 import type { GenerateOperationVM } from '../ui/vmTypes';
 
 function resolveLanguage(): string {
   try {
-    return useSettingsStore.getState().getSettings().mainLanguage || 'English';
+    return requireSettingsFromCache().mainLanguage || 'English';
   } catch {
     return 'English';
   }

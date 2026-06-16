@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useShallow } from 'zustand/react/shallow';
-import { useSubAgentStore } from '../../store/subAgentStore';
-import { useThreadStore } from '../../store/threadStore';
+import { useActivePresetId, useSubAgents } from '../../data/presets';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
+import { useThreadView, useMergedThreadMaps } from '../../data/threads';
 import type { ThreadInfo, ThreadToolCall } from '../../types/thread';
 import {
   canPauseThreadStatus,
@@ -96,23 +96,12 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 }) => {
   const peekKey = `${parentThreadId}:${parentMessageId}:peek`;
 
-  const {
-    threadsById,
-    messagesByThreadId,
-    toolCallsById,
-    toolCallIdsByAssistantMessageId,
-    pendingToolCallIdsByThread,
-  } = useThreadStore(
-    useShallow((state) => ({
-      threadsById: state.threadsById,
-      messagesByThreadId: state.messagesByThreadId,
-      toolCallsById: state.toolCallsById,
-      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
-      pendingToolCallIdsByThread: state.pendingToolCallIdsByThread,
-    })),
-  );
+  // Parent thread's merged view: used only to discover the child (call_*) threads.
+  const parentView = useThreadView(parentThreadId);
+  const threadsById = useThreadStreamStore((state) => state.threadsById);
 
-  const subAgents = useSubAgentStore((state) => state.subAgents);
+  const activePresetId = useActivePresetId();
+  const subAgents = useSubAgents(activePresetId);
 
   const setPeekOpen = useFunctionCallUIStore((state) => state.setPeekOpen);
   const setSelectedPeekRun = useFunctionCallUIStore((state) => state.setSelectedPeekRun);
@@ -128,9 +117,9 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   const childEntries = useMemo(() => {
     // parentMessageId is the assistant message ID — look up via the assistant message index
-    const tcIds = toolCallIdsByAssistantMessageId[parentMessageId] ?? [];
+    const tcIds = parentView.toolCallIdsByAssistantMessageId[parentMessageId] ?? [];
     const parentToolCalls: ThreadToolCall[] = tcIds
-      .map((id) => toolCallsById[id])
+      .map((id) => parentView.toolCallsById[id])
       .filter((tc): tc is ThreadToolCall => Boolean(tc));
     const result: ChildEntry[] = [];
 
@@ -163,7 +152,16 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
     result.sort((a, b) => a.callSeq - b.callSeq);
     return result;
-  }, [toolCallIdsByAssistantMessageId, toolCallsById, parentMessageId, threadsById, projectId, subAgents]);
+  }, [parentView, parentMessageId, threadsById, projectId, subAgents]);
+
+  // Merged snapshot+overlay maps for the discovered child threads (passive cache read).
+  const childThreadIds = useMemo(() => childEntries.map((entry) => entry.childThreadId), [childEntries]);
+  const {
+    messagesByThreadId,
+    toolCallsById,
+    toolCallIdsByAssistantMessageId,
+    pendingToolCallIdsByThread,
+  } = useMergedThreadMaps(childThreadIds);
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};

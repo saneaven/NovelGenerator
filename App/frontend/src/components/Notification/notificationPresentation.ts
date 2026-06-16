@@ -1,4 +1,4 @@
-import type { NotificationEntry, NotificationStatus } from '../../store/notificationStore';
+import type { NotificationEntry, NotificationStatus } from '../../domain/notifications';
 import type { NotificationSourceKind } from '../../api/notificationService';
 
 export type NotificationTone = 'active' | 'attention' | 'success' | 'neutral' | 'error';

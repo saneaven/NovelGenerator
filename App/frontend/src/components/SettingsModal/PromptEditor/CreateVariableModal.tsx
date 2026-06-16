@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../../BaseModal';
-import { useVariableStore } from '../../../store/variableStore';
+import { useActivePresetId, useCreateVariableMutation } from '../../../data/presets';
 import type { VariableType, VariableCreate, NumberOptions } from '../../../types/variables';
 import { isValidVariableName } from '../../../types/variables';
 import { Plus, Close } from '../../icons';
@@ -20,7 +20,8 @@ const CreateVariableModal: React.FC<CreateVariableModalProps> = ({
   onCreate,
 }) => {
   const { t } = useTranslation();
-  const { createVariable } = useVariableStore();
+  const activePresetId = useActivePresetId();
+  const createVariable = useCreateVariableMutation(activePresetId);
 
   const VARIABLE_TYPES: { value: VariableType; label: string; description: string }[] = [
     { value: 'string', label: t('settings.promptEditor.createVariable.typeText'), description: t('settings.promptEditor.createVariable.typeTextDesc') },
@@ -169,7 +170,7 @@ const CreateVariableModal: React.FC<CreateVariableModalProps> = ({
         number_options: numberOptions,
       };
 
-      const newVariable = await createVariable(data);
+      const newVariable = await createVariable.mutateAsync(data);
       onCreate(newVariable.id);
       handleClose();
     } catch (err: any) {

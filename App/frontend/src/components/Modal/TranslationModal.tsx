@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { useTimelineStore } from '../../store/timelineStore';
 import type { AnyObjectType, TranslationStatus, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';

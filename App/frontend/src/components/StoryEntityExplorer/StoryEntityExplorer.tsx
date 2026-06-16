@@ -21,8 +21,8 @@ import { useCreateObjectMutation } from '../../data/objects/mutations/useCreateO
 import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
 import { useDeleteObjectMutation } from '../../data/objects/mutations/useDeleteObjectMutation';
 import { usePatchObjectStructureMutation } from '../../data/objects/mutations/usePatchObjectStructureMutation';
-import { useSettings } from '../../store/settingsStore';
-import { useAssetStore } from '../../store/assetStore';
+import { useSettings } from '../../data/settings';
+import { invalidateObjectAssetLinks, useMainAsset, useObjectMainAssetsQuery } from '../../data/assets';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
@@ -58,7 +58,7 @@ import {
 } from '../../types/storyEntityFolder';
 import type { TipTapDoc } from '../../types/tiptap';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject, UnifiedObject } from '../../types/unifiedObject';
-import type { ObjectAssetLink } from '../../api/assetService';
+import type { Asset } from '../../api/assetService';
 import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
 import {
   requestedLanguageStateFromProjection,
@@ -154,10 +154,6 @@ function kindIcon(kind: StoryEntityKind): React.ReactNode {
   }
 }
 
-function getMainAssetFromLinks(links: ObjectAssetLink[] | undefined) {
-  return links?.find((entry) => entry.is_main)?.asset ?? null;
-}
-
 const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   globalDisplayLanguage,
   selectedFolderId = null,
@@ -207,9 +203,6 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     }
     return map;
   }, [treeMarkdown.data]);
-
-  const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
-  const objectAssetsByKey = useAssetStore((state) => state.objectAssetsByKey);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const columnCount = useGridColumnCount(gridRef);
@@ -313,20 +306,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     return { parentId: pid, parentName };
   }, [effectiveFolderId, foldersById, globalDisplayLanguage, settings.mainLanguage]);
 
-  const mainAssetsByEntityId = useMemo(() => {
-    if (!projectId) return {};
-    return filteredEntities.reduce<Record<string, ReturnType<typeof getMainAssetFromLinks>>>((acc, entity) => {
-      acc[entity.id] = getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${entity.id}`]);
-      return acc;
-    }, {});
-  }, [filteredEntities, projectId, objectAssetsByKey]);
-
-  useEffect(() => {
-    if (!projectId || filteredEntities.length === 0) return;
-    filteredEntities.forEach((entity) => {
-      void fetchObjectAssetLinks(projectId, 'story_entity', entity.id);
-    });
-  }, [projectId, filteredEntities, fetchObjectAssetLinks]);
+  // One main-asset cover per visible entity. The hook fetches each entity's
+  // links (shared cache with single-object consumers) and selects is_main.
+  const filteredEntityIds = useMemo(
+    () => filteredEntities.map((entity) => entity.id),
+    [filteredEntities],
+  );
+  const mainAssetsByEntityId = useObjectMainAssetsQuery(projectId, 'story_entity', filteredEntityIds);
 
   // Folder options for entity editor's "Parent Folder" dropdown
   const folderOptions = useMemo(
@@ -746,6 +732,11 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const currentExpandedEntityLanguageState = currentExpandedEntity
     ? getEntityLanguageState(currentExpandedEntity, settings.mainLanguage)
     : null;
+  const expandedEntityMainAsset = useMainAsset(
+    projectId,
+    'story_entity',
+    currentExpandedEntity?.id,
+  );
 
   // Get the selected folder name for the header
   const selectedFolderName = useMemo(() => {
@@ -979,7 +970,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               effectiveLanguage={currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage}
               versionNumber={currentExpandedEntity.version.number}
               objectType="story_entity"
-              mainAsset={getMainAssetFromLinks(objectAssetsByKey[`${projectId}:story_entity:${currentExpandedEntity.id}`])}
+              mainAsset={expandedEntityMainAsset}
               loading={updateObjectMutation.isPending}
               readOnly={!currentExpandedEntityLanguageState?.canEdit}
               readOnlyReason={
@@ -1039,7 +1030,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
                 void handleDeleteEntity(currentExpandedEntity.id);
               }}
               onAssetChange={() => {
-                void fetchObjectAssetLinks(projectId, 'story_entity', currentExpandedEntity.id, true);
+                invalidateObjectAssetLinks(projectId, 'story_entity', currentExpandedEntity.id);
               }}
             />
           </motion.div>
@@ -1359,7 +1350,7 @@ const DroppableParentBar: React.FC<{
 const DragOverlayContent: React.FC<{
   activeDragId: string;
   gridItems: GridItem[];
-  mainAssetsByEntityId: Record<string, ReturnType<typeof getMainAssetFromLinks>>;
+  mainAssetsByEntityId: Record<string, Asset | null>;
 }> = ({ activeDragId, gridItems, mainAssetsByEntityId }) => {
   const item = gridItems.find((gi) => gi.sortId === activeDragId);
   if (!item) return null;

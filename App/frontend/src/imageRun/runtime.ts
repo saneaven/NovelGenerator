@@ -1,5 +1,5 @@
 import { assetService, type Asset, type CreateImageRunRequest, type ImageRun } from '../api/assetService';
-import { useImageRunStore } from './store';
+import { upsertImageRunInCache } from '../data/imageRuns';
 import { generateTempId } from '../utils/tempId';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from './types';
 import { isTerminalImageRunStatus } from './helpers';
@@ -104,7 +104,7 @@ export const ImageRunRuntime = {
       input.projectId,
       buildCreateImageRunRequest(input, clientRequestId),
     );
-    useImageRunStore.getState().upsertRun(run);
+    upsertImageRunInCache(run);
     if (handlers) {
       handlersByRunId.set(run.id, { projectId: input.projectId, handlers });
     }
@@ -114,12 +114,12 @@ export const ImageRunRuntime = {
 
   async cancel(projectId: string, imageRunId: string): Promise<void> {
     const run = await assetService.cancelImageRun(projectId, imageRunId);
-    useImageRunStore.getState().upsertRun(run);
+    upsertImageRunInCache(run);
     await handleTerminalRun(run);
   },
 
   async handleUpdate(run: ImageRun): Promise<void> {
-    useImageRunStore.getState().upsertRun(run);
+    upsertImageRunInCache(run);
     await handleTerminalRun(run);
   },
 };

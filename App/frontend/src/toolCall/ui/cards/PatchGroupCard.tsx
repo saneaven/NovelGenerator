@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { TextButton } from '../../../components/TextButton';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import type { ToolCallDecisionMap } from '../../types';
 import type { ObjectOperationVM, PatchDecision } from '../vmTypes';
@@ -53,7 +53,7 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   accentColor,
   metaChanges,
 }) => {
-  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const language = useMainLanguage();
   const objects = useProjectObjectsMap(projectId, language);
 
   const displayName = useMemo(() => {

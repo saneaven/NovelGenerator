@@ -3,11 +3,11 @@
  * Builds TemplateData for rendering prompt previews with configurable context modes.
  */
 
-import { useSettingsStore } from '../../../store/settingsStore';
+import { requireSettingsFromCache } from '../../../data/settings';
 import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useProjectStore } from '../../../store/projectStore';
-import { useVariableStore } from '../../../store/variableStore';
 import { readProjectObjectsFromCache } from '../../../data/objects/objectCache';
+import { readVariablesForTemplate, readVariablesFromCache } from '../../../data/presets/presetSelectors';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
 import { buildPromptProjectDataSkeleton, type PromptProjectData } from '../../../templateEngine/projectShape';
 import type { TaskType } from '../../../types/scenarios';
@@ -422,8 +422,7 @@ export function buildModeSpecificData(
  * Build config data aligned with the backend ScenarioManager.build_template_data().
  */
 function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
-  const store = useSettingsStore.getState();
-  const settings = store.getSettings();
+  const settings = requireSettingsFromCache();
   const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
   const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
   const displayLanguage =
@@ -482,8 +481,8 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     input.subAgentMessage = '[ Placeholder for sub agent message ]';
   }
 
-  // Build variables from store with overrides
-  const storeVariables = useVariableStore.getState().getVariablesForTemplate();
+  // Build variables from the active-preset cache with overrides
+  const storeVariables = readVariablesForTemplate();
   const variables: VariablesData = { ...storeVariables, ...variableOverrides };
 
   // Build filtered IDs
@@ -581,8 +580,7 @@ export function getUserVariables(): Array<{
   type: 'string' | 'number' | 'boolean' | 'select';
   options?: string[];
 }> {
-  const store = useVariableStore.getState();
-  return store.variables.map(v => ({
+  return readVariablesFromCache().map(v => ({
     id: v.id,
     name: v.name,
     value: v.value,

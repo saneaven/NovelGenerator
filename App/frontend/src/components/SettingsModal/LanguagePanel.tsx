@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { Close } from '../icons';
-import { SUPPORTED_UI_LANGUAGES, type UILanguageCode } from '../../store/settingsStore';
+import { SUPPORTED_UI_LANGUAGES, type UILanguageCode } from '../../domain/settings';
 import './LanguagePanel.css';
 
 interface LanguagePanelProps {

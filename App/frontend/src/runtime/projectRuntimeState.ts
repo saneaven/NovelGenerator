@@ -1,11 +1,11 @@
 import { threadService, type ProjectThreadRuntimeItem } from '../api/threadService';
-import { useThreadStore } from '../store/threadStore';
-import { fetchAndReplaceThreadSnapshot } from './threadHydration';
+import { useThreadStreamStore } from '../store/threadStreamStore';
+import { refetchThreadSnapshot } from '../data/threads';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 
 export async function hydrateProjectRuntimeSummary(projectId: string): Promise<ProjectThreadRuntimeItem[]> {
   const rows = await threadService.listProjectThreadRuntime(projectId);
-  useThreadStore.getState().upsertThreadsRuntime(rows);
+  useThreadStreamStore.getState().upsertThreadsRuntime(rows);
   return rows;
 }
 
@@ -14,14 +14,14 @@ export async function reconcilePreexistingLiveThreads(
   runtimeRows?: ProjectThreadRuntimeItem[],
 ): Promise<void> {
   const rows = runtimeRows ?? await hydrateProjectRuntimeSummary(projectId);
-  const state = useThreadStore.getState();
+  const state = useThreadStreamStore.getState();
   const completedRows = rows.filter((row) => state.isPreexistingLiveThread(row.id) && isNonLiveThreadStatus(row.status));
 
-  await Promise.allSettled(completedRows.map((row) => fetchAndReplaceThreadSnapshot(row.id)));
+  await Promise.allSettled(completedRows.map((row) => refetchThreadSnapshot(row.id)));
 }
 
 export function suppressRunningThreadStreaming(projectId: string): string[] {
-  const state = useThreadStore.getState();
+  const state = useThreadStreamStore.getState();
   const threadIds = Object.values(state.threadsById)
     .filter((thread) => thread?.projectId === projectId && thread.status === 'running')
     .map((thread) => thread!.id);

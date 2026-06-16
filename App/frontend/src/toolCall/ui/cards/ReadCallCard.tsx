@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo } from 'react';
-import { useSettingsStore } from '../../../store/settingsStore';
+import React, { useMemo } from 'react';
+import { useMainLanguage } from '../../../data/settings';
 import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
-import { useAssetStore } from '../../../store/assetStore';
+import { useMainAsset } from '../../../data/assets';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
@@ -36,7 +36,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   onAccept,
   onReject,
 }) => {
-  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const language = useMainLanguage();
   const objects = useProjectObjectsMap(projectId, language);
   const getRichTextMarkdown = (id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
     const value = (objects[id]?.data as Record<string, unknown> | undefined)?.[field];
@@ -44,23 +44,17 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   };
   const timelineLookup = useTimelineLookup(projectId);
 
-  const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
-  const getMainAsset = useAssetStore((state) => state.getMainAsset);
-
   const snapshot = useMemo(
     () => getObjectSnapshot({ operation, objects, projectId, language }),
     [operation, objects, projectId, language]
   );
 
   const canLoadStoryAsset = Boolean(operation.objectType === 'story_entity' && snapshot.id && projectId);
-  useEffect(() => {
-    if (!canLoadStoryAsset || !snapshot.id) return;
-    void fetchObjectAssetLinks(projectId, 'story_entity', snapshot.id);
-  }, [canLoadStoryAsset, snapshot.id, projectId, fetchObjectAssetLinks]);
-
-  const mainAsset = operation.objectType === 'story_entity' && snapshot.id
-    ? getMainAsset(projectId, 'story_entity', snapshot.id)
-    : null;
+  const mainAsset = useMainAsset(
+    projectId,
+    canLoadStoryAsset ? 'story_entity' : undefined,
+    canLoadStoryAsset ? snapshot.id : undefined,
+  );
   const imageUrl = getAssetUrl(mainAsset);
 
   const title = snapshot.displayName || operation.title;

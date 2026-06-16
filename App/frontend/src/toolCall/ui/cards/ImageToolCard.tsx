@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
 import { TextButton } from '../../../components/TextButton';
 import { assetService } from '../../../api/assetService';
-import { useImageRunStore } from '../../../imageRun';
+import { useImageRun, upsertImageRunInCache } from '../../../data/imageRuns';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { ImageCardProps } from './types';
 
@@ -110,7 +110,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
   onReject,
 }) => {
   const [loadingAction, setLoadingAction] = useState<'accept' | 'reject' | null>(null);
-  const imageRun = useImageRunStore((state) => (operation.imageRunId ? state.runsById[operation.imageRunId] : undefined));
+  const imageRun = useImageRun(projectId, operation.imageRunId);
 
   const buttonsDisabled = decisionDisabled || loadingAction !== null;
   const previewTitle = operation.imageKind === 'scene' ? 'Generated scene image' : 'Generated object image';
@@ -125,7 +125,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
     setLoadingAction(decision);
     try {
       const updated = await assetService.decideImageRun(projectId, operation.imageRunId, decision);
-      useImageRunStore.getState().upsertRun(updated);
+      upsertImageRunInCache(updated);
     } finally {
       setLoadingAction(null);
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { SkeletonList } from '../common/Skeleton';
 import { ChevronRight, Folder } from '../icons';
 import { getStoryEntityFolderName, type StoryEntityFolder } from '../../types/storyEntityFolder';

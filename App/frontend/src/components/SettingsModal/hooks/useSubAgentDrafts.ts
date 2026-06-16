@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSubAgentStore } from '../../../store/subAgentStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import {
+  useActivePresetId,
+  useSubAgentsQuery,
+  useCreateSubAgentMutation,
+  useUpdateSubAgentMutation,
+} from '../../../data/presets';
+import { readSubAgentsFromCache } from '../../../data/presets/presetSelectors';
+import { fetchScenario, invalidateScenario } from '../../../data/settings';
 import { scenarioService } from '../../../api/scenarioService';
 import {
   buildEmptySubAgentDraft,
@@ -19,8 +25,14 @@ import { generateTempId } from '../../../utils/tempId';
 import type { ScenarioDocument } from '../../../types/scenarios';
 
 export function useSubAgentDrafts() {
-  const { subAgents, loadSubAgents, createSubAgent, updateSubAgent } = useSubAgentStore();
-  const { loadScenario, invalidateScenarioCache } = useSettingsStore();
+  const activePresetId = useActivePresetId();
+  const { data: subAgents = [], refetch: refetchSubAgents } = useSubAgentsQuery(activePresetId);
+  const createSubAgentMutation = useCreateSubAgentMutation(activePresetId);
+  const updateSubAgentMutation = useUpdateSubAgentMutation(activePresetId);
+  const createSubAgent = createSubAgentMutation.mutateAsync;
+  const updateSubAgent = updateSubAgentMutation.mutateAsync;
+  const loadScenario = fetchScenario;
+  const invalidateScenarioCache = invalidateScenario;
 
   const [subAgentDrafts, setSubAgentDrafts] = useState<Record<string, SubAgentDefinitionDraft>>({});
   const [subAgentScenarioDrafts, setSubAgentScenarioDrafts] = useState<Record<string, ScenarioDraft>>({});
@@ -103,8 +115,8 @@ export function useSubAgentDrafts() {
 
       let agent = subAgentsRef.current.find((s) => s.id === subAgentId);
       if (!agent) {
-        await loadSubAgents().catch(() => undefined);
-        agent = useSubAgentStore.getState().subAgents.find((s) => s.id === subAgentId);
+        await refetchSubAgents().catch(() => undefined);
+        agent = readSubAgentsFromCache().find((s) => s.id === subAgentId);
         if (!agent) return;
       }
 
@@ -113,7 +125,7 @@ export function useSubAgentDrafts() {
         [key]: hydrateSubAgentDraft(agent, key),
       }));
     },
-    [loadSubAgents],
+    [refetchSubAgents],
   );
 
   // ensureSubAgentScenarioDraftLoaded
@@ -405,20 +417,23 @@ export function useSubAgentDrafts() {
       }
 
       try {
-        const updated = await updateSubAgent(d.subAgentId!, {
-          agent_name,
-          display_name: d.current.display_name.trim(),
-          description: d.current.description.trim(),
-          enabled: d.current.enabled,
-          allowed_invocation_modes: d.current.allowed_invocation_modes,
-          tool_grants: d.current.tool_grants.map((item) => ({
-            feature_key: item.feature_key,
-            categories: [...item.categories],
-          })),
-          allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
-          allowed_mcp_server_ids: d.current.allowed_mcp_server_ids,
-          use_custom_llm_config: d.current.use_custom_llm_config,
-          llm_config_override: d.current.llm_config_override,
+        const updated = await updateSubAgent({
+          id: d.subAgentId!,
+          data: {
+            agent_name,
+            display_name: d.current.display_name.trim(),
+            description: d.current.description.trim(),
+            enabled: d.current.enabled,
+            allowed_invocation_modes: d.current.allowed_invocation_modes,
+            tool_grants: d.current.tool_grants.map((item) => ({
+              feature_key: item.feature_key,
+              categories: [...item.categories],
+            })),
+            allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
+            allowed_mcp_server_ids: d.current.allowed_mcp_server_ids,
+            use_custom_llm_config: d.current.use_custom_llm_config,
+            llm_config_override: d.current.llm_config_override,
+          },
         });
 
         saved += 1;

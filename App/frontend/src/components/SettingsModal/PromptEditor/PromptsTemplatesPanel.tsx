@@ -25,7 +25,7 @@ import PromptPreviewModal from './PromptPreviewModal';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
 import PresetModal from '../PresetModal';
-import { usePresetStore } from '../../../store/presetStore';
+import { usePresets, useActivePresetId } from '../../../data/presets';
 import { scenarioService } from '../../../api/scenarioService';
 import { fragmentService } from '../../../api/fragmentService';
 import { PROMPT_TREE, getFirstPromptNode, findPromptNode, type PromptNode } from './promptTree';
@@ -70,8 +70,12 @@ interface PromptsTemplatesPanelProps {
 const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTemplatesPanelProps>(({ onUnsavedCountChange }, ref) => {
   const { t } = useTranslation();
   const toast = useSettingsToast();
-  const activePresetId = usePresetStore((s) => s.activePresetId);
-  const getPresetById = usePresetStore((s) => s.getPresetById);
+  const presets = usePresets();
+  const activePresetId = useActivePresetId();
+  const getPresetById = useCallback(
+    (id: string) => presets.find((p) => p.id === id),
+    [presets],
+  );
 
   // --- Domain hooks ---
   const scenarios = useScenarioDrafts();

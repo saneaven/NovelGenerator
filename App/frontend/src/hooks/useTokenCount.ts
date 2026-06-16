@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { countTokens, type TokenizerType, type TokenCountResult } from '../services/tokenCountingService';
-import type { ProviderType } from '../store/settingsStore';
+import type { ProviderType } from '../domain/settings';
 
 export interface UseTokenCountOptions {
   /** The text to count tokens for */

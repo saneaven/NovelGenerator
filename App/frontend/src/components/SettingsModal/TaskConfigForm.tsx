@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   TaskAIConfig,
@@ -8,7 +8,7 @@ import type {
   CustomKind,
   TokenizerOverride,
   CustomThinkingTemplate,
-} from '../../store/settingsStore';
+} from '../../domain/settings';
 import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
 import ThinkingTemplateEditor from './ThinkingTemplateEditor';
@@ -16,7 +16,7 @@ import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields'
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced, Close } from '../icons';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { useProviderSpecs } from '../../data/providers/useProviderSpecsQuery';
 import {
   buildSelectOptions,
   getVisibleSpecEntries,
@@ -45,13 +45,8 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
   const { t } = useTranslation();
   const radioNameKey = formKey ?? taskType;
   const [showModelBrowser, setShowModelBrowser] = useState(false);
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-  const providerSpecs = useProviderSpecStore((state) => state.specs);
+  const providerSpecs = useProviderSpecs();
   const providerSpec = providerSpecs[config.provider];
-
-  useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
 
   const llmProviders = useMemo(() => {
     const providers = Object.values(providerSpecs).filter((provider) => Boolean(provider.llm));

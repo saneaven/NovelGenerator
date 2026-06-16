@@ -4,8 +4,9 @@ import {
   type ResumeRunRequest,
   type ToolCallDecisionResponse,
 } from '../api/threadService';
-import { useSettingsStore } from '../store/settingsStore';
-import { useThreadStore } from '../store/threadStore';
+import { requireSettingsFromCache } from '../data/settings';
+import { useThreadStreamStore } from '../store/threadStreamStore';
+import { getMergedThreadView, getMergedThreadMessages, upsertSnapshotToolCall } from '../data/threads';
 import { nowIso, toThreadType, type LatestRunContext, type ThreadInfo, type ThreadStatus } from '../types/thread';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
@@ -59,7 +60,7 @@ function upsertThreadStatus(params: {
   runId?: string | null;
   runStatus?: ThreadStatus | null;
 }): void {
-  const store = useThreadStore.getState();
+  const store = useThreadStreamStore.getState();
   const existing = store.threadsById[params.threadId];
   const partial: Partial<ThreadInfo> = {
     status: params.status,
@@ -104,10 +105,10 @@ function upsertThreadStatus(params: {
 }
 
 function refreshUnresolvedCount(threadId: string): void {
-  const store = useThreadStore.getState();
+  const view = getMergedThreadView(threadId);
   let unresolvedCount = 0;
-  for (const toolCall of Object.values(store.toolCallsById)) {
-    if (!toolCall || toolCall.threadId !== threadId) continue;
+  for (const toolCall of Object.values(view.toolCallsById)) {
+    if (!toolCall) continue;
     if (
       toolCall.status === 'pending'
       || toolCall.status === 'streaming'
@@ -118,16 +119,14 @@ function refreshUnresolvedCount(threadId: string): void {
       unresolvedCount += 1;
     }
   }
-  store.setThreadRuntime(threadId, {
+  useThreadStreamStore.getState().setThreadRuntime(threadId, {
     unresolvedToolCallCount: unresolvedCount,
     updatedAt: nowIso(),
   });
 }
 
 function applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
-  const store = useThreadStore.getState();
-  store.upsertToolCall(response.toolCall);
-
+  upsertSnapshotToolCall(response.toolCall);
   refreshUnresolvedCount(response.toolCall.threadId);
 }
 
@@ -157,7 +156,7 @@ function toLatestRunContextFromRequest(
 }
 
 export async function sendThreadMessage(params: SendThreadMessageParams): Promise<boolean> {
-  useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
+  useThreadStreamStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const trimmed = params.inputText.trim();
   const requestAttachments = params.request?.attachments ?? [];
@@ -171,12 +170,12 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     });
   }
 
-  const store = useThreadStore.getState();
+  const store = useThreadStreamStore.getState();
   const lang = params.request?.language
-    || useSettingsStore.getState().getSettings().mainLanguage;
-  const existingMessages = store.getMessages(params.threadId);
+    || requireSettingsFromCache().mainLanguage;
+  const existingMessages = getMergedThreadMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
-  store.appendMessage({
+  store.appendOptimisticMessage({
     id: `optimistic:user:${Date.now()}`,
     threadId: params.threadId,
     runId: '',
@@ -218,17 +217,17 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
       runStatus: response.status,
     });
     if (params.request) {
-      useThreadStore.getState().setThreadRuntime(params.threadId, {
+      useThreadStreamStore.getState().setThreadRuntime(params.threadId, {
         latestRunContext: toLatestRunContextFromRequest(params.request, lang),
       });
     }
     return true;
   } catch (error) {
-    const messages = useThreadStore.getState().getMessages(params.threadId);
-    for (const message of messages) {
+    const store2 = useThreadStreamStore.getState();
+    for (const message of [...store2.getOverlayMessages(params.threadId)]) {
       if (message.id.startsWith('optimistic:user:')) {
         revokeMessageAttachmentObjectUrls(message);
-        useThreadStore.getState().removeMessage(params.threadId, message.id);
+        store2.removeOverlayMessage(params.threadId, message.id);
       }
     }
     throw error;
@@ -236,7 +235,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
 }
 
 export async function resumeThread(params: ResumeThreadParams): Promise<boolean> {
-  useThreadStore.getState().clearPreexistingLiveThread(params.threadId);
+  useThreadStreamStore.getState().clearPreexistingLiveThread(params.threadId);
 
   const response = await threadService.resumeRun(params.threadId, params.request);
   upsertThreadStatus({
@@ -252,7 +251,7 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
 }
 
 export async function pauseThread(params: PauseThreadParams): Promise<void> {
-  const store = useThreadStore.getState();
+  const store = useThreadStreamStore.getState();
   await threadService.pauseThread(params.threadId);
   store.setThreadRuntime(params.threadId, {
     status: 'paused',
@@ -263,7 +262,7 @@ export async function pauseThread(params: PauseThreadParams): Promise<void> {
 }
 
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
-  const store = useThreadStore.getState();
+  const store = useThreadStreamStore.getState();
   await threadService.cancelThread(params.threadId);
   store.setThreadRuntime(params.threadId, {
     status: 'canceled',

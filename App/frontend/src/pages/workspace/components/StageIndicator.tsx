@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useThreadStore } from '../../../store/threadStore';
+import { useThreadStreamStore } from '../../../store/threadStreamStore';
 
 interface StageIndicatorProps {
   threadId: string;
@@ -21,7 +21,7 @@ const StageIndicator: React.FC<StageIndicatorProps> = ({
   threadStatus,
 }) => {
   const { t } = useTranslation();
-  const stage = useThreadStore((state) => state.currentStageByThread[threadId] ?? null);
+  const stage = useThreadStreamStore((state) => state.currentStageByThread[threadId] ?? null);
   const translationKey = stage ? STAGE_KEY_BY_STAGE[stage] : null;
 
   if (!translationKey || !isMessageRunActive || threadStatus !== 'running') {

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Settings, SettingsUpdatePayload } from '../store/settingsStore';
+import type { Settings, SettingsUpdatePayload } from '../domain/settings';
 
 export const settingsService = {
     /**

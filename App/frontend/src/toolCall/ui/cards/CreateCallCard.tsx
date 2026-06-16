@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyObjectDisplay } from '../displays/ReadOnlyObjectDisplay';
@@ -41,7 +41,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
   onAccept,
   onReject,
 }) => {
-  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const language = useMainLanguage();
   const objects = useProjectObjectsMap(projectId, language);
   const timelineLookup = useTimelineLookup(projectId);
 

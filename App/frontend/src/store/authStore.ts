@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { authService, type UserResponse, type ProfileUpdate } from '../api';
-import { useSettingsStore } from './settingsStore';
+import { queryClient } from '../data/queryClient';
 
 interface AuthStore {
   user: UserResponse | null;
@@ -68,7 +68,9 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
   logout: () => {
     authService.logout();
-    useSettingsStore.getState().clearSettings();
+    // Drop ALL cached server data (settings, projects, objects, presets, ...)
+    // so a subsequent login never sees the previous session's cache.
+    queryClient.clear();
     set({
       user: null,
       isAuthenticated: false,

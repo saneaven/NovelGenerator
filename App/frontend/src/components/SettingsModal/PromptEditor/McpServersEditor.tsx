@@ -3,8 +3,7 @@ import { TextButton } from '../../TextButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
 import { CustomSelect } from '../../ui/CustomSelect';
 import EditorPanelHeader from './EditorPanelHeader';
-import { usePresetStore } from '../../../store/presetStore';
-import { useMcpStore } from '../../../store/mcpStore';
+import { useActivePresetId, useDeleteMcpServerMutation, useSyncMcpServerMutation } from '../../../data/presets';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import type { McpAuthInput, McpHeaderInput, McpServerCreate, McpServerResponse, McpServerUpdate } from '../../../types/mcp';
 import HeaderOverflowMenu from './HeaderOverflowMenu';
@@ -209,9 +208,9 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
-  const activePresetId = usePresetStore((state) => state.activePresetId);
-  const deleteServer = useMcpStore((state) => state.deleteServer);
-  const syncServer = useMcpStore((state) => state.syncServer);
+  const activePresetId = useActivePresetId();
+  const deleteServerMutation = useDeleteMcpServerMutation(activePresetId ?? '');
+  const syncServerMutation = useSyncMcpServerMutation(activePresetId ?? '');
   const [actionError, setActionError] = useState('');
 
   const patchDraft = (patch: Partial<McpServerDraftFields>) => {
@@ -247,7 +246,7 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
     if (!ok) return;
 
     try {
-      await deleteServer(activePresetId!, draft.serverId);
+      await deleteServerMutation.mutateAsync(draft.serverId);
       onDeleted(draft.serverId);
     } catch (error) {
       await showAlert({
@@ -263,7 +262,7 @@ const McpServersEditor: React.FC<McpServersEditorProps> = ({
     setActionError('');
     onDraftChange({ ...draft, isSyncing: true });
     try {
-      await syncServer(activePresetId, draft.serverId);
+      await syncServerMutation.mutateAsync(draft.serverId);
       onDraftChange({ ...draft, isSyncing: false });
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Failed to sync MCP server');

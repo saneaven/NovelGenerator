@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { SkeletonList } from '../../../components/common/Skeleton';
 import { alert as showAlert } from '../../../store/dialogStore';
 import type { OutlineObject, UnifiedObject } from '../../../types/unifiedObject';
@@ -54,7 +54,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
     }
     return map;
   }, [outlineQuery.data]);
-  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const mainLanguage = useMainLanguage();
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [formName, setFormName] = useState('');

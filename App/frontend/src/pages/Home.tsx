@@ -2,13 +2,20 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/projectStore';
+import {
+  useProjectsQuery,
+  useCreateProjectMutation,
+  useImportProjectMutation,
+  useDeleteProjectMutation,
+} from '../data/projects';
 import { useAgentStore } from '../store/agentStore';
 import { useAgentUIStore } from '../store/agentUIStore';
-import { useNotificationStore } from '../store/notificationStore';
+import { useNotificationUiStore } from '../store/notificationUiStore';
+import { useNotificationsMap } from '../data/notifications';
 import { useFunctionCallUIStore } from '../toolCall/ui';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
-import { useSettings } from '../store/settingsStore';
+import { useSettings } from '../data/settings';
 import { getAssetUrl } from '../utils/assetUrl';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
@@ -23,8 +30,15 @@ import { confirm, alert as showAlert } from '../store/dialogStore';
 const Home: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { projects, createProject, importProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } =
-    useProjectStore();
+  const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const projectsQuery = useProjectsQuery();
+  const projects = projectsQuery.data ?? [];
+  const isLoading = projectsQuery.isLoading;
+  const error = projectsQuery.error instanceof Error ? projectsQuery.error.message : null;
+  const refetchProjects = projectsQuery.refetch;
+  const createProjectMutation = useCreateProjectMutation();
+  const importProjectMutation = useImportProjectMutation();
+  const deleteProjectMutation = useDeleteProjectMutation();
   const { logout, user } = useAuthStore();
   const settings = useSettings();
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -33,13 +47,12 @@ const Home: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const notificationsMap = useNotificationStore((state) => state.notifications);
-  const openNotificationDetail = useNotificationStore((state) => state.openDetail);
+  const notificationsMap = useNotificationsMap();
+  const openNotificationDetail = useNotificationUiStore((state) => state.openDetail);
 
   const recentNotifications = useMemo(
     () =>
       Object.values(notificationsMap)
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
         .sort((a, b) => {
           if (a.important !== b.important) return Number(b.important) - Number(a.important);
           if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
@@ -50,26 +63,26 @@ const Home: React.FC = () => {
     [notificationsMap],
   );
 
-  // Fetch projects on mount and when returning to page
-  useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
-
-  // Refetch when window gains focus (user returns to tab/window)
+  // Refetch when window gains focus (user returns to tab/window). The query
+  // fetches on mount automatically, so no explicit mount-fetch is needed.
   useEffect(() => {
     const handleFocus = () => {
-      fetchProjects();
+      void refetchProjects();
     };
 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchProjects]);
+  }, [refetchProjects]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (projectName.trim()) {
       try {
-        const newProject = await createProject(projectName.trim(), projectDescription.trim(), settings.mainLanguage);
+        const newProject = await createProjectMutation.mutateAsync({
+          name: projectName.trim(),
+          description: projectDescription.trim(),
+          mainLanguage: settings.mainLanguage,
+        });
         setCurrentProject(newProject.id);
         navigate(`/project/${newProject.id}`);
         setProjectName('');
@@ -98,7 +111,7 @@ const Home: React.FC = () => {
     const ok = await confirm({ title: 'Delete Project', message: t('home.confirmDelete'), variant: 'danger', confirmLabel: 'Delete' });
     if (!ok) return;
     try {
-      await deleteProject(projectId);
+      await deleteProjectMutation.mutateAsync(projectId);
     } catch (err) {
       console.error('Failed to delete project:', err);
     }
@@ -152,7 +165,7 @@ const Home: React.FC = () => {
 
     setIsImporting(true);
     try {
-      const imported = await importProject(file);
+      const imported = await importProjectMutation.mutateAsync(file);
       setCurrentProject(imported.id);
       navigate(`/project/${imported.id}`);
     } catch (err) {

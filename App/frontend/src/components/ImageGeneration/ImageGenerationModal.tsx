@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettings, type ImageProviderType } from '../../store/settingsStore';
+import { useSettings, type ImageProviderType } from '../../data/settings';
 import { useProjectStore } from '../../store/projectStore';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { assetService, type Asset, type StyledPrompt } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import type { ImageGenerationBinding, ImageGenerationRecipe } from '../../imageRun';
-import { ImageRunRuntime, useImageRunStore } from '../../imageRun';
+import { ImageRunRuntime } from '../../imageRun';
+import { useImageRun } from '../../data/imageRuns';
 import {
     applyAspectRatioChange,
     applyImageSizeChange,
@@ -23,7 +24,8 @@ import AuthenticatedImage from '../common/AuthenticatedImage';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useThreadStore } from '../../store/threadStore';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
+import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { isPausedLikeThreadStatus } from '../../types/thread';
 import { AIAssistMini, Close } from '../icons';
@@ -81,15 +83,14 @@ function extractPromptTextFromData(data: Record<string, { contentParts?: Array<{
 }
 
 function extractFinalPromptFromThread(threadId: string): string {
-    const store = useThreadStore.getState();
-    const messages = store.getMessages(threadId);
+    const messages = getMergedThreadMessages(threadId);
     const lastAssistantMsg = [...messages].reverse().find((message) => message.role === 'assistant');
     if (!lastAssistantMsg) return '';
 
     const finalText = extractPromptTextFromData(lastAssistantMsg.data);
     if (finalText) return finalText;
 
-    const toolCalls = store.getToolCallsForAssistantMessage(lastAssistantMsg.id);
+    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
     for (const toolCall of toolCalls) {
         const promptFromArguments = readPromptValue((toolCall.arguments as Record<string, unknown> | undefined)?.prompt);
         if (promptFromArguments) return promptFromArguments;
@@ -120,7 +121,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [imageSize, setImageSize] = useState(settings.imageGenConfig.image_size);
 
     const [taskId, setTaskId] = useState<string | null>(null);
-    const session = useImageRunStore((state) => (taskId ? state.runsById[taskId] : undefined));
+    const session = useImageRun(currentProjectId, taskId);
     const isGenerating = session?.status === 'queued' || session?.status === 'running' || session?.status === 'applying';
     const error = session?.status === 'failed' ? session.error_message ?? 'Image generation failed' : null;
     // Get saved prompts from object metadata
@@ -426,10 +427,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
     );
-    const streamingThreadStatus = useThreadStore((state) =>
+    const streamingThreadStatus = useThreadStreamStore((state) =>
         journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
     );
-    const streamingThreadError = useThreadStore((state) =>
+    const streamingThreadError = useThreadStreamStore((state) =>
         journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
     );
     const liveView = useThreadLiveViewState(journeyThreadId ?? null);

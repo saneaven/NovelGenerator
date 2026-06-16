@@ -1,4 +1,5 @@
-import { useThreadStore } from '../store/threadStore';
+import { useThreadStreamStore } from '../store/threadStreamStore';
+import { getMergedThreadView } from '../data/threads';
 import { nowIso, type ThreadInfo, type ThreadStatus, type ToolCallStatus } from '../types/thread';
 
 const UNRESOLVED_TOOL_CALL_STATUSES = new Set<ToolCallStatus>([
@@ -17,11 +18,11 @@ export interface ThreadDeletePauseContext {
 }
 
 export function countUnresolvedToolCallsForThread(threadId: string): number {
-  const state = useThreadStore.getState();
+  const view = getMergedThreadView(threadId);
   let count = 0;
 
-  for (const toolCall of Object.values(state.toolCallsById)) {
-    if (!toolCall || toolCall.threadId !== threadId) continue;
+  for (const toolCall of Object.values(view.toolCallsById)) {
+    if (!toolCall) continue;
     if (!UNRESOLVED_TOOL_CALL_STATUSES.has(toolCall.status)) continue;
     count += 1;
   }
@@ -30,7 +31,7 @@ export function countUnresolvedToolCallsForThread(threadId: string): number {
 }
 
 export function getThreadDeletePauseContext(threadId: string): ThreadDeletePauseContext {
-  const state = useThreadStore.getState();
+  const state = useThreadStreamStore.getState();
   return {
     previousThreadStatus: state.threadsById[threadId]?.status,
     previousUnresolvedCount: countUnresolvedToolCallsForThread(threadId),
@@ -41,7 +42,7 @@ export function applyOptimisticDeletePause(
   threadId: string,
   context: ThreadDeletePauseContext,
 ): void {
-  const state = useThreadStore.getState();
+  const state = useThreadStreamStore.getState();
   const nextUnresolvedCount = countUnresolvedToolCallsForThread(threadId);
   const partial: Partial<ThreadInfo> = {
     unresolvedToolCallCount: nextUnresolvedCount,

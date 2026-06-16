@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../store/settingsStore';
+import { requireSettingsFromCache } from '../data/settings';
 import { readObjectFromCache } from '../data/objects/objectCache';
 import type { ObjectType } from '../types/unifiedObject';
 import type { JourneySpec, EditingTargets } from './types';
@@ -108,7 +108,7 @@ function objectEditLabel(input: ObjectEditInput): string {
 }
 
 function objectEditBuildTargets(kind: ObjectEditJourneyKind, input: ObjectEditInput): EditingTargets {
-  const mainLanguage = useSettingsStore.getState().getSettings().mainLanguage;
+  const mainLanguage = requireSettingsFromCache().mainLanguage;
   const targetId = (input.targetId ?? '').trim();
   if (!targetId) {
     throw new Error(`${kind} requires targetId.`);

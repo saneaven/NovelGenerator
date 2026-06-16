@@ -17,7 +17,7 @@ import ObjectPickerGroup from './ObjectPickerGroup';
 import ObjectPickerPreview from './ObjectPickerPreview';
 import { useObjectPickerData } from './useObjectPickerData';
 import { useTokenCount } from '../../hooks/useTokenCount';
-import { useResolvedTaskConfig } from '../../store/settingsStore';
+import { useResolvedTaskConfig } from '../../data/settings';
 import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group, SelectionState } from './types';
 import './ObjectPicker.css';
 

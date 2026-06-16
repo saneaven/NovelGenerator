@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { TextButton } from '../TextButton';
-import { usePresetStore } from '../../store/presetStore';
+import { usePresets, useImportPresetMutation, useSetActivePresetMutation } from '../../data/presets';
 import type { PresetExportData } from '../../types/presets';
 
 interface PresetImportModalProps {
@@ -19,7 +19,9 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
   beforeSwitchPreset,
 }) => {
   const { t } = useTranslation();
-  const { importPreset, setActivePreset, presets } = usePresetStore();
+  const presets = usePresets();
+  const importPreset = useImportPresetMutation();
+  const setActivePreset = useSetActivePresetMutation();
   const [name, setName] = useState(importData.preset.name || '');
   const [description, setDescription] = useState(importData.preset.description || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,7 +67,7 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
     setError('');
 
     try {
-      const imported = await importPreset({
+      const imported = await importPreset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         data: importData,
@@ -79,7 +81,7 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
           return;
         }
       }
-      await setActivePreset(imported.id);
+      await setActivePreset.mutateAsync(imported.id);
       onClose();
     } catch (err: any) {
       if (err.message?.includes('409') || err.message?.includes('already exists')) {

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
 import CustomThinkingTemplateManager from './CustomThinkingTemplateManager';
-import type { CustomThinkingTemplate } from '../../store/settingsStore';
+import type { CustomThinkingTemplate } from '../../domain/settings';
 import { confirm } from '../../store/dialogStore';
 import './ThinkingTemplateEditor.css';
 

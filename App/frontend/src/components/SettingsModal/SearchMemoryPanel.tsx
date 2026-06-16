@@ -6,7 +6,7 @@ import type {
   SearchGeneralConfig,
   SearchMemorySettings,
   SearchMemoryTarget,
-} from '../../store/settingsStore';
+} from '../../domain/settings';
 import { fetchEmbeddingModels } from '../../api/providerService';
 import {
   hasSearchMemoryOverride,
@@ -22,7 +22,7 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { NumberInput } from '../ui/NumberInput';
 import { IconButton } from '../IconButton';
 import { ChevronLeft, ChevronRight, Close, Scroll, Search, Settings as SettingsIcon, Toggle } from '../icons';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { useProviderSpecs } from '../../data/providers/useProviderSpecsQuery';
 import './SearchMemoryPanel.css';
 
 type EmbeddingCatalogModel = {
@@ -65,16 +65,11 @@ const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   mainLanguage,
 }) => {
   const { t } = useTranslation();
-  const specs = useProviderSpecStore((state) => state.specs);
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+  const specs = useProviderSpecs();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => isMobileViewport());
   const [showModelBrowser, setShowModelBrowser] = useState(false);
   const [activeModelBrowser, setActiveModelBrowser] = useState<ModelBrowserTarget>('general');
   const [embeddingCatalogs, setEmbeddingCatalogs] = useState<Record<string, EmbeddingCatalogModel[]>>({});
-
-  useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
 
   const embeddingProvidersToLoad = useMemo(() => {
     const providers = new Set<string>();

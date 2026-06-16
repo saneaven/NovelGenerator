@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
-import { useAgentStore } from '../../store/agentStore';
+import { useEnsureAgentSelection } from '../../data/agents';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useProjectsQuery, useCurrentProject } from '../../data/projects';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useTimelineStore } from '../../store/timelineStore';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
-import { alert as showAlert } from '../../store/dialogStore';
 import { translationService } from '../../api/unifiedObjectService';
 import { bootstrapProjectRuntime } from '../../runtime/projectRuntimeBootstrap';
 import { useProjectObjectsQuery } from '../../data/objects/useProjectObjectsQuery';
@@ -59,8 +59,11 @@ const UnifiedWorkspace: React.FC = () => {
   const { projectId, subPage: urlSubPage } = useParams<{ projectId: string; subPage?: string }>();
   const { currentSubPage, navigateToSubPage } = useWorkspaceSubPage(projectId, urlSubPage);
 
-  const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading, setCurrentProject } = useProjectStore();
-  const { fetchAgents } = useAgentStore();
+  const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const projectsQuery = useProjectsQuery();
+  const projectsLoading = projectsQuery.isLoading;
+  const currentProject = useCurrentProject();
+  useEnsureAgentSelection(projectId);
   const fetchTimeline = useTimelineStore((state) => state.fetchTimeline);
   const timelineChangeRevision = useTimelineStore((state) => state.changeRevision);
   const timelineLoadedProjectId = useTimelineStore((state) => state.loadedProjectId);
@@ -215,13 +218,6 @@ const UnifiedWorkspace: React.FC = () => {
     };
   }, [projectId]);
 
-  // Fetch projects if not loaded
-  useEffect(() => {
-    if (projectId && projects.length === 0) {
-      fetchProjects();
-    }
-  }, [projectId, projects.length, fetchProjects]);
-
   useEffect(() => {
     if (!projectId) return;
     if (timelineLoadedProjectId === projectId && timelineLoadedLanguage === currentDisplayLanguage) return;
@@ -250,18 +246,6 @@ const UnifiedWorkspace: React.FC = () => {
       selectChapter(projectId, firstChapter.id);
     }
   }, [projectId, currentSubPage, isOutlineLoading, projectObjects, getSelectedChapterId, selectChapter]);
-
-  // Fetch agents when projectId changes
-  useEffect(() => {
-    if (!projectId) return;
-
-    fetchAgents(projectId).catch(error => {
-      console.error('Failed to fetch agents:', error);
-      showAlert({ title: 'Data Error', message: 'Failed to load agents. Please try again.' });
-    });
-  }, [projectId, fetchAgents]);
-
-  const currentProject = getCurrentProject();
 
   // Show loading state
   if (projectsLoading && !currentProject) {

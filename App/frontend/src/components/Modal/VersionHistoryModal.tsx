@@ -3,7 +3,7 @@ import { BaseModal } from '../BaseModal';
 import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useRestoreVersionMutation } from '../../data/objects/mutations/useRestoreVersionMutation';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useMainLanguage } from '../../data/settings';
 import type { ObjectType } from '../../types/unifiedObject';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
@@ -132,7 +132,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   }, [mode, selectedVersion, textVersionProps, textVersionContent, loadingTextVersions]);
 
   // Story mode helpers
-  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const mainLanguage = useMainLanguage();
   const currentObjectQuery = useObjectQuery(objectType ?? 'basic_info', mode === 'story' ? objectId : undefined, mainLanguage);
   const currentObject = mode === 'story' ? currentObjectQuery.data ?? null : null;
   const availableLangs = currentObject?.language_state?.available_languages ?? [];

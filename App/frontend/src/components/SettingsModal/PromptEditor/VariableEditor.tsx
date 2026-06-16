@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useVariableStore } from '../../../store/variableStore';
+import { useActivePresetId, useDeleteVariableMutation } from '../../../data/presets';
 import type { PromptVariable, VariableCreate, VariableDefinitionUpdate, VariableType } from '../../../types/variables';
 import { getVariableTypeLabel, isValidVariableName } from '../../../types/variables';
 import { Trash, Copy, Plus, Close } from '../../icons';
@@ -248,7 +248,8 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
 }) => {
   const { t } = useTranslation();
   const toast = useSettingsToast();
-  const { deleteVariable } = useVariableStore();
+  const activePresetId = useActivePresetId();
+  const deleteVariable = useDeleteVariableMutation(activePresetId);
   const [newOption, setNewOption] = useState('');
 
   useEffect(() => {
@@ -326,7 +327,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
     if (!confirmed) return;
 
     try {
-      await deleteVariable(draft.variableId);
+      await deleteVariable.mutateAsync(draft.variableId);
       onDeleted?.(draft.variableId);
     } catch (err) {
       await showAlert({

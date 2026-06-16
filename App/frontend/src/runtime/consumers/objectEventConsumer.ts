@@ -1,7 +1,7 @@
 import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useProjectStore } from '../../store/projectStore';
 import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { readSettingsFromCache } from '../../data/settings';
 import type { ObjectChangedEvent } from '../../api/sseClient';
 import { defaultRichTextFormatForType, isRichPreviewType } from '../../domain/objectFormat';
 import { writeObjectToCacheFromSSE, removeObjectFromCacheFromSSE } from '../../data/sse/sseObjectBridge';
@@ -139,7 +139,7 @@ export class ObjectEventConsumer {
     }
     if (upserts.length === 0) return;
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = readSettingsFromCache();
     const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
     const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
 

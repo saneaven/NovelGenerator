@@ -1,6 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { usePresetStore } from '../../store/presetStore';
+import {
+  usePresetsQuery,
+  useActivePresetId,
+  useSetActivePresetMutation,
+  useDeletePresetMutation,
+  useExportPresetMutation,
+} from '../../data/presets';
 import { CustomSelect } from '../ui/CustomSelect';
 import type { SelectOption, RenderOptionProps } from '../ui/CustomSelect';
 import { Plus, Copy, Edit, Trash, Check, Download, Upload } from '../icons';
@@ -25,17 +31,15 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
 }) => {
   const { t } = useTranslation();
   const toast = useSettingsToast();
-  const { presets, activePresetId, isLoading, setActivePreset, deletePreset, loadPresets, isInitialized, exportPreset } = usePresetStore();
+  const { data: presets = [], isLoading: isListLoading } = usePresetsQuery();
+  const activePresetId = useActivePresetId();
+  const setActivePreset = useSetActivePresetMutation();
+  const deletePreset = useDeletePresetMutation();
+  const exportPreset = useExportPresetMutation();
+  const isLoading = isListLoading || setActivePreset.isPending;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importData, setImportData] = useState<PresetExportData | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
-
-  // Load presets on mount
-  useEffect(() => {
-    if (!isInitialized) {
-      loadPresets();
-    }
-  }, [isInitialized, loadPresets]);
 
   const handleSelectPreset = async (presetId: string) => {
     if (presetId !== activePresetId) {
@@ -43,7 +47,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
         const ok = await beforeSelectPreset(presetId);
         if (!ok) return;
       }
-      await setActivePreset(presetId);
+      await setActivePreset.mutateAsync(presetId);
     }
   };
 
@@ -57,7 +61,9 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
       confirmLabel: 'Delete',
     });
     if (confirmed) {
-      deletePreset(presetId);
+      deletePreset.mutate(presetId, {
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete preset'),
+      });
     }
   };
 
@@ -74,7 +80,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   const handleExportClick = async (e: React.MouseEvent, presetId: string) => {
     e.stopPropagation();
     try {
-      const data = await exportPreset(presetId);
+      const data = await exportPreset.mutateAsync(presetId);
       const preset = presets.find(p => p.id === presetId);
       const filename = `${preset?.name.replace(/[^a-z0-9]/gi, '_') || 'preset'}.nbprompt`;
 

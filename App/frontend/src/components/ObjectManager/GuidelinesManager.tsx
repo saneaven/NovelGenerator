@@ -10,7 +10,7 @@ import { useParams } from 'react-router-dom';
 import './GuidelinesManager.css';
 import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
 import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { alert as showAlert } from '../../store/dialogStore';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';

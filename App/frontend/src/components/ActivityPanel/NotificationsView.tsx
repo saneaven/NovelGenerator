@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { notificationService } from '../../api/notificationService';
 import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
-import { useNotificationStore } from '../../store/notificationStore';
+import { useNotificationUiStore } from '../../store/notificationUiStore';
+import {
+  useDeleteNotificationMutation,
+  useNotificationsMap,
+  useSortedNotifications,
+} from '../../data/notifications';
 import { useFunctionCallUIStore } from '../../toolCall/ui';
 import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
@@ -32,25 +36,10 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
   const stackLift = 40;
   const maxBlur = 6;
 
-  // Subscribe to raw state, derive sorted list with useMemo
-  const notificationsMap = useNotificationStore((state) => state.notifications);
-  const removeFromServer = useNotificationStore((state) => state.removeFromServer);
-  const openDetail = useNotificationStore((state) => state.openDetail);
-
-  // Derive sorted notifications from raw state
-  const notifications = useMemo(
-    () =>
-      Object.values(notificationsMap)
-        .filter((n): n is NonNullable<typeof n> => n !== undefined)
-        .sort((a, b) => {
-          if (a.important !== b.important) return Number(b.important) - Number(a.important);
-          if (a.isRead !== b.isRead) return Number(a.isRead) - Number(b.isRead);
-          if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
-          if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
-          return b.id.localeCompare(a.id);
-        }),
-    [notificationsMap]
-  );
+  const notificationsMap = useNotificationsMap();
+  const notifications = useSortedNotifications();
+  const openDetail = useNotificationUiStore((state) => state.openDetail);
+  const deleteNotification = useDeleteNotificationMutation();
 
   // Reverse order for mobile (bottom-to-top stacking)
   const orderedNotifications = useMemo(() => {
@@ -61,15 +50,9 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
 
   const handleDismiss = useCallback(
     (id: string) => {
-      void notificationService.deleteOne(id)
-        .then(() => {
-          removeFromServer(id);
-        })
-        .catch((error) => {
-          console.warn('Failed to delete notification', { id, error });
-        });
+      deleteNotification.mutate(id);
     },
-    [removeFromServer]
+    [deleteNotification]
   );
 
   const handleClick = useCallback(

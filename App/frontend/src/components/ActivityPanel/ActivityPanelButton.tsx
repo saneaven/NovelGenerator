@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { notificationService } from '../../api/notificationService';
-import { useNotificationStore } from '../../store/notificationStore';
+import {
+  useHasRunningNotifications,
+  useHasUnreadNotifications,
+  useMarkAllNotificationsReadMutation,
+} from '../../data/notifications';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import ActivityPanelContainer, { type ActivityView } from './ActivityPanelContainer';
 import NotificationStatusToast from './NotificationStatusToast';
-import { isNotificationActive } from '../Notification/notificationPresentation';
 import './ActivityPanel.css';
 import '../Notification/Notification.css';
 
@@ -57,24 +59,9 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties | null>(null);
 
   // Subscribe to notification state for indicators
-  const notificationsMap = useNotificationStore((state) => state.notifications);
-  const markAllReadLocal = useNotificationStore((state) => state.markAllReadLocal);
-
-  const hasUnread = useMemo(
-    () =>
-      Object.values(notificationsMap).some(
-        (n) => n !== undefined && !n.isRead
-      ),
-    [notificationsMap]
-  );
-
-  const hasRunning = useMemo(
-    () =>
-      Object.values(notificationsMap).some(
-        (n) => n !== undefined && isNotificationActive(n)
-      ),
-    [notificationsMap]
-  );
+  const hasUnread = useHasUnreadNotifications();
+  const hasRunning = useHasRunningNotifications();
+  const markAllRead = useMarkAllNotificationsReadMutation();
 
   const computePanelStyle = useCallback((): React.CSSProperties | null => {
     if (typeof window === 'undefined' || typeof document === 'undefined' || !buttonRef.current) {
@@ -152,13 +139,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   const handleToggle = useCallback(() => {
     if (!isOpen) {
       // Opening the panel - mark all as read
-      markAllReadLocal();
-      void notificationService.markRead({
-        mark_all: true,
-        notification_ids: [],
-      }).catch((error) => {
-        console.warn('Failed to mark notifications as read', { error });
-      });
+      markAllRead.mutate();
       useNotificationToastStore.getState().setActivityPanelOpen(true);
       setPanelStyle(computePanelStyle() ?? { visibility: 'hidden' });
       setIsOpen(true);
@@ -166,7 +147,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     } else {
       handleClose();
     }
-  }, [isOpen, markAllReadLocal, handleClose, computePanelStyle]);
+  }, [isOpen, markAllRead, handleClose, computePanelStyle]);
 
   const handleViewChange = useCallback((view: ActivityView) => {
     setActiveView(view);

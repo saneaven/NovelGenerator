@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
-import { useSettings } from '../../../store/settingsStore';
+import { useSettings } from '../../../data/settings';
 import { alert as showAlert } from '../../../store/dialogStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';

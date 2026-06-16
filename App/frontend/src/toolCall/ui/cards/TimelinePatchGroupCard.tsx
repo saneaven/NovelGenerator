@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { getTrackColors } from '../../../pages/timeline/timelineColors';
 import type { ObjectOperationVM } from '../vmTypes';
 import { PatchGroupCard } from './PatchGroupCard';
@@ -43,7 +43,7 @@ function eventMetaChanges(args: Record<string, unknown>, lookup: TimelineLookup,
 
 /** PatchGroupCard wrapper that injects timeline track color + metadata-change chips. */
 export const TimelinePatchGroupCard: React.FC<TimelinePatchGroupCardProps> = ({ objectType, ...props }) => {
-  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const language = useMainLanguage();
   const lookup = useTimelineLookup(props.projectId);
 
   const { accentColor, metaChanges } = useMemo(() => {

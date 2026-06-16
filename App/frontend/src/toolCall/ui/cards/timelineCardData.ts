@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTimelineStore } from '../../../store/timelineStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useMainLanguage } from '../../../data/settings';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { defaultCalendar, formatDate } from '../../../utils/timelineCalendar';
 import { buildTimelineFromObjects } from '../../../utils/timelineView';
@@ -53,7 +53,7 @@ function buildLookup(timeline: FullTimeline | null): TimelineLookup {
 
 /** Resolve a lookup of existing timeline tracks/events for the given project. */
 export function useTimelineLookup(projectId: string): TimelineLookup {
-  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const language = useMainLanguage();
   const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language);
   const events = useObjectCollectionQuery(projectId, 'timeline_event', language);
   const timelineConfig = useTimelineStore((state) => state.configByProject[projectId] ?? null);

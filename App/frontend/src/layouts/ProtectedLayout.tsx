@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
-import { useSettings, useSettingsStore } from '../store/settingsStore';
-import { useNotificationStore } from '../store/notificationStore';
-import { notificationService } from '../api/notificationService';
+import { useSettings, settingsQueryOptions } from '../data/settings';
+import { queryClient } from '../data/queryClient';
 import { useTheme } from '../hooks/useTheme';
 import { Loading } from '../components/common/Loading';
 import { NotificationModals } from '../components/Notification';
@@ -16,7 +16,6 @@ import '../App.css';
 function ProtectedAppShell() {
   const settings = useSettings();
   const { i18n } = useTranslation();
-  const hydrateNotifications = useNotificationStore((state) => state.hydrate);
 
   // Initialize theme system (depends on loaded settings)
   useTheme();
@@ -30,29 +29,14 @@ function ProtectedAppShell() {
   }, [settings.uiLanguage, i18n]);
 
   useEffect(() => {
-    let cancelled = false;
-
     void startUserRuntime().catch((error) => {
       console.warn('Failed to start user runtime stream', { error });
     });
 
-    void notificationService.list({
-      limit: 50,
-      offset: 0,
-      includeRead: true,
-    }).then((response) => {
-      if (cancelled) return;
-      hydrateNotifications(response.items);
-    }).catch((error) => {
-      if (cancelled) return;
-      console.warn('Failed to hydrate notifications', { error });
-    });
-
     return () => {
-      cancelled = true;
       stopUserRuntime();
     };
-  }, [hydrateNotifications]);
+  }, []);
 
   return (
     <div className="app">
@@ -92,10 +76,6 @@ export default function ProtectedLayout() {
   const location = useLocation();
 
   const { isAuthenticated, checkAuth } = useAuthStore();
-  const loadSettings = useSettingsStore((state) => state.loadFromServer);
-  const clearSettings = useSettingsStore((state) => state.clearSettings);
-  const settingsStatus = useSettingsStore((state) => state.status);
-  const settingsError = useSettingsStore((state) => state.error);
 
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -113,20 +93,20 @@ export default function ProtectedLayout() {
     };
   }, [checkAuth]);
 
+  // Settings load once per authenticated session (staleTime: Infinity); the
+  // query is gated on auth so it never fires for logged-out users.
+  const settingsQuery = useQuery({
+    ...settingsQueryOptions,
+    enabled: authChecked && isAuthenticated,
+  });
+
+  // Drop ALL cached server data when the user is not authenticated (covers
+  // token-expiry deauth; logout clears the cache directly).
   useEffect(() => {
-    if (!authChecked) return;
-
-    if (!isAuthenticated) {
-      clearSettings();
-      return;
+    if (authChecked && !isAuthenticated) {
+      queryClient.clear();
     }
-
-    if (settingsStatus === 'idle') {
-      loadSettings().catch(() => {
-        // Fail-closed: store will be in `error` state; UI renders fatal screen.
-      });
-    }
-  }, [authChecked, isAuthenticated, settingsStatus, loadSettings, clearSettings]);
+  }, [authChecked, isAuthenticated]);
 
   if (!authChecked) {
     return <Loading fullPage text="Checking authentication..." />;
@@ -136,16 +116,16 @@ export default function ProtectedLayout() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (settingsStatus === 'error') {
+  if (settingsQuery.isError) {
     return (
       <FatalSettingsError
-        message={settingsError ?? 'Unknown error'}
+        message={settingsQuery.error instanceof Error ? settingsQuery.error.message : 'Unknown error'}
         onReload={() => window.location.reload()}
       />
     );
   }
 
-  if (settingsStatus !== 'ready') {
+  if (!settingsQuery.isSuccess) {
     return <Loading fullPage text="Loading settings..." />;
   }
 

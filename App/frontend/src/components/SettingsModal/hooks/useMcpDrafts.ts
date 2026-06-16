@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMcpStore } from '../../../store/mcpStore';
+import {
+  useActivePresetId,
+  useMcpServersQuery,
+  useCreateMcpServerMutation,
+  useUpdateMcpServerMutation,
+} from '../../../data/presets';
 import {
   buildMcpCreatePayload,
   buildMcpUpdatePayload,
@@ -10,6 +15,7 @@ import {
 import { makeMcpDraftKey, type DirtyItem, type SaveFailure } from '../PromptEditor/draftTypes';
 import { toErrorMessage } from '../PromptEditor/draftUtils';
 import { generateTempId } from '../../../utils/tempId';
+import type { McpServerResponse } from '../../../types/mcp';
 
 export interface UseMcpDraftsReturn {
   mcpDrafts: Record<string, McpServerDraft>;
@@ -18,7 +24,7 @@ export interface UseMcpDraftsReturn {
   setSelectedMcpServerId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedMcpKey: string | null;
   currentMcpDraft: McpServerDraft | null;
-  selectedMcpSnapshot: ReturnType<typeof useMcpStore.getState>['servers'][number]['snapshot'] | null;
+  selectedMcpSnapshot: McpServerResponse['snapshot'] | null;
   mcpStoreError: string | null;
   handleCreateMcpServer: () => void;
   onDraftChange: (draft: McpServerDraft) => void;
@@ -32,10 +38,13 @@ export interface UseMcpDraftsReturn {
 }
 
 export function useMcpDrafts(): UseMcpDraftsReturn {
-  const mcpServers = useMcpStore((s) => s.servers);
-  const createServer = useMcpStore((s) => s.createServer);
-  const updateServer = useMcpStore((s) => s.updateServer);
-  const mcpStoreError = useMcpStore((s) => s.error);
+  const activePresetId = useActivePresetId();
+  const { data: mcpServers = [], error: mcpQueryError } = useMcpServersQuery(activePresetId);
+  const createServerMutation = useCreateMcpServerMutation(activePresetId ?? '');
+  const updateServerMutation = useUpdateMcpServerMutation(activePresetId ?? '');
+  const createServer = createServerMutation.mutateAsync;
+  const updateServer = updateServerMutation.mutateAsync;
+  const mcpStoreError = mcpQueryError instanceof Error ? mcpQueryError.message : null;
 
   const [mcpDrafts, setMcpDrafts] = useState<Record<string, McpServerDraft>>({});
   const [newMcpDraft, setNewMcpDraft] = useState<McpServerDraft | null>(null);
@@ -154,11 +163,11 @@ export function useMcpDrafts(): UseMcpDraftsReturn {
             throw new Error('No active preset selected');
           }
           if (d.isNew) {
-            const created = await createServer(activePresetId, buildMcpCreatePayload(d));
+            const created = await createServer(buildMcpCreatePayload(d));
             setNewMcpDraft(null);
             setSelectedMcpServerId(created.id);
           } else {
-            const updated = await updateServer(activePresetId, d.serverId!, buildMcpUpdatePayload(d));
+            const updated = await updateServer({ serverId: d.serverId!, data: buildMcpUpdatePayload(d) });
             setMcpDrafts((prev) => ({
               ...prev,
               [d.draftKey]: hydrateMcpDraft(updated, d.draftKey),

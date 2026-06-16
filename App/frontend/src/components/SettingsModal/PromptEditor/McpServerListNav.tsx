@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { usePresetStore } from '../../../store/presetStore';
-import { useMcpStore } from '../../../store/mcpStore';
+import React, { useMemo } from 'react';
+import { useActivePresetId, useMcpServersQuery } from '../../../data/presets';
 import { Globe, Plus } from '../../icons';
 import { TextButton } from '../../TextButton';
 import './McpServerListNav.css';
@@ -23,17 +21,8 @@ const McpServerListNav: React.FC<McpServerListNavProps> = ({
   isNewDraftSelected,
   onSelectNewDraft,
 }) => {
-  const activePresetId = usePresetStore((state) => state.activePresetId);
-  const { servers, ensureLoaded, isLoading } = useMcpStore(useShallow((state) => ({
-    servers: state.servers,
-    ensureLoaded: state.ensureLoaded,
-    isLoading: state.isLoading,
-  })));
-
-  useEffect(() => {
-    if (!activePresetId) return;
-    void ensureLoaded(activePresetId).catch(() => {});
-  }, [activePresetId, ensureLoaded]);
+  const activePresetId = useActivePresetId();
+  const { data: servers = [], isLoading } = useMcpServersQuery(activePresetId);
 
   const sortedServers = useMemo(() => {
     return [...servers].sort((a, b) => {

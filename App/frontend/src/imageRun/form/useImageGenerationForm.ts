@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { ImageModelInfo } from '../../api/assetService';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { useProviderSpecs } from '../../data/providers/useProviderSpecsQuery';
 import { useImageModelCatalog } from '../useImageModelCatalog';
 import { normalizeImageProviderSettingsDraft } from './providerSettings';
 import { reconcileSelectionWithModel, resolveSupportedImageSizes } from './selection';
@@ -16,12 +16,7 @@ interface UseImageGenerationFormOptions {
 }
 
 export function useImageGenerationForm(options: UseImageGenerationFormOptions) {
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
-  const providerSpecs = useProviderSpecStore((state) => state.specs);
-
-  useEffect(() => {
-    void loadProviderSpecs();
-  }, [loadProviderSpecs]);
+  const providerSpecs = useProviderSpecs();
 
   const providerSpec = providerSpecs[options.provider];
   const { models, loading, error, selectedModel } = useImageModelCatalog(options.provider, options.model);

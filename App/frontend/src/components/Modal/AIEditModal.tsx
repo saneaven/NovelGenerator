@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
 import { readProjectObjectsFromCache } from '../../data/objects/objectCache';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import type { ObjectType, OutlineObject, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import type { ObjectEditInput } from '../../llmTaskJourney/journeySpecs';

@@ -1,4 +1,4 @@
-import { getProviderSpec } from '../providerEngine/store';
+import { getProviderSpec } from '../data/providers/providerSelectors';
 import { cloneValue, normalizeByPublicSpec, resolveEffectiveLlmTaskSpec } from '../providerEngine/utils';
 
 export type ProviderType = string;

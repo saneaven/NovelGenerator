@@ -20,7 +20,7 @@ import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollect
 import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
 import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
 import { useDeleteObjectMutation } from '../../../data/objects/mutations/useDeleteObjectMutation';
-import { useSettings } from '../../../store/settingsStore';
+import { useSettings } from '../../../data/settings';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import OutlinePanelSkeleton from './OutlinePanelSkeleton';
 import AIEditModal from '../../../components/Modal/AIEditModal';

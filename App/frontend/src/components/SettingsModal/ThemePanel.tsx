@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ThemeMode } from '../../store/settingsStore';
+import type { ThemeMode } from '../../domain/settings';
 import { Sun, Moon, Computer, Lightbulb, Check } from '../icons';
 import './ThemePanel.css';
 

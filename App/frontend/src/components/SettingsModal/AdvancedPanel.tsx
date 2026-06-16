@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
-import { TOOL_CALL_AUTO_APPROVE_CATEGORIES } from '../../store/settingsStore';
+import type { RetryConfig, ToolCallAutoApproveConfig } from '../../domain/settings';
+import { TOOL_CALL_AUTO_APPROVE_CATEGORIES } from '../../domain/settings';
 
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';

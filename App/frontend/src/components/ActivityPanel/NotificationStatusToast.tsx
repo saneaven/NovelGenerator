@@ -2,7 +2,8 @@ import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
-import { useNotificationStore } from '../../store/notificationStore';
+import { useNotificationUiStore } from '../../store/notificationUiStore';
+import { readNotificationFromCache } from '../../data/notifications';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
 import { useFunctionCallUIStore } from '../../toolCall/ui';
 import { getNotificationToneFor } from '../Notification/notificationPresentation';
@@ -16,7 +17,7 @@ const NotificationStatusToast: React.FC = () => {
   const handleClick = useCallback(() => {
     if (!toast) return;
     clear();
-    const notification = useNotificationStore.getState().notifications[toast.id];
+    const notification = readNotificationFromCache(toast.id);
     if (!notification) return;
 
     if (notification.target.kind === 'agent' && notification.target.project_id) {
@@ -43,7 +44,7 @@ const NotificationStatusToast: React.FC = () => {
       navigate(`/project/${notification.target.project_id}`);
       return;
     }
-    useNotificationStore.getState().openDetail(toast.id);
+    useNotificationUiStore.getState().openDetail(toast.id);
   }, [toast, clear, navigate]);
 
   if (!toast) return null;

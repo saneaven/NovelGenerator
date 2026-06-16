@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
-import { useNotificationStore, type NotificationEntry } from '../../store/notificationStore';
+import React, { useEffect, useRef } from 'react';
+import { useNotificationsQuery } from '../../data/notifications';
 import { useNotificationToastStore } from '../../store/notificationToastStore';
+import type { NotificationEntry } from '../../domain/notifications';
 
 const DEFAULT_TOAST_DURATION_MS = 2500;
 
@@ -16,32 +17,34 @@ function toToastData(entry: NotificationEntry) {
 }
 
 export const NotificationToastManager: React.FC = () => {
+  const { data, isSuccess } = useNotificationsQuery();
+  const prevMapRef = useRef<Map<string, NotificationEntry>>(new Map());
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    let initialized = Object.keys(useNotificationStore.getState().notifications).length > 0;
-    const unsubscribe = useNotificationStore.subscribe((state, prevState) => {
-      if (!initialized) {
-        initialized = true;
-        return;
-      }
+    if (!isSuccess) return;
 
-      const nextMap = state.notifications;
-      const prevMap = prevState.notifications;
+    const entries = Object.values(data);
 
-      if (nextMap === prevMap) return;
-      const changed: NotificationEntry[] = [];
+    // Skip toasts on the first successful load: seed the baseline only.
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      prevMapRef.current = new Map(entries.map((entry) => [entry.id, entry]));
+      return;
+    }
 
-      for (const [id, nextEntry] of Object.entries(nextMap)) {
-        if (!nextEntry) continue;
+    const prevMap = prevMapRef.current;
+    const changed: NotificationEntry[] = [];
 
-        const prevEntry = prevMap[id];
-        const isNew = prevEntry === undefined;
-        const statusChanged = prevEntry !== undefined && prevEntry.status !== nextEntry.status;
+    for (const entry of entries) {
+      const prevEntry = prevMap.get(entry.id);
+      const isNew = prevEntry === undefined;
+      const statusChanged = prevEntry !== undefined && prevEntry.status !== entry.status;
+      if (!isNew && !statusChanged) continue;
+      changed.push(entry);
+    }
 
-        if (!isNew && !statusChanged) continue;
-        changed.push(nextEntry);
-      }
-
-      if (changed.length === 0) return;
+    if (changed.length > 0) {
       changed
         .sort((a, b) => {
           if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt;
@@ -52,10 +55,10 @@ export const NotificationToastManager: React.FC = () => {
             .getState()
             .show(toToastData(entry), DEFAULT_TOAST_DURATION_MS);
         });
-    });
+    }
 
-    return unsubscribe;
-  }, []);
+    prevMapRef.current = new Map(entries.map((entry) => [entry.id, entry]));
+  }, [data, isSuccess]);
 
   return null;
 };

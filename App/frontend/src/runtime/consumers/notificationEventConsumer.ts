@@ -1,22 +1,26 @@
 import type { NotificationSSEEvent } from '../../api/sseClient';
-import { useNotificationStore } from '../../store/notificationStore';
+import {
+  removeManyNotificationsFromSSE,
+  removeNotificationFromSSE,
+  upsertNotificationFromSSE,
+} from '../../data/sse/sseNotificationBridge';
 
 export class NotificationEventConsumer {
   constructor() {}
 
   consume(event: NotificationSSEEvent): void {
     if (event.event === 'notification:upsert') {
-      useNotificationStore.getState().upsertFromServer(event.data);
+      upsertNotificationFromSSE(event.data);
       return;
     }
 
     if (event.event === 'notification:delete') {
-      useNotificationStore.getState().removeFromServer(event.data.id);
+      removeNotificationFromSSE(event.data.id);
       return;
     }
 
     if (event.event === 'notification:bulk_delete') {
-      useNotificationStore.getState().removeManyFromServer(event.data.ids);
+      removeManyNotificationsFromSSE(event.data.ids);
     }
   }
 

@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
-import { useSettings, useSettingsStore } from '../../store/settingsStore';
+import { useSettings, useSaveSettingsMutation, setThemeInSettingsCache } from '../../data/settings';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { ProviderCredentials, Settings, AITaskType, SearchMemoryTarget } from '../../store/settingsStore';
+import type { ProviderCredentials, Settings, AITaskType, SearchMemoryTarget } from '../../data/settings';
 import { buildLockedSectionReset } from '../../store/settingsUpdatePayload';
 import { hasTaskOverride, resolveAllTaskConfigs, TASK_CONFIG_TASK_TYPES } from '../../store/taskConfigSettings';
 import { resolveMemorySettings, resolveSearchSettings } from '../../store/searchMemorySettings';
@@ -26,7 +26,8 @@ import { TextButton } from '../TextButton';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import apiClient from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { queryClient } from '../../data/queryClient';
+import { useProviderSpecs, providerSpecsQueryOptions } from '../../data/providers/useProviderSpecsQuery';
 import { buildCredentialDrafts, normalizeCredentialDraft, validateCredentialDraftJson } from '../../providerEngine/utils';
 import './SettingsModal.css';
 import './_shared-components.css';
@@ -96,12 +97,10 @@ function calculateUnsavedCount(params: {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const saveSettingsToServer = useSettingsStore((s) => s.saveToServer);
-  const setStoreTheme = useSettingsStore((s) => s.setTheme);
+  const saveSettingsMutation = useSaveSettingsMutation();
   const settings = useSettings();
   const user = useAuthStore((state) => state.user);
-  const providerSpecs = useProviderSpecStore((state) => state.specs);
-  const loadProviderSpecs = useProviderSpecStore((state) => state.load);
+  const providerSpecs = useProviderSpecs();
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>({});
   const [storedProviders, setStoredProviders] = useState<string[]>([]);
@@ -154,9 +153,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       promptUnsavedCountRef.current = 0;
       setPromptUnsavedCount(0);
       setHasMountedPromptsPanel(mainTab === 'prompts' && !settings.demoModeEnabled);
-      void loadProviderSpecs()
-        .then(() => {
-          const emptyDraft = buildEmptyCredentialDraft(useProviderSpecStore.getState().specs);
+      void queryClient
+        .fetchQuery(providerSpecsQueryOptions)
+        .then((specs) => {
+          const emptyDraft = buildEmptyCredentialDraft(specs);
           setLocalCredentials(emptyDraft);
           setCredentialsSnapshot(JSON.stringify(emptyDraft));
         })
@@ -173,7 +173,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       wasOpenRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, loadProviderSpecs, settings]);
+  }, [isOpen, settings]);
 
   const handlePromptUnsavedCountChange = useCallback((count: number) => {
     promptUnsavedCountRef.current = count;
@@ -440,7 +440,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         try {
           let savedSettings = localSettings;
           if (settingsDirty) {
-            savedSettings = await saveSettingsToServer(localSettings);
+            savedSettings = await saveSettingsMutation.mutateAsync(localSettings);
             setLocalSettings(savedSettings);
             setSettingsSnapshot(JSON.stringify(savedSettings));
           }
@@ -946,8 +946,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onThemeChange={(theme) => {
               // Update local settings for consistency
               setLocalSettings({ ...localSettings, theme });
-              // Apply theme immediately to global store
-              setStoreTheme(theme);
+              // Apply theme immediately to the settings cache (live preview)
+              setThemeInSettingsCache(theme);
             }}
           />
         )}

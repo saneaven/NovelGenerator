@@ -21,7 +21,7 @@ import {
 import { journeyService, type JourneyDTO } from '../../../api/journeyService';
 import { vectorStorageService, type VectorStorageStatusResponse } from '../../../api/vectorStorageService';
 import { confirm, alert as showAlert } from '../../../store/dialogStore';
-import { useProjectStore } from '../../../store/projectStore';
+import { useProject, useUpdateProjectMutation } from '../../../data/projects';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
 import { canCancelThreadStatus, canResumeThreadStatus } from '../../../types/thread';
 import './WorkspaceConfigPanel.css';
@@ -85,8 +85,8 @@ function formatBytes(bytes: number): string {
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
 
-  const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const updateProject = useProjectStore((s) => s.updateProject);
+  const project = useProject(projectId);
+  const updateProjectMutation = useUpdateProjectMutation();
   const [projectName, setProjectName] = useState(project?.name ?? '');
   const [projectDescription, setProjectDescription] = useState(project?.description ?? '');
   const [isSavingInfo, setIsSavingInfo] = useState(false);
@@ -103,9 +103,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     setIsSavingInfo(true);
     setSavedInfo(false);
     try {
-      await updateProject(projectId, {
-        name: projectName.trim(),
-        description: projectDescription.trim() || undefined,
+      await updateProjectMutation.mutateAsync({
+        id: projectId,
+        updates: {
+          name: projectName.trim(),
+          description: projectDescription.trim() || undefined,
+        },
       });
       setSavedInfo(true);
       setTimeout(() => setSavedInfo(false), 2000);
@@ -115,7 +118,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     } finally {
       setIsSavingInfo(false);
     }
-  }, [projectId, projectName, projectDescription, updateProject]);
+  }, [projectId, projectName, projectDescription, updateProjectMutation]);
 
   const projectInfoDirty = projectName !== (project?.name ?? '') || projectDescription !== (project?.description ?? '');
 

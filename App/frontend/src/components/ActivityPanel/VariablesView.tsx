@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useVariableStore } from '../../store/variableStore';
+import { useActivePresetId, useVariablesQuery, useUpdateVariableValueMutation } from '../../data/presets';
 import type { PromptVariable } from '../../types/variables';
 import { CustomSelect } from '../ui/CustomSelect';
 
@@ -147,19 +147,16 @@ interface VariablesViewProps {
 }
 
 const VariablesView: React.FC<VariablesViewProps> = ({ isActive = true }) => {
-  const { variables, isLoading, loadVariables, updateValue, isInitialized } = useVariableStore();
-
-  // Load variables when becoming active (lazy loading)
-  useEffect(() => {
-    if (isActive && !isInitialized) {
-      loadVariables();
-    }
-  }, [isActive, isInitialized, loadVariables]);
+  const activePresetId = useActivePresetId();
+  // Lazy load: the query stays disabled until the view is active.
+  const effectivePresetId = isActive ? activePresetId : null;
+  const { data: variables = [], isLoading } = useVariablesQuery(effectivePresetId);
+  const updateValue = useUpdateVariableValueMutation(activePresetId);
 
   const handleValueChange = useCallback(
     async (id: string, value: string | number | boolean | null) => {
       try {
-        await updateValue(id, value);
+        await updateValue.mutateAsync({ id, value });
       } catch (error) {
         console.error('Failed to update variable:', error);
       }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../../BaseModal';
 import { TextButton } from '../../TextButton';
-import { useSubAgentStore } from '../../../store/subAgentStore';
+import { useActivePresetId, useCreateSubAgentMutation } from '../../../data/presets';
 import type { SubAgentCreate, SubAgentAllowedInvocation } from '../../../types/subAgents';
 import { SUB_AGENT_CALL_PREFIX, isValidAgentName } from '../../../subAgent/tools/SubAgentCallTools';
 
@@ -16,7 +16,8 @@ const DEFAULT_ALLOWED_MODES: SubAgentAllowedInvocation[] = ['planMode', 'agentMo
 
 const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClose, onCreated }) => {
   const { t } = useTranslation();
-  const { createSubAgent } = useSubAgentStore();
+  const activePresetId = useActivePresetId();
+  const createSubAgent = useCreateSubAgentMutation(activePresetId);
 
   const [agentName, setAgentName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -85,7 +86,7 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
     };
 
     try {
-      const created = await createSubAgent(payload);
+      const created = await createSubAgent.mutateAsync(payload);
       onCreated(created.id);
       reset();
       onClose();

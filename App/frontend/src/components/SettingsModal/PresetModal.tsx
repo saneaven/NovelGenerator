@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { TextButton } from '../TextButton';
-import { usePresetStore } from '../../store/presetStore';
+import {
+  useCreatePresetMutation,
+  useDuplicatePresetMutation,
+  useUpdatePresetMutation,
+  useSetActivePresetMutation,
+} from '../../data/presets';
 import type { PresetListItem } from '../../types/presets';
 
 type ModalMode = 'create' | 'duplicate' | 'edit';
@@ -21,7 +26,10 @@ const PresetModal: React.FC<PresetModalProps> = ({
   sourcePreset,
   beforeSwitchPreset,
 }) => {
-  const { createPreset, duplicatePreset, updatePreset, setActivePreset } = usePresetStore();
+  const createPreset = useCreatePresetMutation();
+  const duplicatePreset = useDuplicatePresetMutation();
+  const updatePreset = useUpdatePresetMutation();
+  const setActivePreset = useSetActivePresetMutation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [initializeWithDefaults, setInitializeWithDefaults] = useState(true);
@@ -57,28 +65,34 @@ const PresetModal: React.FC<PresetModalProps> = ({
 
     try {
       if (mode === 'create') {
-        const newPreset = await createPreset({
+        const newPreset = await createPreset.mutateAsync({
           name: name.trim(),
           description: description.trim() || undefined,
           initialize_with_defaults: initializeWithDefaults,
         });
         // Switch to the new preset
         if (!beforeSwitchPreset || (await beforeSwitchPreset(newPreset.id))) {
-          await setActivePreset(newPreset.id);
+          await setActivePreset.mutateAsync(newPreset.id);
         }
       } else if (mode === 'duplicate' && sourcePreset) {
-        const duplicatedPreset = await duplicatePreset(sourcePreset.id, {
-          new_name: name.trim(),
-          new_description: description.trim() || undefined,
+        const duplicatedPreset = await duplicatePreset.mutateAsync({
+          presetId: sourcePreset.id,
+          data: {
+            new_name: name.trim(),
+            new_description: description.trim() || undefined,
+          },
         });
         // Switch to the duplicated preset
         if (!beforeSwitchPreset || (await beforeSwitchPreset(duplicatedPreset.id))) {
-          await setActivePreset(duplicatedPreset.id);
+          await setActivePreset.mutateAsync(duplicatedPreset.id);
         }
       } else if (mode === 'edit' && sourcePreset) {
-        await updatePreset(sourcePreset.id, {
-          name: name.trim(),
-          description: description.trim() || undefined,
+        await updatePreset.mutateAsync({
+          presetId: sourcePreset.id,
+          data: {
+            name: name.trim(),
+            description: description.trim() || undefined,
+          },
         });
       }
       onClose();

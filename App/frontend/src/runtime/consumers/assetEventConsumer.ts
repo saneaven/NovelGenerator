@@ -1,6 +1,10 @@
 import type { AssetChangedChange, AssetChangedEvent } from '../../api/sseClient';
 import { useProjectStore } from '../../store/projectStore';
-import { useAssetStore } from '../../store/assetStore';
+import {
+  invalidateProjectAssetsList,
+  invalidateObjectAssetLinks,
+  invalidateSceneAssets,
+} from '../../data/assets';
 
 const FLUSH_DEBOUNCE_MS = 50;
 const SCENE_ALL_KEY = '__all__';
@@ -73,11 +77,11 @@ export class AssetEventConsumer {
     if (this.flushTimer !== null) return;
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
-      void this.flush();
+      this.flush();
     }, FLUSH_DEBOUNCE_MS);
   }
 
-  private async flush(): Promise<void> {
+  private flush(): void {
     if (this.disposed) return;
     const projectId = this.activeProjectId;
     if (!projectId) return;
@@ -90,26 +94,20 @@ export class AssetEventConsumer {
     this.pendingObjectAssetKeys.clear();
     this.pendingSceneKeys.clear();
 
-    const store = useAssetStore.getState();
-    const tasks: Promise<void>[] = [];
-
-    if (shouldRefreshProjectAssets && store.isProjectAssetsLoaded(projectId)) {
-      tasks.push(store.fetchAssets(projectId, true));
+    // Invalidate the affected query keys. TanStack only refetches *active*
+    // (mounted) queries and marks the rest stale, so the old "refresh only what's
+    // already loaded" guards are no longer needed.
+    if (shouldRefreshProjectAssets) {
+      invalidateProjectAssetsList(projectId);
     }
 
     for (const item of objectAssetKeys) {
-      if (!store.isObjectAssetLinksLoaded(projectId, item.objectType, item.objectId)) continue;
-      tasks.push(store.fetchObjectAssetLinks(projectId, item.objectType, item.objectId, true));
+      invalidateObjectAssetLinks(projectId, item.objectType, item.objectId);
     }
 
     for (const sceneKey of sceneKeys) {
       const manuscriptId = sceneKey === SCENE_ALL_KEY ? undefined : sceneKey;
-      if (!store.isSceneAssetsLoaded(projectId, manuscriptId)) continue;
-      tasks.push(store.fetchSceneAssets(projectId, manuscriptId, true));
-    }
-
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
+      invalidateSceneAssets(projectId, manuscriptId);
     }
   }
 }

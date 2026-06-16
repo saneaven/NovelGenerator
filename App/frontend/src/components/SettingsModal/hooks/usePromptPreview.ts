@@ -6,8 +6,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { renderTemplate } from '../../../templateEngine/engine';
 
 import { useProjectStore } from '../../../store/projectStore';
-import { useVariableStore } from '../../../store/variableStore';
-import { useResolvedTaskConfigs } from '../../../store/settingsStore';
+import { useActivePresetId, useVariables } from '../../../data/presets';
+import { useResolvedTaskConfigs } from '../../../data/settings';
 import { useTokenCount } from '../../../hooks/useTokenCount';
 import type { ConfigData } from '../../../templateEngine/schema';
 import type { TaskType } from '../../../types/scenarios';
@@ -69,7 +69,8 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
 
   // Store access
   const currentProjectId = useProjectStore(state => state.currentProjectId);
-  const userVariables = useVariableStore(state => state.variables);
+  const activePresetId = useActivePresetId();
+  const userVariables = useVariables(activePresetId);
 
   // Get task config for token counting
   const taskConfigs = useResolvedTaskConfigs();

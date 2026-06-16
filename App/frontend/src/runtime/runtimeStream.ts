@@ -1,10 +1,10 @@
 import { assetService } from '../api/assetService';
 import { connectUserStream, type RuntimeSSEEvent } from '../api/sseClient';
-import { notificationService } from '../api/notificationService';
-import { useImageRunStore } from '../imageRun';
-import { useNotificationStore } from '../store/notificationStore';
 import { useProjectStore } from '../store/projectStore';
-import { useAssetStore } from '../store/assetStore';
+import { queryClient } from '../data/queryClient';
+import { notificationsQueryOptions } from '../data/notifications';
+import { seedImageRunsInCache } from '../data/imageRuns';
+import { invalidateProjectAssetQueries } from '../data/assets';
 import { EventRouter } from './eventRouter';
 import {
   hydrateProjectRuntimeSummary,
@@ -128,23 +128,21 @@ class UserRuntimeConnection {
     const currentProjectId = useProjectStore.getState().currentProjectId;
 
     try {
-      const notificationResponse = await notificationService.list({
-        limit: 50,
-        offset: 0,
-        includeRead: true,
-      });
-      useNotificationStore.getState().hydrate(notificationResponse.items);
+      // Force a fresh notifications fetch into the query cache (staleTime: 0
+      // overrides the option's freshness) so reconnect surfaces missed items
+      // and the toast manager — which observes this query — fires for them.
+      await queryClient.fetchQuery({ ...notificationsQueryOptions, staleTime: 0 });
 
       if (!currentProjectId) {
         return;
       }
 
+      invalidateProjectAssetQueries(currentProjectId);
       const [runtimeRows, imageRuns] = await Promise.all([
         hydrateProjectRuntimeSummary(currentProjectId),
         assetService.listImageRuns(currentProjectId, 'active'),
-        useAssetStore.getState().refreshLoadedCaches(currentProjectId),
-      ]).then(([rows, runs]) => [rows, runs] as const);
-      useImageRunStore.getState().upsertRuns(imageRuns);
+      ]);
+      seedImageRunsInCache(imageRuns);
       await reconcilePreexistingLiveThreads(currentProjectId, runtimeRows);
     } catch (error) {
       console.warn('Failed to rehydrate runtime state after SSE reconnect', {

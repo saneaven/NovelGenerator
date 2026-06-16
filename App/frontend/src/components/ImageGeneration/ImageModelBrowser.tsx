@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { ImageModelInfo } from '../../api/assetService';
-import type { ImageProviderType } from '../../store/settingsStore';
+import type { ImageProviderType } from '../../domain/settings';
 import { TextButton } from '../TextButton';
 import { Check, Close } from '../icons';
 import { useTranslation } from 'react-i18next';

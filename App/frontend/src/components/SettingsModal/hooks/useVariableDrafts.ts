@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useVariableStore } from '../../../store/variableStore';
+import {
+  useActivePresetId,
+  useVariablesQuery,
+  useCreateVariableMutation,
+  useUpdateVariableDefinitionMutation,
+} from '../../../data/presets';
+import { readVariablesFromCache } from '../../../data/presets/presetSelectors';
 import {
   buildNewVariableDraft,
   buildVariableCreatePayload,
@@ -12,10 +18,12 @@ import { toErrorMessage } from '../PromptEditor/draftUtils';
 import { generateTempId } from '../../../utils/tempId';
 
 export function useVariableDrafts() {
-  const variables = useVariableStore((s) => s.variables);
-  const loadVariables = useVariableStore((s) => s.loadVariables);
-  const createVariable = useVariableStore((s) => s.createVariable);
-  const updateVariableDefinition = useVariableStore((s) => s.updateDefinition);
+  const activePresetId = useActivePresetId();
+  const { data: variables = [], refetch: refetchVariables } = useVariablesQuery(activePresetId);
+  const createVariableMutation = useCreateVariableMutation(activePresetId);
+  const updateVariableDefinitionMutation = useUpdateVariableDefinitionMutation(activePresetId);
+  const createVariable = createVariableMutation.mutateAsync;
+  const updateVariableDefinition = updateVariableDefinitionMutation.mutateAsync;
 
   const [variableDrafts, setVariableDrafts] = useState<Record<string, VariableDefinitionDraft>>({});
   const [newVariableDraft, setNewVariableDraft] = useState<VariableDefinitionDraft | null>(null);
@@ -40,8 +48,8 @@ export function useVariableDrafts() {
 
       let variable = variablesRef.current.find((v) => v.id === variableId);
       if (!variable) {
-        await loadVariables().catch(() => undefined);
-        variable = useVariableStore.getState().variables.find((v) => v.id === variableId);
+        await refetchVariables().catch(() => undefined);
+        variable = readVariablesFromCache().find((v) => v.id === variableId);
         if (!variable) return;
       }
 
@@ -50,7 +58,7 @@ export function useVariableDrafts() {
         [key]: hydrateVariableDraft(variable, key),
       }));
     },
-    [loadVariables]
+    [refetchVariables]
   );
 
   useEffect(() => {
@@ -161,7 +169,7 @@ export function useVariableDrafts() {
           setNewVariableDraft(null);
           setSelectedVariableId(created.id);
         } else {
-          await updateVariableDefinition(d.variableId!, buildVariableDefinitionUpdate(d));
+          await updateVariableDefinition({ id: d.variableId!, data: buildVariableDefinitionUpdate(d) });
           setVariableDrafts((prev) => {
             const key = makeVariableDraftKey(d.variableId!);
             const cur = prev[key];

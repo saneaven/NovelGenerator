@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { usePresetStore } from '../../../store/presetStore';
-import { useSubAgentStore } from '../../../store/subAgentStore';
+import { useActivePresetId, useSubAgentsQuery } from '../../../data/presets';
 import { Plus, SpeechBubble } from '../../icons';
 import { TextButton } from '../../TextButton';
 import './SubAgentListNav.css';
@@ -24,12 +23,8 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
   onSelectNewDraft,
 }) => {
   const { t } = useTranslation();
-  const activePresetId = usePresetStore((s) => s.activePresetId);
-  const { subAgents, isLoading, loadSubAgents } = useSubAgentStore();
-
-  useEffect(() => {
-    loadSubAgents();
-  }, [loadSubAgents, activePresetId]);
+  const activePresetId = useActivePresetId();
+  const { data: subAgents = [], isLoading } = useSubAgentsQuery(activePresetId);
 
   const sorted = useMemo(() => {
     return [...subAgents].sort((a, b) => a.display_name.localeCompare(b.display_name));

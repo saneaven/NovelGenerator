@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { NotificationSourceKind } from '../api/notificationService';
-import type { NotificationStatus } from './notificationStore';
+import type { NotificationStatus } from '../domain/notifications';
 
 export type NotificationStatusToast = {
   id: string;

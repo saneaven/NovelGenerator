@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ProviderCredentials } from '../../store/settingsStore';
+import type { ProviderCredentials } from '../../domain/settings';
 import { Edit } from '../icons';
 import TextButton from '../TextButton/TextButton';
-import { useProviderSpecStore } from '../../providerEngine/store';
+import { useProviderSpecs } from '../../data/providers/useProviderSpecsQuery';
 import {
   buildDraftValueFromFieldSpec,
   getVisibleSpecEntries,
@@ -38,7 +38,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
   onChange,
 }) => {
   const { t } = useTranslation();
-  const specs = useProviderSpecStore((state) => state.specs);
+  const specs = useProviderSpecs();
   const providers = useMemo(() => sortProviders(Object.values(specs)), [specs]);
   const storedSet = useMemo(() => new Set(storedProviders), [storedProviders]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

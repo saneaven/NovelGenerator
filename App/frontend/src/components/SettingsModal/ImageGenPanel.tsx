@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ImageGenConfig, ImageProviderType } from '../../store/settingsStore';
+import type { ImageGenConfig, ImageProviderType } from '../../domain/settings';
 import {
   applyAspectRatioChange,
   applyImageSizeChange,

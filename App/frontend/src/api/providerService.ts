@@ -4,7 +4,7 @@
  */
 
 import { apiClient, API_BASE_URL } from './client';
-import type { ProviderType, CustomKind } from '../store/settingsStore';
+import type { ProviderType, CustomKind } from '../domain/settings';
 import type { PublicProviderSpecResponse } from '../providerEngine/types';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;

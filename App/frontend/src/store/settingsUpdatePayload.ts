@@ -1,4 +1,4 @@
-import type { Settings, SettingsUpdatePayload } from './settingsStore';
+import type { Settings, SettingsUpdatePayload } from '../domain/settings';
 
 const LOCKED_SETTINGS_FIELDS = [
     'taskConfigSettings',

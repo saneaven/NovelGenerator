@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useAssetStore } from '../../store/assetStore';
+import {
+    useProjectAssetsQuery,
+    useObjectAssetLinksQuery,
+    useSceneAssetsQuery,
+    useUploadAssetMutation,
+    useUpdateAssetMutation,
+    useDeleteAssetMutation,
+    useSetMainAssetMutation,
+    invalidateProjectAssetsList,
+    invalidateObjectAssetLinks,
+    invalidateSceneAssets,
+} from '../../data/assets';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
@@ -13,7 +24,8 @@ import { VirtualizedImageGrid } from './VirtualizedImageGrid';
 import ToggleSwitch from '../common/ToggleSwitch';
 import type { DisplayAsset } from './ImageGridItem';
 import type { ImageGenerationRecipe } from '../../imageRun';
-import { ImageRunRuntime, generationRecipeFromImageRun, imageRunBindingFromSnapshot, recipeFromAsset, useImageRunStore } from '../../imageRun';
+import { ImageRunRuntime, generationRecipeFromImageRun, imageRunBindingFromSnapshot, recipeFromAsset } from '../../imageRun';
+import { useImageRunsMap, removeImageRunFromCache } from '../../data/imageRuns';
 import { confirm, alert as showAlert } from '../../store/dialogStore';
 import './ImageTabContent.css';
 
@@ -91,17 +103,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     initialGenerationRecipe,
 }) => {
     const { currentProjectId } = useProjectStore();
-    const imageRuns = useImageRunStore((s) => s.runsById);
-    const isLoading = useAssetStore((state) => state.isLoading);
-    const error = useAssetStore((state) => state.error);
-    const fetchAssets = useAssetStore((state) => state.fetchAssets);
-    const fetchObjectAssetLinks = useAssetStore((state) => state.fetchObjectAssetLinks);
-    const fetchSceneAssets = useAssetStore((state) => state.fetchSceneAssets);
-    const uploadAsset = useAssetStore((state) => state.uploadAsset);
-    const updateAsset = useAssetStore((state) => state.updateAsset);
-    const deleteAsset = useAssetStore((state) => state.deleteAsset);
-    const setMainAsset = useAssetStore((state) => state.setMainAsset);
-    const clearError = useAssetStore((state) => state.clearError);
+    const imageRuns = useImageRunsMap(currentProjectId);
+
+    const uploadMutation = useUploadAssetMutation();
+    const updateMutation = useUpdateAssetMutation();
+    const deleteMutation = useDeleteAssetMutation();
+    const setMainMutation = useSetMainAssetMutation();
 
     // Determine UI visibility based on mode
     const showImportButton = showImportButtonProp ?? (mode !== 'picker');
@@ -128,37 +135,68 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const moreDropdownRef = useRef<HTMLDivElement>(null);
     const gridScrollContainerRef = useRef<HTMLDivElement>(null);
     const currentSceneManuscriptId = showAllChapters ? undefined : manuscriptId;
-    const linkedAssets = useAssetStore((state) =>
-        currentProjectId && mode === 'object' && objectType && objectId
-            ? state.getObjectAssetLinks(currentProjectId, objectType, objectId)
-            : EMPTY_LINKED_ASSETS
+
+    // Each query is enabled only for the mode that consumes it (the old store
+    // read a per-mode slice and only fetched that slice in an effect).
+    const objectLinksQuery = useObjectAssetLinksQuery(
+        mode === 'object' ? (currentProjectId ?? undefined) : undefined,
+        mode === 'object' ? objectType : undefined,
+        mode === 'object' ? objectId : undefined,
     );
-    const projectAssets = useAssetStore((state) =>
-        currentProjectId
-            ? state.getProjectAssets(currentProjectId)
-            : EMPTY_PROJECT_ASSETS
+    const sceneAssetsQuery = useSceneAssetsQuery(
+        mode === 'scene' ? (currentProjectId ?? undefined) : undefined,
+        currentSceneManuscriptId ?? undefined,
     );
-    const sceneAssets = useAssetStore((state) =>
-        currentProjectId && mode === 'scene'
-            ? state.getSceneAssets(currentProjectId, currentSceneManuscriptId)
-            : EMPTY_SCENE_ASSETS
+    const projectAssetsQuery = useProjectAssetsQuery(
+        mode === 'picker' ? (currentProjectId ?? undefined) : undefined,
     );
 
-    // Fetch data based on mode
+    const linkedAssets = objectLinksQuery.data ?? EMPTY_LINKED_ASSETS;
+    const sceneAssets = sceneAssetsQuery.data ?? EMPTY_SCENE_ASSETS;
+    const projectAssets = projectAssetsQuery.data ?? EMPTY_PROJECT_ASSETS;
+
+    const activeQuery = mode === 'object'
+        ? objectLinksQuery
+        : mode === 'scene'
+            ? sceneAssetsQuery
+            : projectAssetsQuery;
+    const isLoading = activeQuery.isLoading
+        || uploadMutation.isPending
+        || updateMutation.isPending
+        || deleteMutation.isPending
+        || setMainMutation.isPending;
+
+    const [dismissedError, setDismissedError] = useState(false);
+    const latestError =
+        activeQuery.error
+        ?? uploadMutation.error
+        ?? updateMutation.error
+        ?? deleteMutation.error
+        ?? setMainMutation.error
+        ?? null;
+    const errorMessage = latestError
+        ? (latestError instanceof Error ? latestError.message : String(latestError))
+        : null;
+    const error = dismissedError ? null : errorMessage;
     useEffect(() => {
-        if (!currentProjectId) return;
+        // A fresh error re-shows the banner after a prior dismissal.
+        if (errorMessage) setDismissedError(false);
+    }, [errorMessage]);
+    const clearError = useCallback(() => setDismissedError(true), []);
 
+    // Refresh the list backing the current mode. Mutations invalidate their own
+    // keys; this is for non-mutation flows (AI generation, server-bound import
+    // success modal) that previously called fetch*(force:true).
+    const refreshActiveList = useCallback(() => {
+        if (!currentProjectId) return;
         if (mode === 'object' && objectType && objectId) {
-            fetchObjectAssetLinks(currentProjectId, objectType, objectId);
+            invalidateObjectAssetLinks(currentProjectId, objectType, objectId);
         } else if (mode === 'scene') {
-            // If showAllChapters is true, fetch all scene assets (no manuscriptId filter)
-            // Otherwise, fetch only assets owned by current manuscript
-            fetchSceneAssets(currentProjectId, currentSceneManuscriptId);
-        } else if (mode === 'picker') {
-            // Picker mode: fetch all assets or scene assets
-            fetchAssets(currentProjectId);
+            invalidateSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
+        } else {
+            invalidateProjectAssetsList(currentProjectId);
         }
-    }, [currentProjectId, mode, objectType, objectId, currentSceneManuscriptId, fetchObjectAssetLinks, fetchSceneAssets, fetchAssets]);
+    }, [currentProjectId, mode, objectType, objectId, showAllChapters, manuscriptId]);
 
     // Auto-open generate panel when an initial recipe is provided (e.g., retry flow)
     useEffect(() => {
@@ -295,12 +333,18 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
         for (const file of Array.from(files)) {
             try {
-                const newAsset = await uploadAsset(currentProjectId, file, file.name, assetType, binding ?? undefined);
+                const newAsset = await uploadMutation.mutateAsync({
+                    projectId: currentProjectId,
+                    file,
+                    name: file.name,
+                    assetType,
+                    binding: binding ?? undefined,
+                });
                 setSuccessModalAsset(newAsset);
                 setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                 setShowImportDropdown(false);
             } catch (err) {
-                // Error handled in store
+                // Error surfaced via the mutation's error state
             }
         }
 
@@ -337,14 +381,22 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     return;
                 }
 
-                uploadAsset(currentProjectId, file, file.name, assetType, binding ?? undefined).then((newAsset) => {
+                uploadMutation.mutateAsync({
+                    projectId: currentProjectId,
+                    file,
+                    name: file.name,
+                    assetType,
+                    binding: binding ?? undefined,
+                }).then((newAsset) => {
                     setSuccessModalAsset(newAsset);
                     setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                     setShowImportDropdown(false);
+                }).catch(() => {
+                    // Error surfaced via the mutation's error state
                 });
             }
         }
-    }, [currentProjectId, uploadAsset, mode, manuscriptId, objectType, objectId]);
+    }, [currentProjectId, uploadMutation, mode, manuscriptId, objectType, objectId]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -431,10 +483,10 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const handleSetMain = async (assetId: string) => {
         if (!currentProjectId || !objectType || !objectId) return;
         try {
-            await setMainAsset(currentProjectId, objectType, objectId, assetId);
+            await setMainMutation.mutateAsync({ projectId: currentProjectId, objectType, objectId, assetId });
             onAssetChange?.();
         } catch (err) {
-            // Error handled in store
+            // Error surfaced via the mutation's error state
         }
     };
 
@@ -456,20 +508,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (!confirmed) return;
 
         try {
-            await deleteAsset(currentProjectId, asset.id);
-            // Refresh the appropriate list
-            if (mode === 'scene') {
-                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
-            } else if (mode === 'object' && objectType && objectId) {
-                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
-            } else {
-                await fetchAssets(currentProjectId);
-            }
+            await deleteMutation.mutateAsync({ projectId: currentProjectId, assetId: asset.id });
+            // Mutation invalidates every project-scoped asset query → lists refetch.
             onAssetChange?.();
             setDetailAsset(null);
             setMoreDropdownAssetId(null);
         } catch (err) {
-            // Error handled in store
+            // Error surfaced via the mutation's error state
         }
     };
 
@@ -484,33 +529,19 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             return;
         }
         try {
-            await updateAsset(currentProjectId, assetId, editingName.trim());
-            // Refresh the appropriate list
-            if (mode === 'scene') {
-                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
-            } else if (mode === 'object' && objectType && objectId) {
-                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
-            } else {
-                await fetchAssets(currentProjectId);
-            }
+            await updateMutation.mutateAsync({ projectId: currentProjectId, assetId, name: editingName.trim() });
+            // Mutation invalidates every project-scoped asset query → lists refetch.
         } catch (err) {
-            // Error handled in store
+            // Error surfaced via the mutation's error state
         }
         setEditingAssetId(null);
     };
 
     // Refresh after import (upload is already bound server-side)
-    const refreshAfterImport = async (asset: Asset) => {
+    const refreshAfterImport = (asset: Asset) => {
         if (!currentProjectId) return;
 
-        if (mode === 'object' && objectType && objectId) {
-            await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
-        } else if (mode === 'scene') {
-            await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
-        } else {
-            await fetchAssets(currentProjectId);
-        }
-
+        refreshActiveList();
         onAssetChange?.();
 
         if (onSelect) {
@@ -520,20 +551,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setActiveSubTab('library');
     };
 
-    const handleImageGenerated = async (asset: Asset) => {
+    const handleImageGenerated = (asset: Asset) => {
         setGenerationRecipe(null);
-        try {
-            if (!currentProjectId) return;
-            if (mode === 'scene') {
-                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
-            } else if (mode === 'object' && objectType && objectId) {
-                await fetchObjectAssetLinks(currentProjectId, objectType, objectId, true);
-            } else {
-                await fetchAssets(currentProjectId);
-            }
+        if (currentProjectId) {
+            refreshActiveList();
             onAssetChange?.();
-        } catch (err) {
-            // Error handled in store
         }
 
         // Also notify parent if callback provided
@@ -593,12 +615,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const handleRetryRun = useCallback((runId: string, recipe: ImageGenerationRecipe) => {
         setGenerationRecipe(recipe);
         setShowGeneratePanel(true);
-        useImageRunStore.getState().clearRun(runId);
-    }, []);
+        if (currentProjectId) removeImageRunFromCache(currentProjectId, runId);
+    }, [currentProjectId]);
 
     const handleDismissRun = useCallback((runId: string) => {
-        useImageRunStore.getState().clearRun(runId);
-    }, []);
+        if (currentProjectId) removeImageRunFromCache(currentProjectId, runId);
+    }, [currentProjectId]);
 
     const formatFileSize = (bytes: number | null): string => {
         if (!bytes) return 'Unknown';
@@ -635,13 +657,17 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         try {
             // Rename if name changed
             if (assetName.trim() && assetName !== successModalAsset.name) {
-                await updateAsset(currentProjectId, successModalAsset.id, assetName.trim());
+                await updateMutation.mutateAsync({
+                    projectId: currentProjectId,
+                    assetId: successModalAsset.id,
+                    name: assetName.trim(),
+                });
             }
 
-            await refreshAfterImport(successModalAsset);
+            refreshAfterImport(successModalAsset);
             setSuccessModalAsset(null);
         } catch (err) {
-            // Error handled in store
+            // Error surfaced via the mutation's error state
         }
     };
 

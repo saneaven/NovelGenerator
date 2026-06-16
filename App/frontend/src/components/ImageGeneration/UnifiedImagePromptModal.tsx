@@ -6,10 +6,11 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useThreadStore } from '../../store/threadStore';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
+import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { journeyService } from '../../api/journeyService';
 import { isPausedLikeThreadStatus } from '../../types/thread';
@@ -95,13 +96,13 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   );
 
   // Watch thread for completion
-  const threadStatus = useThreadStore((state) =>
+  const threadStatus = useThreadStreamStore((state) =>
     journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
   );
-  const threadError = useThreadStore((state) =>
+  const threadError = useThreadStreamStore((state) =>
     journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
   );
-  const isStreamActive = useThreadStore((state) =>
+  const isStreamActive = useThreadStreamStore((state) =>
     journeyThreadId ? Boolean(state.activeStreamByThread[journeyThreadId]) : false
   );
 
@@ -153,7 +154,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
 
     // Completed (done) — extract prompt from last assistant message
     if (threadStatus === 'done') {
-      const messages = useThreadStore.getState().getMessages(journeyThreadId);
+      const messages = getMergedThreadMessages(journeyThreadId);
       const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
 
       if (lastAssistantMsg) {
@@ -168,7 +169,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           onPromptGenerated({ prompt: promptText, mode: promptMode });
         } else {
           // Try extracting from tool call arguments
-          const toolCalls = useThreadStore.getState().getToolCallsForAssistantMessage(lastAssistantMsg.id);
+          const toolCalls = getMergedThreadView(journeyThreadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
           const promptFromTool = toolCalls
             .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
             .find(Boolean) as string | undefined;

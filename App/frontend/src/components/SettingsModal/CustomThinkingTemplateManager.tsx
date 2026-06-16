@@ -5,7 +5,7 @@ import type {
   CustomThinkingEffortField,
   CustomThinkingResponseField,
   CustomThinkingHistoryField,
-} from '../../store/settingsStore';
+} from '../../domain/settings';
 import { TextButton } from '../TextButton';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { Close } from '../icons';

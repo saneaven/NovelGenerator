@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
-import type { NaturalImageStyle, TagBasedImageStyle } from '../../store/settingsStore';
+import type { NaturalImageStyle, TagBasedImageStyle } from '../../domain/settings';
 import { generateTempId } from '../../utils/tempId';
 import { confirm } from '../../store/dialogStore';
 import './ImageStyleEditorModal.css';

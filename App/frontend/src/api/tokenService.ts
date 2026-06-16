@@ -2,7 +2,7 @@
  * API service for token counting
  */
 import { apiClient, type RequestOptions } from './client';
-import type { ProviderType, TokenizerOverride } from '../store/settingsStore';
+import type { ProviderType, TokenizerOverride } from '../domain/settings';
 
 const BASE_PATH = '/api/v1/tokens';
 

@@ -1,11 +1,11 @@
 import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
-import { useSubAgentStore } from '../../store/subAgentStore';
+import { readSubAgentByAgentName } from '../../data/presets/presetSelectors';
 import { CallAgentCard } from '../ui/cards/CallAgentCard';
 import type { CallOperationVM } from '../ui/vmTypes';
 
 function getCallDisplay(toolName: string): { agentName: string; displayName: string } {
   const agentName = toolName.replace(/^call_/, '').trim();
-  const def = agentName ? useSubAgentStore.getState().getByAgentName(agentName) : undefined;
+  const def = agentName ? readSubAgentByAgentName(agentName) : undefined;
   const displayName = def?.display_name ?? (agentName || 'Sub Agent');
   return { agentName, displayName };
 }

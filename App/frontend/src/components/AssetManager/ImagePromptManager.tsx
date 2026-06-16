@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useUpdateImagePromptMutation } from '../../data/objects/mutations/useUpdateImagePromptMutation';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
-import { useThreadStore } from '../../store/threadStore';
+import { useThreadStreamStore } from '../../store/threadStreamStore';
+import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
 import { isPausedLikeThreadStatus } from '../../types/thread';
 import type { ObjectType, StoryEntityKind } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
@@ -34,15 +35,14 @@ function extractPromptTextFromData(data: Record<string, { contentParts?: Array<{
 }
 
 function extractFinalPromptFromThread(threadId: string): string {
-    const store = useThreadStore.getState();
-    const messages = store.getMessages(threadId);
+    const messages = getMergedThreadMessages(threadId);
     const lastAssistantMsg = [...messages].reverse().find((message) => message.role === 'assistant');
     if (!lastAssistantMsg) return '';
 
     const finalText = extractPromptTextFromData(lastAssistantMsg.data);
     if (finalText) return finalText;
 
-    const toolCalls = store.getToolCallsForAssistantMessage(lastAssistantMsg.id);
+    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
     for (const toolCall of toolCalls) {
         const promptFromArguments = readPromptValue((toolCall.arguments as Record<string, unknown> | undefined)?.prompt);
         if (promptFromArguments) return promptFromArguments;
@@ -80,10 +80,10 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
     );
-    const streamingThreadStatus = useThreadStore((state) =>
+    const streamingThreadStatus = useThreadStreamStore((state) =>
         journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
     );
-    const streamingThreadError = useThreadStore((state) =>
+    const streamingThreadError = useThreadStreamStore((state) =>
         journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
     );
     const liveView = useThreadLiveViewState(journeyThreadId ?? null);

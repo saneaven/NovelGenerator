@@ -1,11 +1,8 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useShallow } from 'zustand/react/shallow';
-import { threadService } from '../../api/threadService';
-import { applyThreadSnapshot } from '../../runtime/threadHydration';
-import { useThreadStore } from '../../store/threadStore';
-import { useSettings } from '../../store/settingsStore';
-import type { ThreadMessage, ThreadStatus } from '../../types/thread';
+import { useThreadView, useThreadMessagesQuery } from '../../data/threads';
+import { useSettings } from '../../data/settings';
+import type { ThreadStatus } from '../../types/thread';
 import { isPausedLikeThreadStatus } from '../../types/thread';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
 import { useAutoScrollLock } from '../../hooks/useAutoScrollLock';
@@ -25,8 +22,6 @@ import { useThreadMessageRows } from './useThreadMessageRow';
 import './ThreadMessageList.css';
 
 const SubAgentPeekDock = React.lazy(() => import('../SubAgentPeek/SubAgentPeekDock'));
-
-const EMPTY_MESSAGES: ThreadMessage[] = [];
 
 const STAGE_KEY_BY_STAGE: Record<string, string> = {
   retrieving_memory: 'agent.stage.retrievingMemory',
@@ -82,8 +77,6 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   const settings = useSettings();
   const sourceLanguage = settings.mainLanguage;
   const secondaryLanguage = settings.defaultSubLanguage ?? undefined;
-  const [hydrating, setHydrating] = useState(false);
-  const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary' | undefined>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollContentRef = useRef<HTMLDivElement | null>(null);
@@ -94,15 +87,11 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     toolCallsById,
     toolCallIdsByAssistantMessageId,
     currentStage,
-  } = useThreadStore(
-    useShallow((state) => ({
-      thread: threadId ? state.threadsById[threadId] : undefined,
-      messages: threadId ? state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
-      toolCallsById: state.toolCallsById,
-      toolCallIdsByAssistantMessageId: state.toolCallIdsByAssistantMessageId,
-      currentStage: threadId ? state.currentStageByThread[threadId] ?? null : null,
-    })),
-  );
+  } = useThreadView(threadId);
+  const snapshotQuery = useThreadMessagesQuery(threadId);
+  const hydrateError = snapshotQuery.isError
+    ? (snapshotQuery.error instanceof Error ? snapshotQuery.error.message : 'Failed to load messages.')
+    : null;
 
   const liveView = useThreadLiveViewState(threadId);
   const isMessageRunActive = isLiveStatus(thread?.status) || liveView?.noticeKind === 'preexisting_live_run';
@@ -152,34 +141,6 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   }, [threadId, secondaryLanguage]);
 
   useEffect(() => {
-    if (!threadId) return;
-    const existingMessages = useThreadStore.getState().getMessages(threadId);
-    if (existingMessages.length > 0) return;
-
-    let cancelled = false;
-    setHydrating(true);
-    setHydrateError(null);
-
-    void threadService.listMessages(threadId)
-      .then((response) => {
-        if (cancelled) return;
-        applyThreadSnapshot(response);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.warn('Failed to hydrate thread messages', { threadId, error });
-        setHydrateError(error instanceof Error ? error.message : 'Failed to load messages.');
-      })
-      .finally(() => {
-        if (!cancelled) setHydrating(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [threadId]);
-
-  useEffect(() => {
     resetToBottom();
   }, [resetToBottom, threadId]);
 
@@ -218,7 +179,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
     <div className={rootClassName} style={style}>
       <div className="thread-message-list__scroll" ref={scrollContainerRef}>
         <div className="thread-message-list__content" ref={scrollContentRef}>
-          {hydrating && rows.length === 0 && (
+          {snapshotQuery.isLoading && rows.length === 0 && (
             <div className="thread-message-list__loading">
               <Loading size="md" />
               <span>Loading messages...</span>
@@ -231,7 +192,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
             </div>
           )}
 
-          {!hydrating && !hydrateError && rows.length === 0 && !isMessageRunActive && (
+          {!snapshotQuery.isLoading && !hydrateError && rows.length === 0 && !isMessageRunActive && (
             <div className="thread-message-list__empty">
               {emptyState ?? 'No messages yet.'}
             </div>

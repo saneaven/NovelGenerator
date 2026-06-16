@@ -10,9 +10,9 @@ import { useParams } from 'react-router-dom';
 import './BasicInfoManager.css';
 import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
 import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
-import { useSettings } from '../../store/settingsStore';
+import { useSettings } from '../../data/settings';
 import { alert as showAlert } from '../../store/dialogStore';
-import { useAssetStore } from '../../store/assetStore';
+import { useMainAsset } from '../../data/assets';
 import { getAssetUrl } from '../../utils/assetUrl';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
@@ -162,17 +162,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   };
 
-  // Get cover image from asset store using the cover_image_id
-  const { fetchObjectAssetLinks, getMainAsset } = useAssetStore();
-  const coverAsset = (projectId && basicInfoId) ? getMainAsset(projectId, 'basic_info', basicInfoId) : null;
+  // Cover image is the object's main asset; the links query fetches on demand
+  // and is invalidated by SSE / set-main mutations, so no imperative refresh.
+  const coverAsset = useMainAsset(projectId, 'basic_info', basicInfoId ?? undefined);
   const coverImageUrl = getAssetUrl(coverAsset);
-
-  // Fetch assets when basicInfoId is available
-  useEffect(() => {
-    if (projectId && basicInfoId) {
-      fetchObjectAssetLinks(projectId, 'basic_info', basicInfoId);
-    }
-  }, [projectId, basicInfoId, fetchObjectAssetLinks]);
 
   // A stale projection (still in the previous language) counts as "not ready" while
   // a fetch for the requested language is in flight, so the skeleton stays up on a

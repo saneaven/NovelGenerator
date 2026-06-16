@@ -1,39 +1,35 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useThreadStore } from '../store/threadStore';
+import { useThreadStreamStore } from '../store/threadStreamStore';
 import type { ThreadMessage, ThreadToolCall } from '../types/thread';
 import type { ThreadLiveViewState } from '../runtime/threadLiveViewState';
 import { isLiveThreadStatus } from '../runtime/threadStreamLifecycle';
 
-const EMPTY_MESSAGES: ThreadMessage[] = [];
-const EMPTY_TOOL_CALL_IDS: string[] = [];
+const EMPTY_OVERLAY: ThreadMessage[] = [];
 const EMPTY_TOOL_CALLS: ThreadToolCall[] = [];
 const EMPTY_CONTENT_PARTS: Array<{ type: 'content'; text: string }> = [];
 
+/**
+ * Live view state for a thread. The streaming assistant message and its streaming
+ * tool calls live entirely in the overlay store (finalized snapshot messages are
+ * never `isStreaming`), so this reads purely from `threadStreamStore`.
+ */
 export function useThreadLiveViewState(threadId: string | null | undefined): ThreadLiveViewState | null {
-  const thread = useThreadStore((state) => (threadId ? state.threadsById[threadId] : undefined));
-  const messages = useThreadStore((state) => (threadId ? (state.messagesByThreadId[threadId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES));
-  const isPreexistingLiveThread = useThreadStore((state) => (threadId ? Boolean(state.preexistingLiveThreadsById[threadId]) : false));
+  const thread = useThreadStreamStore((state) => (threadId ? state.threadsById[threadId] : undefined));
+  const overlayMessages = useThreadStreamStore((state) => (threadId ? state.overlayMessagesByThread[threadId] ?? EMPTY_OVERLAY : EMPTY_OVERLAY));
+  const isPreexistingLiveThread = useThreadStreamStore((state) => (threadId ? Boolean(state.preexistingLiveThreadsById[threadId]) : false));
 
   const streamingMessage = useMemo(
-    () => messages.find((message) => message.role === 'assistant' && message.isStreaming) ?? null,
-    [messages],
+    () => overlayMessages.find((message) => message.role === 'assistant' && message.isStreaming) ?? null,
+    [overlayMessages],
   );
 
-  const streamingToolCallIds = useThreadStore(
+  const streamingToolCalls = useThreadStreamStore(
     useShallow((state) => {
-      if (!streamingMessage?.id) return EMPTY_TOOL_CALL_IDS;
-      return state.toolCallIdsByAssistantMessageId[streamingMessage.id] ?? EMPTY_TOOL_CALL_IDS;
-    }),
-  );
-
-  const streamingToolCalls = useThreadStore(
-    useShallow((state) => {
-      if (streamingToolCallIds.length === 0) return EMPTY_TOOL_CALLS;
-      const next = streamingToolCallIds
-        .map((id) => state.toolCallsById[id])
+      if (!streamingMessage?.id) return EMPTY_TOOL_CALLS;
+      const next = Object.values(state.streamingToolCallsById)
         .filter((toolCall): toolCall is ThreadToolCall => Boolean(toolCall))
-        .filter((toolCall) => toolCall.status === 'streaming');
+        .filter((toolCall) => toolCall.assistantMessageId === streamingMessage.id && toolCall.status === 'streaming');
       return next.length > 0 ? next : EMPTY_TOOL_CALLS;
     }),
   );

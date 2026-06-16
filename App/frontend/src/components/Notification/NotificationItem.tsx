@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useMotionTemplate, useTransform, useMotionValue, animate, useDragControls, type MotionValue } from 'motion/react';
-import type { NotificationEntry } from '../../store/notificationStore';
+import type { NotificationEntry } from '../../domain/notifications';
 import AuthenticatedImage from '../common/AuthenticatedImage';
 import { Check, Close, ChevronRight, Trash } from '../icons';
 import { Loading } from '../common/Loading';
