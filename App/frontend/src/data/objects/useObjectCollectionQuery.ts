@@ -19,6 +19,7 @@ export async function fetchObjectCollection(
   type: ObjectType,
   language: string,
   format: ObjectRichTextFormat,
+  summary = false,
 ): Promise<UnifiedObject[]> {
   const all: UnifiedObject[] = [];
   let page = 1;
@@ -30,6 +31,7 @@ export async function fetchObjectCollection(
       rich_text_format: format,
       page,
       page_size: PAGE_SIZE,
+      include_content: summary ? false : undefined,
     });
     total = res.total;
     all.push(...res.objects);
@@ -39,16 +41,23 @@ export async function fetchObjectCollection(
   return all;
 }
 
+/**
+ * @param summary When true, fetch the lightweight projection (no rich-text
+ *   `content`/`authorNote`) — for callers that only need labels/metadata.
+ *   Cached under a separate query-key variant so it never collides with the
+ *   full-content collection.
+ */
 export function useObjectCollectionQuery(
   projectId: string | undefined,
   type: ObjectType,
   language: string,
   format?: ObjectRichTextFormat,
+  summary = false,
 ) {
   const fmt = format ?? defaultRichTextFormatForType(type);
   return useQuery({
-    queryKey: objectKeys.collection(projectId ?? '__none__', type, language, fmt),
-    queryFn: () => fetchObjectCollection(projectId as string, type, language, fmt),
+    queryKey: objectKeys.collection(projectId ?? '__none__', type, language, fmt, summary ? 'summary' : 'full'),
+    queryFn: () => fetchObjectCollection(projectId as string, type, language, fmt, summary),
     enabled: Boolean(projectId),
   });
 }

@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import type { AnyObjectType, ObjectType } from '../../types/unifiedObject';
 import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
-import ObjectPickerPreview from './ObjectPickerPreview';
 import { useObjectPickerData } from './useObjectPickerData';
 import { useTokenCount } from '../../hooks/useTokenCount';
 import { useResolvedTaskConfig } from '../../data/settings';
@@ -136,7 +135,6 @@ function buildTokenTextForItem(item: PickerItem): string {
     add('Track', getMetadataString(item, 'trackName'));
     add('Date', formattedDate);
     add('Description', eventDescription);
-    add('Content', item.content);
     if (tags.length > 0) {
       add('Tags', tags.join(', '));
     }
@@ -145,7 +143,6 @@ function buildTokenTextForItem(item: PickerItem): string {
 
   add('Name', item.name);
   add('Description', item.description);
-  add('Content', item.content);
   return parts.join('\n');
 }
 
@@ -188,8 +185,7 @@ function itemMatchesSearch(item: PickerItem, normalizedQuery: string): boolean {
   if (!normalizedQuery) return true;
   return (
     matchesSearchValue(item.name, normalizedQuery) ||
-    matchesSearchValue(item.description, normalizedQuery) ||
-    matchesSearchValue(item.content, normalizedQuery)
+    matchesSearchValue(item.description, normalizedQuery)
   );
 }
 
@@ -277,8 +273,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   onChange,
   projectId,
   language,
-  showPreview = false,
-  previewPosition = 'side',
   excludeTypes = EMPTY_OBJECT_TYPES,
   filterIds,
   preSelectedIds = EMPTY_STRING_ARRAY,
@@ -304,7 +298,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<AnyObjectType | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [previewItem, setPreviewItem] = useState<PickerItem | null>(null);
   const hasInitializedSelectionRef = useRef(false);
   const prevSelectableIdSetRef = useRef<Set<string> | null>(null);
   const prevSelectedIdSetRef = useRef<Set<string> | null>(null);
@@ -539,7 +532,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const containerClasses = [
     'object-picker',
     className,
-    showPreview && previewPosition === 'side' && 'with-preview',
   ].filter(Boolean).join(' ');
 
   return (
@@ -630,27 +622,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
           ))}
         </div>
       </div>
-
-      {/* Preview Panel (side mode) */}
-      {showPreview && previewPosition === 'side' && (
-        <ObjectPickerPreview
-          item={previewItem}
-          position="side"
-          language={language}
-          projectId={projectId}
-        />
-      )}
-
-      {/* Preview Modal */}
-      {showPreview && previewPosition === 'modal' && previewItem && (
-        <ObjectPickerPreview
-          item={previewItem}
-          position="modal"
-          onClose={() => setPreviewItem(null)}
-          language={language}
-          projectId={projectId}
-        />
-      )}
     </div>
   );
 };

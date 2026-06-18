@@ -27,7 +27,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   displayLanguage,
 }) => {
   const { t } = useTranslation();
-  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage);
+  // Summary: the sidebar only shows act/chapter name + description, never body content.
+  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage, undefined, true);
   const projectionObjects = useMemo<Record<string, UnifiedObject>>(
     () => Object.fromEntries((outlineQuery.data ?? []).map((o) => [o.id, o])),
     [outlineQuery.data],

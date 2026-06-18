@@ -10,6 +10,13 @@
 import type { ObjectType } from '../../types/unifiedObject';
 
 type RichTextFormat = 'tiptap' | 'markdown';
+/**
+ * Whether a collection/tree query carries heavy rich-text bodies.
+ * 'summary' = backend include_content=false (labels/metadata/wordCount only).
+ * Kept as the LAST key segment so all prefix builders (collectionLang, etc.)
+ * still match both variants for invalidation.
+ */
+type CollectionVariant = 'full' | 'summary';
 
 export const objectKeys = {
   all: ['objects'] as const,
@@ -20,15 +27,24 @@ export const objectKeys = {
     [...objectKeys.collectionsOf(projectId), type] as const,
   collectionLang: (projectId: string, type: ObjectType, language: string) =>
     [...objectKeys.collectionType(projectId, type), language] as const,
-  collection: (projectId: string, type: ObjectType, language: string, format: RichTextFormat = 'tiptap') =>
-    [...objectKeys.collectionLang(projectId, type, language), format] as const,
+  collection: (
+    projectId: string,
+    type: ObjectType,
+    language: string,
+    format: RichTextFormat = 'tiptap',
+    variant: CollectionVariant = 'full',
+  ) => [...objectKeys.collectionLang(projectId, type, language), format, variant] as const,
 
   // ---- story-entity tree (folders + entities, own endpoint) ----
   storyTreesOf: (projectId: string) => [...objectKeys.all, 'storyTree', projectId] as const,
   storyTreeLang: (projectId: string, language: string) =>
     [...objectKeys.storyTreesOf(projectId), language] as const,
-  storyTree: (projectId: string, language: string, format: RichTextFormat = 'tiptap') =>
-    [...objectKeys.storyTreeLang(projectId, language), format] as const,
+  storyTree: (
+    projectId: string,
+    language: string,
+    format: RichTextFormat = 'tiptap',
+    variant: CollectionVariant = 'full',
+  ) => [...objectKeys.storyTreeLang(projectId, language), format, variant] as const,
 
   // ---- single object ----
   allDetails: () => [...objectKeys.all, 'detail'] as const,
@@ -48,4 +64,4 @@ export const objectKeys = {
     [...objectKeys.all, 'translationStatus', projectId, [...targets].sort()] as const,
 };
 
-export type { RichTextFormat as ObjectRichTextFormat };
+export type { RichTextFormat as ObjectRichTextFormat, CollectionVariant as ObjectCollectionVariant };

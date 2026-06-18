@@ -102,8 +102,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
   // Manuscripts + chapters (outline) come from TanStack Query collections.
-  const manuscriptCollection = useObjectCollectionQuery(projectId, 'manuscript', globalDisplayLanguage);
-  const outlineCollection = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage);
+  // Summary (no rich-text body): these collections only resolve chapter↔manuscript
+  // links (metadata) + serve a transient pre-load fallback. The active body comes
+  // from the single `manuscriptDetail` query below.
+  const manuscriptCollection = useObjectCollectionQuery(projectId, 'manuscript', globalDisplayLanguage, undefined, true);
+  const outlineCollection = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage, undefined, true);
   const storeObjects = useMemo<Record<string, UnifiedObject>>(() => {
     const map: Record<string, UnifiedObject> = {};
     for (const obj of [...(manuscriptCollection.data ?? []), ...(outlineCollection.data ?? [])]) {

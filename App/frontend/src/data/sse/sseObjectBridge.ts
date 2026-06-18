@@ -28,16 +28,21 @@ function patchOrInvalidateCollection(
   format: 'tiptap' | 'markdown',
   object: UnifiedObject,
 ): void {
-  const key = objectKeys.collection(projectId, type, language, format);
-  const existing = queryClient.getQueryData<UnifiedObject[]>(key);
-  if (!existing) return; // collection not cached → nothing mounted; will fetch fresh on mount
-  const index = existing.findIndex((o) => o.id === object.id);
-  if (index >= 0) {
-    const next = existing.slice();
-    next[index] = object;
-    queryClient.setQueryData(key, next);
-  } else {
-    queryClient.invalidateQueries({ queryKey: key });
+  // Touch both the full and summary variants of the collection. The summary
+  // variant lacks heavy content, but writing the (content-bearing) SSE object
+  // into it is harmless — summary consumers only read labels/metadata.
+  for (const variant of ['full', 'summary'] as const) {
+    const key = objectKeys.collection(projectId, type, language, format, variant);
+    const existing = queryClient.getQueryData<UnifiedObject[]>(key);
+    if (!existing) continue; // not cached → nothing mounted; will fetch fresh on mount
+    const index = existing.findIndex((o) => o.id === object.id);
+    if (index >= 0) {
+      const next = existing.slice();
+      next[index] = object;
+      queryClient.setQueryData(key, next);
+    } else {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
   }
 }
 

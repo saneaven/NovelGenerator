@@ -5,7 +5,7 @@
 
 import { requireSettingsFromCache } from '../../../data/settings';
 import { useSelectionStore } from '../../../store/selectionStore';
-import { readProjectObjectsFromCache } from '../../../data/objects/objectCache';
+import { readProjectObjectIdsByType } from '../../../data/objects/objectCache';
 import { readVariablesForTemplate, readVariablesFromCache } from '../../../data/presets/presetSelectors';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
 import { buildPromptProjectDataSkeleton, type PromptProjectData } from '../../../templateEngine/projectShape';
@@ -160,9 +160,7 @@ export function buildMinimalProjectData(languages: string[] = []): PromptProject
  */
 function getAllProjectObjectIds(projectId: string): string[] {
   try {
-    return readProjectObjectsFromCache(projectId)
-      .filter(obj => obj.metadata.project_id === projectId)
-      .map(obj => obj.id);
+    return readProjectObjectIdsByType(projectId);
   } catch {
     return [];
   }
@@ -170,9 +168,7 @@ function getAllProjectObjectIds(projectId: string): string[] {
 
 function getAllProjectStoryEntityIds(projectId: string): string[] {
   try {
-    return readProjectObjectsFromCache(projectId)
-      .filter(obj => obj.metadata.project_id === projectId && obj.type === 'story_entity')
-      .map(obj => obj.id);
+    return readProjectObjectIdsByType(projectId, 'story_entity');
   } catch {
     return [];
   }

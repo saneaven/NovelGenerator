@@ -9,6 +9,7 @@ import { OutlineItemCard, toOutlineItemVariant } from '../../../components/Outli
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot, resolveObjectTitle } from './helpers';
+import { useTargetObjectData } from './useTargetObjectData';
 import { useTimelineLookup } from './timelineCardData';
 import { isTimelineEventLink, isTimelineObjectType, renderTimelineBody, renderTimelineLink } from './timelineCardRender';
 
@@ -22,9 +23,12 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useMainLanguage();
+  // Summary map: titles/labels/metadata only. Body of the to-be-deleted object
+  // (shown pre-deletion only) comes from a single full-content fetch.
   const objects = useProjectObjectsMap(projectId, language);
-  const getRichTextMarkdown = (id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
-    const value = (objects[id]?.data as Record<string, unknown> | undefined)?.[field];
+  const targetData = useTargetObjectData(operation, language);
+  const getRichTextMarkdown = (_id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
+    const value = targetData?.[field];
     return typeof value === 'string' ? value : undefined;
   };
   const timelineLookup = useTimelineLookup(projectId);

@@ -37,6 +37,7 @@ async def get_story_entity_tree(
     project_id: UUID,
     language: str | None = Query(None),
     rich_text_format: RichTextFormat = Query("tiptap"),
+    include_content: bool = Query(True, description="When false, omit heavy rich-text body; keep labels/metadata for tree structure."),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -50,6 +51,7 @@ async def get_story_entity_tree(
         language=requested_language,
         rich_text_format=rich_text_format,
         fallback_language=main_language,
+        include_content=include_content,
     )
     entities = object_service.list_objects(
         db,
@@ -58,6 +60,7 @@ async def get_story_entity_tree(
         language=requested_language,
         rich_text_format=rich_text_format,
         fallback_language=main_language,
+        include_content=include_content,
     )
     return StoryEntityTreeResponse(
         folders=[UnifiedObjectResponse(**item) for item in folders],

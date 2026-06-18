@@ -386,6 +386,7 @@ async def list_objects(
     language: Optional[str] = Query(None, description="Requested projection language. Defaults to the user's main language."),
     kinds: Optional[List[str]] = Query(None, description="Optional story entity kind filters."),
     rich_text_format: RichTextFormat = Query("tiptap"),
+    include_content: bool = Query(True, description="When false, omit heavy rich-text body (content/authorNote); keep labels/metadata/wordCount."),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -410,6 +411,7 @@ async def list_objects(
         kinds=normalized_kinds,
         rich_text_format=rich_text_format,
         fallback_language=main_language,
+        include_content=include_content,
     )
     result_objects = [UnifiedObjectResponse(**item) for item in serialized]
 

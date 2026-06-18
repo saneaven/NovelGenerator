@@ -9,6 +9,7 @@ import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot, resolveObjectTitle } from './helpers';
+import { useTargetObjectData } from './useTargetObjectData';
 import { useTimelineLookup } from './timelineCardData';
 import { isTimelineObjectType, renderTimelineBody } from './timelineCardRender';
 
@@ -61,7 +62,11 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useMainLanguage();
+  // Summary map: titles/labels/metadata only. The field diff compares args
+  // against the target's CURRENT body, which needs full content — fetched as a
+  // single object below (not the whole project).
   const objects = useProjectObjectsMap(projectId, language);
+  const targetData = useTargetObjectData(operation, language);
 
   const snapshot = useMemo(
     () => getObjectSnapshot({ operation, objects, projectId, language }),
@@ -78,12 +83,12 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
         ? replaceKeys.filter((key) => key in operation.args)
         : computeChangedFields({
             args: operation.args,
-            currentData: snapshot.data,
+            currentData: targetData ?? snapshot.data,
             currentMetadata: snapshot.metadata,
             keys: replaceKeys,
             metadataKeys: metadataMapForObjectType(operation.objectType),
           }),
-    [isFinalized, operation.args, operation.objectType, snapshot.data, snapshot.metadata, replaceKeys]
+    [isFinalized, operation.args, operation.objectType, targetData, snapshot.data, snapshot.metadata, replaceKeys]
   );
 
   const changedValues = useMemo(

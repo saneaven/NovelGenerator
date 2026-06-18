@@ -39,6 +39,40 @@ export function readProjectObjectsFromCache(projectId: string): UnifiedObject[] 
   return [...byId.values()];
 }
 
+/**
+ * IDs of cached objects for a project, optionally filtered by type — without
+ * materializing the full objects. For callers (e.g. prompt-preview builders)
+ * that only need the set of ids, so the lightweight SUMMARY collections are
+ * enough and no rich-text body is touched.
+ */
+export function readProjectObjectIdsByType(projectId: string, type?: ObjectType): string[] {
+  const ids = new Set<string>();
+  const add = (obj: UnifiedObject | undefined): void => {
+    if (!obj || obj.metadata?.project_id !== projectId) return;
+    if (type && obj.type !== type) return;
+    ids.add(obj.id);
+  };
+
+  const collections = queryClient.getQueriesData<UnifiedObject[]>({
+    queryKey: objectKeys.collectionsOf(projectId),
+  });
+  for (const [, data] of collections) {
+    if (data) for (const obj of data) add(obj);
+  }
+
+  const trees = queryClient.getQueriesData<{ folders: UnifiedObject[]; entities: UnifiedObject[] }>({
+    queryKey: objectKeys.storyTreesOf(projectId),
+  });
+  for (const [, data] of trees) {
+    if (data) {
+      for (const obj of data.folders) add(obj);
+      for (const obj of data.entities) add(obj);
+    }
+  }
+
+  return [...ids];
+}
+
 /** A single cached object by type+id, searching any cached language/format. Null if not cached. */
 export function readObjectFromCache(type: ObjectType, id: string): UnifiedObject | null {
   const matches = queryClient.getQueriesData<UnifiedObject>({ queryKey: objectKeys.detailOf(type, id) });

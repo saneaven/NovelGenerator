@@ -1,9 +1,9 @@
 /**
  * Hook for organizing object data for the ObjectPicker component.
  *
- * Reads objects via TanStack Query collections fetched in MARKDOWN format, so
- * `data.content` is already rendered markdown text (replacing the old
- * getRichTextMarkdown cache). Story entities + folders come from the story-tree
+ * Reads objects via TanStack Query collections in the SUMMARY projection
+ * (include_content=false) — picker items show name/description/wordCount only,
+ * never the rich-text body. Story entities + folders come from the story-tree
  * query. Outline ordering/numbering use the single-source domain helpers.
  */
 
@@ -21,7 +21,7 @@ import type {
   UseObjectPickerDataResult,
 } from './types';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
-import { buildBasicInfoSummary, normalizeBasicInfoData } from '../../utils/basicInfo';
+import { normalizeBasicInfoData } from '../../utils/basicInfo';
 import { formatDate } from '../../utils/timelineCalendar';
 import { buildTimelineFromObjects } from '../../utils/timelineView';
 import { useTimelineConfig } from '../../data/timeline';
@@ -30,7 +30,6 @@ import {
   getStoryEntityFolderName,
   type StoryEntityFolder,
 } from '../../types/storyEntityFolder';
-import { docToPlainText } from '../../editor/manuscript/doc';
 import { compareOutlineOrder, buildOutlineNumbering } from '../../domain/outlineHierarchy';
 import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
 import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
@@ -96,25 +95,19 @@ function objectToItem(obj: UnifiedObject): ObjectPickerItem {
 
   let name = (data.name as string) || (data.title as string) || fallbackName;
   let description = (data.description as string) || (data.logline as string) || undefined;
-  let content = typeof data.content === 'string' ? data.content : undefined;
 
   if (obj.type === 'basic_info') {
     const basicInfo = normalizeBasicInfoData(data);
     name = basicInfo.title || fallbackName;
     description = basicInfo.logline || undefined;
-    content = buildBasicInfoSummary(basicInfo) || undefined;
   } else if (obj.type === 'guidelines') {
     name = fallbackName;
-    content = typeof (data as { authorNote?: unknown }).authorNote === 'string'
-      ? (data as { authorNote?: string }).authorNote
-      : undefined;
   }
 
   return {
     id: obj.id,
     name,
     description,
-    content,
     type: obj.type,
     kind: obj.type === 'outline' ? (obj.kind as 'outline' | 'act' | 'chapter' | undefined) : undefined,
     parentId: (obj.metadata?.parent_id as string) || (obj.metadata?.chapter_id as string) || undefined,
@@ -131,17 +124,6 @@ function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function timelineContentToText(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    return toNonEmptyString(value);
-  }
-  if (value && typeof value === 'object') {
-    const text = docToPlainText(value);
-    return text.length > 0 ? text : undefined;
-  }
-  return undefined;
 }
 
 function formatTimelineEventDate(
@@ -182,7 +164,6 @@ export function buildTimelineEventGroups(
           id: track.id,
           name: trackName,
           description: toNonEmptyString(trackData.description),
-          content: timelineContentToText(trackData.content),
           type: 'timeline_track' as const,
           parentId: track.parentId ?? undefined,
           order: track.position,
@@ -200,7 +181,6 @@ export function buildTimelineEventGroups(
             id: event.id,
             name: toNonEmptyString(eventData.name) || untitledEvent,
             description: eventDescription || formattedDate,
-            content: timelineContentToText(eventData.content),
             type: 'timeline_event' as const,
             parentId: track.id,
             metadata: {
@@ -497,7 +477,6 @@ function buildOutlineGroups(
               t,
             ),
             description: chapterData.description as string | undefined,
-            content: typeof manuscriptData.content === 'string' ? manuscriptData.content : undefined,
             type: 'manuscript' as const,
             parentId: chapter.id,
             order: chapter.metadata?.position as number | undefined,
@@ -600,14 +579,15 @@ export function useObjectPickerData({
 }: UseObjectPickerDataOptions): UseObjectPickerDataResult {
   const { t } = useTranslation();
 
-  // Fetch in markdown so data.content holds rendered markdown text for items.
-  const basicInfo = useObjectCollectionQuery(projectId, 'basic_info', language, 'markdown');
-  const guidelines = useObjectCollectionQuery(projectId, 'guidelines', language, 'markdown');
-  const outline = useObjectCollectionQuery(projectId, 'outline', language, 'markdown');
-  const manuscript = useObjectCollectionQuery(projectId, 'manuscript', language, 'markdown');
-  const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language, 'markdown');
-  const events = useObjectCollectionQuery(projectId, 'timeline_event', language, 'markdown');
-  const tree = useStoryEntityTreeQuery(projectId, language, 'markdown');
+  // Summary projection: picker items show name/description/wordCount only — never
+  // the rich-text body (the preview that consumed it was removed).
+  const basicInfo = useObjectCollectionQuery(projectId, 'basic_info', language, 'markdown', true);
+  const guidelines = useObjectCollectionQuery(projectId, 'guidelines', language, 'markdown', true);
+  const outline = useObjectCollectionQuery(projectId, 'outline', language, 'markdown', true);
+  const manuscript = useObjectCollectionQuery(projectId, 'manuscript', language, 'markdown', true);
+  const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language, 'markdown', true);
+  const events = useObjectCollectionQuery(projectId, 'timeline_event', language, 'markdown', true);
+  const tree = useStoryEntityTreeQuery(projectId, language, 'markdown', true);
 
   const timelineConfig = useTimelineConfig(projectId).data ?? null;
 

@@ -260,6 +260,7 @@ def _serialize_object(
     language: str | None = None,
     rich_text_format: str = "tiptap",
     fallback_language: str | None = None,
+    include_content: bool = True,
 ) -> dict[str, Any]:
     storage_type = _canonical_object_type(object_type)
     latest = latest_version_with_all_languages(db, storage_type, obj.id)
@@ -296,6 +297,7 @@ def _serialize_object(
                 object_type=object_type,
                 data=selected_row.data,
                 rich_text_format=rich_text_format,
+                include_content=include_content,
             )
             content_language = str(selected_row.language)
         else:
@@ -385,9 +387,19 @@ def _render_language_payload(
     object_type: str,
     data: dict[str, Any],
     rich_text_format: str,
+    include_content: bool = True,
 ) -> dict[str, Any]:
+    """Project a stored language payload for the API.
+
+    With ``include_content=False`` (summary/list mode) the heavy rich-text
+    fields (``content`` / ``authorNote``) are dropped and the expensive
+    tree→markdown/tiptap conversion is skipped. Light fields needed for
+    labels/structure (name, title, description, wordCount, logline, ...) are
+    kept so callers that only need to display a name or count still work.
+    """
     current = dict(data or {})
     if object_type == "basic_info":
+        # basic_info has no heavy rich-text field; logline/genres/tags are light.
         return normalize_basic_info_data(current)
     if object_type == STORY_ENTITY_FOLDER_TYPE:
         return {
@@ -395,14 +407,21 @@ def _render_language_payload(
             "description": str(current.get("description") or ""),
         }
     if object_type == "guidelines":
+        if not include_content:
+            return {}
         return {"authorNote": _render_rich_value(current.get("authorNote"), rich_text_format=rich_text_format)}
     if object_type in {STORY_ENTITY_TYPE, "outline", "timeline_track", "timeline_event"}:
-        return {
+        payload = {
             "name": str(current.get("name") or ""),
             "description": str(current.get("description") or ""),
-            "content": _render_rich_value(current.get("content"), rich_text_format=rich_text_format),
         }
+        if include_content:
+            payload["content"] = _render_rich_value(current.get("content"), rich_text_format=rich_text_format)
+        return payload
     if object_type == "manuscript":
+        if not include_content:
+            # Keep the precomputed word count (cheap int); skip rendering the body.
+            return {"wordCount": int(current.get("wordCount") or 0)}
         content = normalize_tree(current.get("content"))
         return {
             "content": _render_rich_value(content, rich_text_format=rich_text_format),
@@ -1866,6 +1885,7 @@ class ObjectService:
         kinds: list[str] | None = None,
         rich_text_format: str = "tiptap",
         fallback_language: str | None = None,
+        include_content: bool = True,
     ) -> list[dict[str, Any]]:
         t = object_type
         storage_type = _canonical_object_type(t)
@@ -1921,6 +1941,7 @@ class ObjectService:
                 language,
                 rich_text_format=rich_text_format,
                 fallback_language=fallback_language,
+                include_content=include_content,
             )
             for row in rows
         ]

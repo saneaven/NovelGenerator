@@ -517,7 +517,6 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
                 projectId={projectId}
                 language={displayLanguage}
                 customGroups={linkGroups}
-                showPreview={false}
                 maxHeight={240}
               />
             </div>

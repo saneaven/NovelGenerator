@@ -212,6 +212,7 @@ export const unifiedObjectService = {
       page?: number;
       page_size?: number;
       kinds?: Array<StoryEntityKind | OutlineKind>;
+      include_content?: boolean;
     }
   ): Promise<{
     objects: UnifiedObject<TData>[];
@@ -225,6 +226,7 @@ export const unifiedObjectService = {
       page: options?.page || 1,
       page_size: options?.page_size || 50,
       kinds: options?.kinds,
+      include_content: options?.include_content === false ? false : undefined,
     });
 
     return apiClient.get<{
@@ -296,11 +298,13 @@ export const unifiedObjectService = {
     options?: {
       language?: string;
       rich_text_format?: RichTextFormat;
+      include_content?: boolean;
     },
   ): Promise<StoryEntityTreeResponse> {
     const query = buildQueryString({
       language: options?.language,
       rich_text_format: options?.rich_text_format ?? 'tiptap',
+      include_content: options?.include_content === false ? false : undefined,
     });
     return apiClient.get<StoryEntityTreeResponse>(`/api/v1/projects/${projectId}/story-entity-tree${query}`);
   },

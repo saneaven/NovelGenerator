@@ -26,7 +26,6 @@ export interface ObjectPickerItem {
   id: string;
   name: string;
   description?: string;      // One-line summary for object indexes
-  content?: string;          // Full content
   type: AnyObjectType;
   kind?: OutlineKind;
   parentId?: string;
@@ -63,8 +62,6 @@ export interface ObjectPickerProps {
   language: string;
 
   // Optional features
-  showPreview?: boolean;
-  previewPosition?: 'side' | 'modal';
   excludeTypes?: ObjectType[];
   filterIds?: string[];            // If provided, only show items with these IDs
   preSelectedIds?: string[];       // IDs that cannot be deselected
@@ -125,15 +122,6 @@ export interface ObjectPickerSearchProps {
   onTypeFilterChange?: (type: AnyObjectType | null) => void;
   availableTypes?: AnyObjectType[];
   placeholder?: string;
-}
-
-/** Props for ObjectPickerPreview */
-export interface ObjectPickerPreviewProps {
-  item: ObjectPickerItem | null;
-  position: 'side' | 'modal';
-  onClose?: () => void;
-  language: string;
-  projectId: string;
 }
 
 // ============================================================================

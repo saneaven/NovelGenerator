@@ -3,9 +3,12 @@
  * `useUnifiedObjectStore(s => s.objects)` flat map that display components
  * (tool-call cards, lookups) subscribed to.
  *
- * Fetches the project's collections + story tree in markdown format (so
- * `data.content` is rendered markdown text), aggregated into a Record by id.
- * Query keys are shared, so multiple consumers dedupe.
+ * Aggregates the project's collections + story tree into a Record by id.
+ * Every verified consumer of this map reads only labels (name/title) and
+ * structural metadata (parent_id/kind/chapter_id/...), never the rich-text
+ * `content`. So it fetches the **summary** projection (backend
+ * include_content=false) — far smaller payloads, cached separately from any
+ * full-content collection. Query keys are shared, so multiple consumers dedupe.
  */
 
 import { useMemo } from 'react';
@@ -19,13 +22,13 @@ export function useProjectObjectsMap(
   language: string,
   format: ObjectRichTextFormat = 'markdown',
 ): Record<string, UnifiedObject> {
-  const basicInfo = useObjectCollectionQuery(projectId, 'basic_info', language, format);
-  const guidelines = useObjectCollectionQuery(projectId, 'guidelines', language, format);
-  const outline = useObjectCollectionQuery(projectId, 'outline', language, format);
-  const manuscript = useObjectCollectionQuery(projectId, 'manuscript', language, format);
-  const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language, format);
-  const events = useObjectCollectionQuery(projectId, 'timeline_event', language, format);
-  const tree = useStoryEntityTreeQuery(projectId, language, format);
+  const basicInfo = useObjectCollectionQuery(projectId, 'basic_info', language, format, true);
+  const guidelines = useObjectCollectionQuery(projectId, 'guidelines', language, format, true);
+  const outline = useObjectCollectionQuery(projectId, 'outline', language, format, true);
+  const manuscript = useObjectCollectionQuery(projectId, 'manuscript', language, format, true);
+  const tracks = useObjectCollectionQuery(projectId, 'timeline_track', language, format, true);
+  const events = useObjectCollectionQuery(projectId, 'timeline_event', language, format, true);
+  const tree = useStoryEntityTreeQuery(projectId, language, format, true);
 
   return useMemo(() => {
     const map: Record<string, UnifiedObject> = {};

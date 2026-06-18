@@ -10,6 +10,7 @@ import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay
 import { ReadOnlyBasicInfoDisplay } from '../displays/ReadOnlyBasicInfoDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
+import { useTargetObjectData } from './useTargetObjectData';
 import { useTimelineLookup } from './timelineCardData';
 import { isTimelineObjectType, renderTimelineBody } from './timelineCardRender';
 
@@ -37,9 +38,12 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
   onReject,
 }) => {
   const language = useMainLanguage();
+  // Summary map: titles/labels/metadata only (no body). Body content for the
+  // target comes from a single full-content fetch below.
   const objects = useProjectObjectsMap(projectId, language);
-  const getRichTextMarkdown = (id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
-    const value = (objects[id]?.data as Record<string, unknown> | undefined)?.[field];
+  const targetData = useTargetObjectData(operation, language);
+  const getRichTextMarkdown = (_id: string, _language: string, field: 'content' | 'authorNote'): string | undefined => {
+    const value = targetData?.[field];
     return typeof value === 'string' ? value : undefined;
   };
   const timelineLookup = useTimelineLookup(projectId);
