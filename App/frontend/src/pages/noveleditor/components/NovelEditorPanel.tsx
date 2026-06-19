@@ -100,11 +100,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
-  // Manuscripts + chapters (outline) come from TanStack Query collections.
-  // Summary (no rich-text body): these collections only resolve chapter↔manuscript
-  // links (metadata) + serve a transient pre-load fallback. The active body comes
-  // from the single `manuscriptDetail` query below.
+  // Manuscript/outline collections are summary-only (no rich-text body) — they resolve chapter↔manuscript links + serve a transient pre-load fallback; the active body comes from the manuscriptDetail query below.
   const manuscriptCollection = useObjectCollectionQuery(projectId, 'manuscript', globalDisplayLanguage, undefined, true);
   const outlineCollection = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage, undefined, true);
   const storeObjects = useMemo<Record<string, UnifiedObject>>(() => {
@@ -114,8 +110,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
     return map;
   }, [manuscriptCollection.data, outlineCollection.data]);
-  // Whether the chapter (outline) collection has loaded for the current language.
-  // Used to avoid a false "Failed to resolve linked manuscript" while chapters load.
+  // Whether the outline collection loaded for the current language; avoids a false "Failed to resolve linked manuscript" while chapters load.
   const chaptersHydrated = !outlineCollection.isLoading;
 
   const updateObjectMutation = useUpdateObjectMutation();
@@ -129,9 +124,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // State
   const [manuscriptId, setManuscriptId] = useState<string | null>(null);
-  // Active manuscript content (tiptap). staleTime: Infinity + refetchOnMount: false —
-  // the editor owns the buffer, so the cache only changes via save (setQueryData) or an
-  // explicit refetch / SSE push; edits are never yanked mid-typing by a background refetch.
+  // Active manuscript content (tiptap). staleTime: Infinity + refetchOnMount: false — the editor owns the buffer, so the cache only changes via save/refetch/SSE, never yanked mid-typing.
   const manuscriptDetail = useObjectQuery('manuscript', manuscriptId ?? undefined, globalDisplayLanguage, {
     staleTime: Infinity,
     refetchOnMount: false,
@@ -184,8 +177,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
   }, [aiEditSessionId, aiEditSession, manuscriptId, manuscriptDetail]);
 
-  // Active manuscript: prefer the detail query (fresh after save via setQueryData),
-  // fall back to the collection copy while the detail is loading.
+  // Active manuscript: prefer the detail query (fresh after save), fall back to the collection copy while the detail is loading.
   const manuscript = ((manuscriptDetail.data as ManuscriptObject | undefined)
     ?? (manuscriptId ? (storeObjects[manuscriptId] as ManuscriptObject | undefined) : undefined))
     ?? null;
@@ -193,10 +185,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const error = manuscriptId
     ? (manuscriptDetail.error ? (manuscriptDetail.error.message || 'Failed to load manuscript') : null)
     : null;
-  // True only when the currently shown manuscript is the projection for the active
-  // display language. On language change `manuscript` may momentarily be the previous
-  // language's object (served by getObjectsForProject's base-object fallback); we treat
-  // that as "not ready" so the loading skeleton appears immediately instead of ~0.5s late.
+  // True only when the shown manuscript matches the active display language; on language change it may momentarily be the previous language's object, treated as "not ready" so the skeleton appears immediately.
   const manuscriptLanguageReady = manuscript
     ? manuscript.language_state?.requested_language === globalDisplayLanguage
     : false;
@@ -269,8 +258,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const serverDocHash = useMemo(() => getDocHash(serverDoc), [serverDoc]);
 
   const stableServerDocHash = useMemo(() => {
-    // Save round-trip echo: the server just confirmed the hash we intentionally wrote.
-    // Return the previously cached stable value so editorKey does NOT change.
+    // Save round-trip echo: server confirmed the hash we wrote — return the cached stable value so editorKey does NOT change.
     if (
       lastSavedDocHashRef.current !== null &&
       lastSavedDocHashRef.current === serverDocHash &&
@@ -323,9 +311,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       return;
     }
 
-    // 3) Neither resolved. If the chapter collection for this language hasn't
-    //    loaded yet, the chapter is simply still loading — show the skeleton, not
-    //    a false error. Only report a missing link once chapters are hydrated.
+    // 3) Neither resolved. If chapters for this language aren't hydrated yet, it's still loading — show the skeleton, not a false error; only report a missing link once hydrated.
     setManuscriptId(null);
     if (!chaptersHydrated) {
       setContentIdError(null);
@@ -343,12 +329,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     chaptersHydrated,
   ]);
 
-  // Fetch manuscript when ID is resolved but the object for the active language is
-  // not in the store yet. Also refetch when the active language changes and the shown
-  // manuscript is still the previous language's projection (stale), so switching language
-  // immediately loads the new language instead of lingering on base-object fallback.
-  // The manuscript detail query auto-fetches when manuscriptId / language changes.
-  // Here we only mirror its state into the panel's resolving / error UI.
+  // The detail query auto-fetches when manuscriptId / language changes; here we only mirror its state into the panel's resolving / error UI.
   useEffect(() => {
     if (!manuscriptId) return;
     if (manuscript && manuscriptLanguageReady) {
@@ -365,8 +346,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
   }, [manuscriptId, manuscript, manuscriptLanguageReady, manuscriptDetail.isError, manuscriptDetail.error]);
 
-  // Note: RichTextEditor now handles baseline tracking internally via hasChanges()
-  // No need to track baselineSetRef here anymore
+  // RichTextEditor handles baseline tracking internally via hasChanges(); no baselineSetRef needed here.
 
   // Restore content from localStorage cache if available and newer than server data
   useEffect(() => {
@@ -386,8 +366,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           docRef.current = nextDoc;
           setDoc(nextDoc);
           editorRef.current?.setDoc(nextDoc);
-          // Note: Editor baseline is set from server content on mount,
-          // so hasChanges() will correctly return true for cached changes
+          // Editor baseline is set from server content on mount, so hasChanges() correctly returns true for cached changes.
         }
       } catch (err) {
         console.error('Failed to restore from cache:', err);
@@ -473,8 +452,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setIsSaving(true);
       setSavingType('manual');
 
-      // Mark this hash as "ours" BEFORE the store update re-renders the panel,
-      // so stableServerDocHash recognizes the save echo and keeps editorKey stable.
+      // Mark this hash as "ours" before the store update re-renders, so stableServerDocHash recognizes the save echo and keeps editorKey stable.
       lastSavedDocHashRef.current = getDocHash(latestDoc);
 
       try {
@@ -603,8 +581,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setShowImageModal(true);
   }, []);
 
-  // Handle swap image from overlay - opens modal with EMPTY prompts
-  // User can pick from library or generate new from scratch
+  // Handle swap image from overlay - opens modal with EMPTY prompts; user can pick from library or generate from scratch.
   const handleSwapImage = useCallback((currentSrc: string, _imageBounds: DOMRect | null) => {
     setReplaceImageSrc(currentSrc);
     setRegenerateRecipe(null);
@@ -616,8 +593,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setShowImageModal(true);
   }, []);
 
-  // Handle regenerate image from overlay - opens modal with original settings prefilled (like Retry UX)
-  // User still manually selects a new image from the library to replace the current one.
+  // Handle regenerate image from overlay - opens modal with original settings prefilled (Retry UX); user still picks a new image from the library.
   const handleRegenerateImage = useCallback((currentSrc: string, _imageBounds: DOMRect | null) => {
     setReplaceImageSrc(currentSrc);
     // Get cursor context for scene context
@@ -709,7 +685,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     );
   }
 
-  if (loading && !manuscript) {
+  // Gate on the detail body, not the content-less summary fallback, to avoid an empty-editor flash.
+  if (loading && !manuscriptDetail.data) {
     return manuscriptSkeleton;
   }
 
@@ -741,16 +718,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     );
   }
 
-  // The shown manuscript is still the previous language's projection (base-object
-  // fallback right after a language switch). Show the skeleton immediately — the fetch
-  // effect above is already loading this language's manuscript.
+  // Shown manuscript is still the previous language's projection right after a language switch — show the skeleton; the fetch effect above is already loading this language.
   if (!manuscriptLanguageReady) {
     return manuscriptSkeleton;
   }
 
-  // Keep showing the loading skeleton until BOTH the chapter header (outline) and
-  // the manuscript content are ready, instead of rendering content without a header.
-  // Guarded on hydration so a genuinely missing header doesn't loop forever.
+  // Keep the skeleton until both the chapter header and content are ready instead of rendering content without a header; guarded on hydration so a missing header doesn't loop forever.
   if (!selectedChapter && !chaptersHydrated) {
     return manuscriptSkeleton;
   }
