@@ -29,6 +29,19 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   const { t } = useTranslation();
   // Summary: the sidebar only shows act/chapter name + description, never body content.
   const outlineQuery = useObjectCollectionQuery(projectId, 'outline', displayLanguage, undefined, true);
+  // Summary manuscripts: data carries wordCount (no content) + metadata.chapter_id.
+  // NovelEditorPanel already loads this exact (summary) collection, so query-key dedup
+  // means no extra network request here — we just read the per-chapter word count.
+  const manuscriptQuery = useObjectCollectionQuery(projectId, 'manuscript', displayLanguage, undefined, true);
+  const wordCountByChapterId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const m of manuscriptQuery.data ?? []) {
+      const chapterId = m.metadata?.chapter_id;
+      const wc = (m.data as { wordCount?: number })?.wordCount;
+      if (typeof chapterId === 'string' && typeof wc === 'number') map[chapterId] = wc;
+    }
+    return map;
+  }, [manuscriptQuery.data]);
   const projectionObjects = useMemo<Record<string, UnifiedObject>>(
     () => Object.fromEntries((outlineQuery.data ?? []).map((o) => [o.id, o])),
     [outlineQuery.data],
@@ -250,6 +263,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                             >
                               <div className="chapter-card-header">
                                 <span className="chapter-number">Ch.{globalChapterOffset + chapIndex + 1}</span>
+                                <span className="word-count">{wordCountByChapterId[chapter.id] ?? 0}w</span>
                               </div>
                               <div className="chapter-card-main">
                                 <span className="chapter-name">{chapData.name || t('chapterSidebar.untitled')}</span>
