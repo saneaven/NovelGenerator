@@ -9,7 +9,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { unifiedObjectService } from '../../../api/unifiedObjectService';
 import { objectKeys } from '../../keys/objectKeys';
-import { defaultRichTextFormatForType, isRichPreviewType } from '../../../domain/objectFormat';
+import { defaultRichTextFormatForType, isRichPreviewType, isStoryEntityTreeType } from '../../../domain/objectFormat';
 import type { ObjectType, UnifiedObject, UpdateObjectRequest } from '../../../types/unifiedObject';
 
 function isOutlineStructureMetadata(metadata?: Record<string, unknown>): boolean {
@@ -46,6 +46,28 @@ export function useUpdateObjectMutation() {
     onSuccess: (updated, { type, request }) => {
       qc.setQueryData(objectKeys.detail(type, updated.id, request.language), updated);
       const projectId = updated.metadata?.project_id;
+
+      // New version holds only the edited language → other languages are now stale.
+      if (request.create_new_version !== false) {
+        qc.removeQueries({
+          queryKey: objectKeys.detailOf(type, updated.id),
+          predicate: (q) => q.queryKey[4] !== request.language,
+        });
+        if (typeof projectId === 'string') {
+          if (isStoryEntityTreeType(type)) {
+            qc.invalidateQueries({
+              queryKey: objectKeys.storyTreesOf(projectId),
+              predicate: (q) => q.queryKey[3] !== request.language,
+            });
+          } else {
+            qc.invalidateQueries({
+              queryKey: objectKeys.collectionType(projectId, type),
+              predicate: (q) => q.queryKey[4] !== request.language,
+            });
+          }
+        }
+      }
+
       if (
         type === 'outline'
         && typeof projectId === 'string'
