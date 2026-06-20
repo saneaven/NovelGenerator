@@ -17,6 +17,7 @@ import { useDndSensors } from '../../hooks/useDndSensors';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
 import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
+import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useCreateObjectMutation } from '../../data/objects/mutations/useCreateObjectMutation';
 import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
 import { useDeleteObjectMutation } from '../../data/objects/mutations/useDeleteObjectMutation';
@@ -162,12 +163,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const { projectId } = useParams<{ projectId: string }>();
   const settings = useSettings();
 
-  // TipTap-format tree feeds the editor (entity.data.content is a TipTap doc);
-  // the markdown-format sibling supplies rendered card previews (replaces
-  // the old getRichTextMarkdown cache).
-  const tree = useStoryEntityTreeQuery(projectId, globalDisplayLanguage);
+  // markdown tree = list source; tiptap body loaded per-entity on expand.
   const treeMarkdown = useStoryEntityTreeQuery(projectId, globalDisplayLanguage, 'markdown');
-  const showSkeleton = tree.isLoading;
+  const showSkeleton = treeMarkdown.isLoading;
 
   const createObjectMutation = useCreateObjectMutation();
   const updateObjectMutation = useUpdateObjectMutation();
@@ -180,10 +178,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const [optimisticObjects, setOptimisticObjects] = useState<Record<string, UnifiedObject> | null>(null);
 
   const serverObjects = useMemo<Record<string, UnifiedObject>>(() => {
-    const folders = tree.data?.folders ?? [];
-    const entities = tree.data?.entities ?? [];
+    const folders = treeMarkdown.data?.folders ?? [];
+    const entities = treeMarkdown.data?.entities ?? [];
     return Object.fromEntries([...folders, ...entities].map((o) => [o.id, o]));
-  }, [tree.data]);
+  }, [treeMarkdown.data]);
 
   // Clear the optimistic overlay whenever fresh server data arrives.
   useEffect(() => {
@@ -732,6 +730,14 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
   const currentExpandedEntityLanguageState = currentExpandedEntity
     ? getEntityLanguageState(currentExpandedEntity, settings.mainLanguage)
     : null;
+  // Load the editable tiptap body for the expanded entity.
+  const expandedDetail = useObjectQuery(
+    'story_entity',
+    expandedEntityId ?? undefined,
+    currentExpandedEntityLanguageState?.viewLanguage ?? globalDisplayLanguage,
+    { staleTime: Infinity },
+  );
+  const expandedContentReady = !expandedEntityId || !expandedDetail.isLoading;
   const expandedEntityMainAsset = useMainAsset(
     projectId,
     'story_entity',
@@ -964,9 +970,13 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
             exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
             transition={{ duration: 0.2 }}
           >
+            {expandedContentReady ? (
             <ObjectCardExpanded
               itemId={currentExpandedEntity.id}
-              itemData={getEntityData(currentExpandedEntity, currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage)}
+              itemData={{
+                ...getEntityData(currentExpandedEntity, currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage),
+                content: normalizeDoc((expandedDetail.data?.data as Record<string, unknown> | undefined)?.content),
+              }}
               effectiveLanguage={currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage}
               versionNumber={currentExpandedEntity.version.number}
               objectType="story_entity"
@@ -1033,6 +1043,9 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
                 invalidateObjectAssetLinks(projectId, 'story_entity', currentExpandedEntity.id);
               }}
             />
+            ) : (
+              <div className="story-entity-card-expanded-loading">Loading…</div>
+            )}
           </motion.div>
         ) : null}
 

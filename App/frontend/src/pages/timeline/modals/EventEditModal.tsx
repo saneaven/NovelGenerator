@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
@@ -12,6 +12,7 @@ import { Close, Plus, Trash } from '../../../components/icons';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
 import { createEvent, updateEvent, deleteEvent, createEventLink, deleteEventLink } from '../../../data/timeline';
+import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type {
   CalendarConfig,
@@ -108,13 +109,17 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   const canEditProjection = isCreating || Boolean(event?.languageState?.has_requested_language);
   const leafTracks = useMemo(() => collectLeafTracks(tracks, displayLanguage), [tracks, displayLanguage]);
 
+  // Body is markdown in the collection; load the editable tiptap separately.
+  const detail = useObjectQuery('timeline_event', event?.id, displayLanguage, { staleTime: Infinity });
+  const contentReady = isCreating || !detail.isLoading;
+
   const initial = useMemo(() => {
     if (event) {
       const data = (event.data ?? {}) as Record<string, unknown>;
       return {
         name: (data.name as string) || '',
         description: (data.description as string) || '',
-        content: normalizeDoc(data.content),
+        content: normalizeDoc((detail.data?.data as Record<string, unknown> | undefined)?.content),
         startDate: clampTimelineDate({ ...event.startDate }, calendar),
         endDate: event.endDate ? clampTimelineDate({ ...event.endDate }, calendar) : null,
         tags: [...event.tags],
@@ -130,11 +135,16 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
       tags: [] as string[],
       trackId: defaults?.trackId ?? (leafTracks.length === 1 ? leafTracks[0].id : ''),
     };
-  }, [event, defaults, calendar, leafTracks]);
+  }, [event, defaults, calendar, leafTracks, detail.data]);
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [content, setContent] = useState<TipTapDoc>(initial.content);
+  useEffect(() => {
+    if (event && detail.data) {
+      setContent(normalizeDoc((detail.data.data as Record<string, unknown> | undefined)?.content));
+    }
+  }, [event, detail.data]);
   const [startDate, setStartDate] = useState<TimelineDate>(initial.startDate);
   const [endDate, setEndDate] = useState<TimelineDate | null>(initial.endDate);
   const [tags, setTags] = useState<string[]>(initial.tags);
@@ -219,7 +229,8 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
-          content,
+          // Don't overwrite the body before it has loaded.
+          content: contentReady ? content : undefined,
           startDate,
           endDate,
           tags,
@@ -231,7 +242,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [canEditProjection, validate, isCreating, event, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, onClose, onCreated]);
+  }, [canEditProjection, validate, isCreating, event, contentReady, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, onClose, onCreated]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -526,7 +537,9 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
 
         <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
           <label className="tl-form__label">{t('timeline.eventModal.content')}</label>
-          <RichTextEditor initialContent={content} onChange={setContent} />
+          {contentReady
+            ? <RichTextEditor initialContent={content} onChange={setContent} />
+            : <div className="tl-form__content-loading">{t('common.loading')}</div>}
         </div>
       </div>
     </BaseModal>

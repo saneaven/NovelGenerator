@@ -17,6 +17,7 @@ import { useDndSensors } from '../../../hooks/useDndSensors';
 import { CSS } from '@dnd-kit/utilities';
 import { AnimatePresence, motion } from 'motion/react';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
+import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import { useUpdateObjectMutation } from '../../../data/objects/mutations/useUpdateObjectMutation';
 import { useCreateObjectMutation } from '../../../data/objects/mutations/useCreateObjectMutation';
 import { useDeleteObjectMutation } from '../../../data/objects/mutations/useDeleteObjectMutation';
@@ -55,22 +56,20 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const createMutation = useCreateObjectMutation();
   const deleteMutation = useDeleteObjectMutation();
 
-  // Outline collection in tiptap (structure + edit data) and markdown (rendered
-  // previews, replacing the old getRichTextMarkdown cache).
-  const outlineQuery = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage);
+  // markdown collection = list source; tiptap body loaded per-item on edit.
   const outlineMarkdownQuery = useObjectCollectionQuery(projectId, 'outline', globalDisplayLanguage, 'markdown');
-  const showSkeleton = outlineQuery.isLoading;
+  const showSkeleton = outlineMarkdownQuery.isLoading;
   const settings = useSettings();
   const openSidebar = useUiStore((state) => state.openSidebar);
 
   // Index objects by id for the per-id lookups the old store projection provided.
   const serverObjects = useMemo(() => {
     const map: Record<string, UnifiedObject> = {};
-    for (const obj of outlineQuery.data ?? []) {
+    for (const obj of outlineMarkdownQuery.data ?? []) {
       map[obj.id] = obj;
     }
     return map;
-  }, [outlineQuery.data]);
+  }, [outlineMarkdownQuery.data]);
 
   // Optimistic overlay for drag-and-drop reorder. While a reposition write is in
   // flight we render this locally-patched objects Record for instant feedback,
@@ -514,6 +513,14 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     () => (editingObject ? getLanguageState(editingObject) : null),
     [editingObject, getLanguageState],
   );
+  // Load the editable tiptap body for the item under edit.
+  const editingDetail = useObjectQuery(
+    'outline',
+    editingTarget?.id,
+    editingLanguageState?.viewLanguage ?? globalDisplayLanguage,
+    { staleTime: Infinity },
+  );
+  const editingContentReady = !editingTarget || !editingDetail.isLoading;
   const editingData = useMemo<{ name: string; description: string; content: TipTapDoc }>(
     () => {
       if (!editingObject || !editingLanguageState) {
@@ -523,11 +530,10 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       return {
         name: data.name ?? '',
         description: data.description ?? '',
-        content: normalizeDoc(data.content),
+        content: normalizeDoc((editingDetail.data?.data as Record<string, unknown> | undefined)?.content),
       };
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingObject, editingLanguageState],
+    [editingObject, editingLanguageState, editingDetail.data],
   );
 
   // Get acts for selected outline
@@ -612,7 +618,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           type: 'outline',
           id: active.id as string,
           request: {
-            data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+            // metadata-only reposition; empty data keeps the stored body.
+            data: {},
             language: languageState.viewLanguage,
             metadata: { parent_id: selectedOutlineId, position: newIndex },
             create_new_version: false,
@@ -662,7 +669,8 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           type: 'outline',
           id: active.id as string,
           request: {
-            data: getDataForLanguage((activeObject as UnifiedObject) || { data: {} } as UnifiedObject, languageState.viewLanguage),
+            // metadata-only reposition; empty data keeps the stored body.
+            data: {},
             language: languageState.viewLanguage,
             metadata: { parent_id: actId, position: newIndex },
             create_new_version: false,
@@ -690,7 +698,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     const targetId = versionHistoryTargetId ?? selectedOutlineId;
     if (!targetId) return;
     try {
-      await Promise.all([outlineQuery.refetch(), outlineMarkdownQuery.refetch()]);
+      await outlineMarkdownQuery.refetch();
     } catch (error) {
       console.error('Failed to refresh after restore:', error);
     }
@@ -1175,6 +1183,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
             exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
             transition={{ duration: 0.2 }}
           >
+            {editingContentReady ? (
             <ObjectCardExpanded
               itemId={editingTarget.id}
               objectType={editingTarget.kind}
@@ -1208,6 +1217,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
               onSave={handleSaveOutlineItem}
               onCancel={closeEditor}
             />
+            ) : (
+              <div className="outline-card-expanded-loading">Loading…</div>
+            )}
           </motion.div>
         ) : creatingTarget ? (
           <motion.div

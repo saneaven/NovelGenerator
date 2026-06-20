@@ -332,7 +332,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
       />
 
       <div className="timeline-page__body">
-        {isLoading && tracks.length === 0 ? (
+        {isLoading ? (
           <TimelineSkeleton />
         ) : emptyKind ? (
           <TimelineEmptyState

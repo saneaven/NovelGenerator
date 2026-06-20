@@ -29,6 +29,8 @@ function applyTimelineObject(object: UnifiedObject<TimelineObjectData>): void {
   const projectId = object.metadata?.project_id;
   if (typeof projectId !== 'string') return;
   queryClient.invalidateQueries({ queryKey: objectKeys.collectionType(projectId, object.type) });
+  // Mark the body's detail query stale so the next edit-open is fresh.
+  queryClient.invalidateQueries({ queryKey: objectKeys.detailOf(object.type, object.id) });
 }
 
 function invalidateTimelineCollections(projectId: string): void {

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
@@ -7,6 +7,7 @@ import { RichTextEditor } from '../../../components/RichTextEditor';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
 import { createTrack, updateTrack } from '../../../data/timeline';
+import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type { TimelineTrack } from '../../../types/timeline';
 import { SWATCH_COLORS, oklchToHex } from '../timelineColors';
@@ -41,6 +42,10 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
 
   const isCreating = track === null;
   const canEditProjection = isCreating || Boolean(track?.languageState?.has_requested_language);
+  // Body is markdown in the collection; load the editable tiptap separately.
+  const detail = useObjectQuery('timeline_track', track?.id, displayLanguage, { staleTime: Infinity });
+  const contentReady = isCreating || !detail.isLoading;
+
   const initial = useMemo(() => {
     if (!track) {
       // null = let the server assign an automatic color
@@ -50,14 +55,19 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     return {
       name: (data.name as string) || '',
       description: (data.description as string) || '',
-      content: normalizeDoc(data.content),
+      content: normalizeDoc((detail.data?.data as Record<string, unknown> | undefined)?.content),
       color: track.color as string | null,
     };
-  }, [track, displayLanguage]);
+  }, [track, displayLanguage, detail.data]);
 
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [content, setContent] = useState<TipTapDoc>(initial.content);
+  useEffect(() => {
+    if (track && detail.data) {
+      setContent(normalizeDoc((detail.data.data as Record<string, unknown> | undefined)?.content));
+    }
+  }, [track, detail.data]);
   const [color, setColor] = useState<string | null>(initial.color);
   const [isSaving, setIsSaving] = useState(false);
   const [nameError, setNameError] = useState(false);
@@ -108,7 +118,8 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
           language: displayLanguage,
           name: name.trim(),
           description: description.trim(),
-          content,
+          // Don't overwrite the body before it has loaded.
+          content: contentReady ? content : undefined,
           // color cannot be cleared; only send it when actually changed
           ...(color !== null && color !== initial.color ? { color } : {}),
         }, displayLanguage);
@@ -119,7 +130,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [canEditProjection, name, description, content, color, initial.color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
+  }, [canEditProjection, name, description, content, contentReady, color, initial.color, isCreating, track, parentId, projectId, displayLanguage, createTrack, updateTrack, onClose, onCreated]);
 
   return (
     <BaseModal
@@ -255,7 +266,9 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
 
         <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
           <label className="tl-form__label">{t('timeline.trackModal.content')}</label>
-          <RichTextEditor initialContent={content} onChange={setContent} />
+          {contentReady
+            ? <RichTextEditor initialContent={content} onChange={setContent} />
+            : <div className="tl-form__content-loading">{t('common.loading')}</div>}
         </div>
       </div>
     </BaseModal>

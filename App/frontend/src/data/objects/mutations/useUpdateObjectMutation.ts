@@ -75,6 +75,15 @@ export function useUpdateObjectMutation() {
       ) {
         qc.invalidateQueries({ queryKey: objectKeys.collectionLang(projectId, 'outline', request.language) });
       }
+
+      // Refresh the edited language's markdown projection so list previews update.
+      if (isRichPreviewType(type) && typeof projectId === 'string') {
+        if (isStoryEntityTreeType(type)) {
+          qc.invalidateQueries({ queryKey: objectKeys.storyTree(projectId, request.language, 'markdown') });
+        } else {
+          qc.invalidateQueries({ queryKey: objectKeys.collection(projectId, type, request.language, 'markdown') });
+        }
+      }
     },
     onSettled: (_updated, _err, { type, id, request }) => {
       if (isRichPreviewType(type)) {

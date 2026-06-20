@@ -649,6 +649,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     </div>
   );
 
+  const renderPanelBody = () => {
   if (!selectedChapterId) {
     const isChapterMissing = chaptersInitialized && !hasChapters;
     const heading = isChapterMissing
@@ -917,14 +918,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Chapter Sidebar */}
-        <ChapterSidebar
-          projectId={projectId}
-          selectedChapterId={selectedChapterId}
-          onSelectChapter={onSelectChapter}
-          displayLanguage={globalDisplayLanguage}
-        />
       </div>
 
       {/* AI Edit Modal */}
@@ -990,6 +983,20 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               ? t('novelEditor.modal.changeImage')
               : t('novelEditor.modal.insertImage')
         }
+      />
+    </>
+  );
+  };
+
+  return (
+    <>
+      {renderPanelBody()}
+      {/* Always mounted so loading-state swaps in the panel body don't unmount (close) the sidebar. */}
+      <ChapterSidebar
+        projectId={projectId}
+        selectedChapterId={selectedChapterId}
+        onSelectChapter={onSelectChapter}
+        displayLanguage={globalDisplayLanguage}
       />
     </>
   );
