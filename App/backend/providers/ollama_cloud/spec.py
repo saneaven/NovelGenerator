@@ -60,13 +60,74 @@ SPEC = ProviderSpec(
                         "effort": FieldSpec(
                             kind="enum",
                             default="medium",
-                            options=("low", "medium", "high"),
+                            options=("low", "medium", "high", "max"),
                             ui=UIHint(
                                 widget="select",
                                 label_key="settings.taskConfig.thinking_config.effortLevel",
                                 help_key="settings.taskConfig.thinking_config.effortHintGeneric",
                                 option_label_prefix="settings.taskConfig.thinking_config.effortOptions",
                                 order=20,
+                            ),
+                        ),
+                    },
+                ),
+                "provider_settings": ObjectSpec(
+                    fields={
+                        "options": FieldSpec(
+                            kind="object",
+                            ui=UIHint(
+                                widget="json",
+                                label_key="settings.taskConfig.ollamaCloud.options",
+                                help_key="settings.taskConfig.ollamaCloud.optionsHint",
+                                order=100,
+                            ),
+                        ),
+                        "format": FieldSpec(
+                            kind="object",
+                            ui=UIHint(
+                                widget="json",
+                                label_key="settings.taskConfig.ollamaCloud.format",
+                                help_key="settings.taskConfig.ollamaCloud.formatHint",
+                                order=110,
+                            ),
+                        ),
+                        "keep_alive": FieldSpec(
+                            kind="string",
+                            ui=UIHint(
+                                widget="text",
+                                label_key="settings.taskConfig.ollamaCloud.keepAlive",
+                                placeholder_key="settings.taskConfig.ollamaCloud.keepAlivePlaceholder",
+                                help_key="settings.taskConfig.ollamaCloud.keepAliveHint",
+                                order=120,
+                            ),
+                        ),
+                        "logprobs": FieldSpec(
+                            kind="bool",
+                            ui=UIHint(
+                                widget="toggle",
+                                label_key="settings.taskConfig.ollamaCloud.logprobs",
+                                help_key="settings.taskConfig.ollamaCloud.logprobsHint",
+                                order=130,
+                            ),
+                        ),
+                        "top_logprobs": FieldSpec(
+                            kind="int",
+                            min_value=0,
+                            max_value=20,
+                            ui=UIHint(
+                                widget="number",
+                                label_key="settings.taskConfig.ollamaCloud.topLogprobs",
+                                help_key="settings.taskConfig.ollamaCloud.topLogprobsHint",
+                                order=140,
+                            ),
+                        ),
+                        "custom_fields": FieldSpec(
+                            kind="object",
+                            ui=UIHint(
+                                widget="json",
+                                label_key="settings.taskConfig.ollamaCloud.customFields",
+                                help_key="settings.taskConfig.ollamaCloud.customFieldsHint",
+                                order=999,
                             ),
                         ),
                     },

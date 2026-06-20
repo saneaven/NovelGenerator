@@ -837,6 +837,21 @@
         },
         "customFields": "��스텀 필드",
         "customFieldsHint": "요청 본문에 마지막으로 병합되는 JSON 객체입니다. 키가 충돌하면 이 값이 우선합니다."
+      },
+      "ollamaCloud": {
+        "options": "네이티브 옵션",
+        "optionsHint": "Ollama options 필드에 병합할 JSON 객체입니다. think 키는 여기서 무시되며 사고 모드를 사용합니다.",
+        "format": "응답 형식",
+        "formatHint": "Ollama 구조화 출력용 JSON 스키마 객체입니다. \"json\" 같은 문자열 형식은 커스텀 필드를 사용하세요.",
+        "keepAlive": "Keep Alive",
+        "keepAlivePlaceholder": "5m",
+        "keepAliveHint": "요청 후 Ollama가 모델을 로드 상태로 유지할 시간입니다.",
+        "logprobs": "로그 확률",
+        "logprobsHint": "지원되는 경우 Ollama에 로그 확률 데이터를 요청합니다.",
+        "topLogprobs": "상위 로그 확률 수",
+        "topLogprobsHint": "logprobs가 활성화되었을 때 반환할 후보 토큰 수입니다.",
+        "customFields": "커스텀 필드",
+        "customFieldsHint": "네이티브 /api/chat 요청 본문에 마지막으로 병합되는 JSON 객체입니다. 키가 충돌하면 이 값이 우선합니다."
       }
     },
     "llmLog": {

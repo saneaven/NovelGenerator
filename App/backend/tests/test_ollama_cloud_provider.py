@@ -99,7 +99,24 @@ def test_ollama_cloud_credentials_normalize_to_api_key_only() -> None:
     assert normalized == {"api_key": "  ollama-key  "}
 
 
-def test_ollama_cloud_task_config_limits_reasoning_effort() -> None:
+def test_ollama_cloud_task_config_allows_max_thinking_effort() -> None:
+    normalized = normalize_task_config(
+        "ollama_cloud",
+        {
+            "provider": "ollama_cloud",
+            "model": "glm-5.2:cloud",
+            "temperature": 0.2,
+            "advanced": {
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "max"},
+            },
+        },
+    )
+
+    assert normalized["advanced"]["thinking_config"]["effort"] == "max"
+
+
+def test_ollama_cloud_task_config_defaults_invalid_reasoning_effort() -> None:
     normalized = normalize_task_config(
         "ollama_cloud",
         {
@@ -116,68 +133,87 @@ def test_ollama_cloud_task_config_limits_reasoning_effort() -> None:
     assert normalized["advanced"]["thinking_config"]["effort"] == "medium"
 
 
-def test_ollama_cloud_request_uses_openai_base_url_and_reasoning_effort() -> None:
+def test_ollama_cloud_native_request_maps_task_config_and_provider_settings() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
 
-    request = provider._prepare_request_kwargs(
-        messages=[{"role": "user", "content": "hello"}],
-        model="qwen3",
+    request = provider._prepare_request_body(
+        messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
+        model="glm-5.2:cloud",
         temperature=0.7,
-        tools=[{"name": "lookup", "parameters": {"type": "object"}}],
-        tool_choice=None,
+        tools=[{"name": "lookup", "description": "Lookup", "parameters": {"type": "object"}}],
         max_tokens=128,
-        provider_preference=None,
-        thinking_config={"effort": "high"},
+        thinking_config={"effort": "max"},
         thinking_mode="model",
-        provider_settings=None,
+        provider_settings={
+            "options": {"top_p": 0.9, "think": "ignored", "temperature": 0.3},
+            "format": {"type": "object", "properties": {"answer": {"type": "string"}}},
+            "keep_alive": "10m",
+            "logprobs": True,
+            "top_logprobs": 3,
+            "custom_fields": {"extra_native": "ok"},
+        },
     )
 
-    assert provider.base_url == "https://ollama.com/v1"
-    assert request["extra_body"] == {"reasoning_effort": "high"}
-    assert request["tools"] == [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+    assert request["model"] == "glm-5.2:cloud"
+    assert request["stream"] is True
+    assert request["think"] == "max"
+    assert request["options"] == {"temperature": 0.3, "num_predict": 128, "top_p": 0.9}
+    assert "think" not in request["options"]
+    assert request["format"] == {"type": "object", "properties": {"answer": {"type": "string"}}}
+    assert request["keep_alive"] == "10m"
+    assert request["logprobs"] is True
+    assert request["top_logprobs"] == 3
+    assert request["extra_native"] == "ok"
+    assert request["tools"] == [
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "description": "Lookup",
+                "parameters": {"type": "object"},
+            },
+        }
+    ]
 
 
-def test_ollama_cloud_request_disables_native_reasoning_when_off() -> None:
+@pytest.mark.parametrize("thinking_mode", ["off", "custom"])
+def test_ollama_cloud_native_request_disables_thinking(thinking_mode: str) -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
 
-    request = provider._prepare_request_kwargs(
-        messages=[{"role": "user", "content": "hello"}],
+    request = provider._prepare_request_body(
+        messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
         model="qwen3",
         temperature=0.7,
         tools=None,
-        tool_choice=None,
         max_tokens=None,
-        provider_preference=None,
         thinking_config={"effort": "high"},
-        thinking_mode="off",
+        thinking_mode=thinking_mode,
         provider_settings=None,
     )
 
-    assert request["extra_body"] == {"reasoning_effort": "none"}
+    assert request["think"] is False
 
 
-def test_ollama_cloud_request_disables_native_reasoning_for_custom_thinking() -> None:
+def test_ollama_cloud_native_request_maps_all_think_efforts() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
 
-    request = provider._prepare_request_kwargs(
-        messages=[{"role": "user", "content": "hello"}],
-        model="qwen3",
-        temperature=0.7,
-        tools=None,
-        tool_choice=None,
-        max_tokens=None,
-        provider_preference=None,
-        thinking_config={"effort": "high"},
-        thinking_mode="custom",
-        provider_settings=None,
-    )
-
-    assert request["extra_body"] == {"reasoning_effort": "none"}
+    for effort in ("low", "medium", "high", "max"):
+        request = provider._prepare_request_body(
+            messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
+            model="qwen3",
+            temperature=0.7,
+            tools=None,
+            max_tokens=None,
+            thinking_config={"effort": effort},
+            thinking_mode="model",
+            provider_settings=None,
+        )
+        assert request["think"] == effort
 
 
-def _persisted_reasoning_text_from_chunk(provider: OllamaCloudProvider, chunk: dict[str, Any]) -> str:
+def _persisted_reasoning_text_from_native_chunk(provider: OllamaCloudProvider, chunk: dict[str, Any]) -> str:
     assembler = FallbackSnapshotAssembler(provider="ollama_cloud", model="qwen3")
-    for event in provider._chunk_to_events(chunk):
+    for event in provider._events_from_chunk(chunk):
         if event.kind == "delta" and event.delta is not None:
             assembler.apply_delta(event.delta)
 
@@ -193,40 +229,16 @@ def _persisted_reasoning_text_from_chunk(provider: OllamaCloudProvider, chunk: d
     return reasoning["data"]["reasoning_text"]
 
 
-def test_ollama_cloud_string_thinking_delta_is_normalized_and_persisted() -> None:
+def test_ollama_cloud_native_thinking_chunk_is_persistable() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
-    chunk, extra = provider._mutate_chunk(
-        {"choices": [{"delta": {"thinking": "checked path ", "content": "answer"}}]},
-        "model",
-    )
-    assert extra == []
 
-    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "checked path "
+    assert _persisted_reasoning_text_from_native_chunk(
+        provider,
+        {"message": {"thinking": "checked path ", "content": "answer"}},
+    ) == "checked path "
 
 
-def test_ollama_cloud_reasoning_delta_is_normalized_and_persisted() -> None:
-    provider = OllamaCloudProvider({"api_key": "ollama-key"})
-    chunk, extra = provider._mutate_chunk(
-        {"choices": [{"delta": {"reasoning": "checked route ", "content": "answer"}}]},
-        "model",
-    )
-    assert extra == []
-
-    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "checked route "
-
-
-def test_ollama_cloud_reasoning_delta_does_not_override_existing_thinking() -> None:
-    provider = OllamaCloudProvider({"api_key": "ollama-key"})
-    chunk, extra = provider._mutate_chunk(
-        {"choices": [{"delta": {"reasoning": "ignored ", "thinking": "kept ", "content": "answer"}}]},
-        "model",
-    )
-    assert extra == []
-
-    assert _persisted_reasoning_text_from_chunk(provider, chunk) == "kept "
-
-
-def test_ollama_cloud_reasoning_text_history_serializes_to_openai_reasoning() -> None:
+def test_ollama_cloud_reasoning_text_history_serializes_to_ollama_thinking() -> None:
     provider = OllamaCloudProvider({"api_key": "ollama-key"})
 
     converted = provider._convert_messages(
@@ -251,7 +263,7 @@ def test_ollama_cloud_reasoning_text_history_serializes_to_openai_reasoning() ->
         {
             "role": "assistant",
             "content": "answer",
-            "reasoning": "checked path ",
+            "thinking": "checked path ",
         }
     ]
 
@@ -285,6 +297,64 @@ def test_ollama_cloud_reasoning_text_history_ignores_non_ollama_detail() -> None
     ]
 
 
+def test_ollama_cloud_tool_results_convert_to_native_tool_messages() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "tool_results",
+                "tool_results": [
+                    {
+                        "tool_call_id": "call_1",
+                        "tool_name": "lookup",
+                        "content": "result",
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "tool",
+            "tool_name": "lookup",
+            "content": "result",
+            "tool_call_id": "call_1",
+        }
+    ]
+
+
+def test_ollama_cloud_native_tool_calls_normalize_to_app_deltas() -> None:
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    assembler = FallbackSnapshotAssembler(provider="ollama_cloud", model="qwen3")
+
+    for event in provider._events_from_chunk(
+        {
+            "message": {
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "function": {
+                            "index": 0,
+                            "name": "lookup",
+                            "arguments": {"query": "x"},
+                        },
+                    }
+                ]
+            }
+        }
+    ):
+        if event.delta is not None:
+            assembler.apply_delta(event.delta)
+
+    snapshot = assembler.finalize_or_raise()
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].id == "call_1"
+    assert snapshot.tool_calls[0].tool_name == "lookup"
+    assert snapshot.tool_calls[0].arguments == {"query": "x"}
+
+
 class _FakeResponse:
     def __init__(self, payload: dict[str, Any], status_code: int = 200, text: str = "") -> None:
         self._payload = payload
@@ -295,9 +365,30 @@ class _FakeResponse:
         return self._payload
 
 
+class _FakeStreamResponse:
+    def __init__(self, lines: list[str], status_code: int = 200, text: str = "") -> None:
+        self.lines = lines
+        self.status_code = status_code
+        self.text = text
+
+    async def __aenter__(self) -> "_FakeStreamResponse":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+    async def aiter_lines(self):
+        for line in self.lines:
+            yield line
+
+    async def aread(self) -> bytes:
+        return self.text.encode("utf-8")
+
+
 class _FakeAsyncClient:
     get_responses: list[_FakeResponse] = []
     post_responses: list[_FakeResponse] = []
+    stream_responses: list[_FakeStreamResponse] = []
     requests: list[dict[str, Any]] = []
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -318,12 +409,140 @@ class _FakeAsyncClient:
         self.requests.append({"method": "POST", "url": url, **kwargs})
         return self.post_responses.pop(0)
 
+    def stream(self, method: str, url: str, **kwargs: Any) -> _FakeStreamResponse:
+        self.requests.append({"method": method, "url": url, **kwargs})
+        return self.stream_responses.pop(0)
+
 
 @pytest.fixture(autouse=True)
 def _reset_fake_client() -> None:
     _FakeAsyncClient.get_responses = []
     _FakeAsyncClient.post_responses = []
+    _FakeAsyncClient.stream_responses = []
     _FakeAsyncClient.requests = []
+
+
+def test_ollama_cloud_stream_chat_posts_to_native_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    _FakeAsyncClient.stream_responses = [
+        _FakeStreamResponse(
+            [
+                '{"message":{"thinking":"plan "},"done":false}',
+                '{"message":{"content":"answer"},"done":false}',
+                '{"done":true,"done_reason":"stop","prompt_eval_count":5,"eval_count":7}',
+            ]
+        )
+    ]
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    events = asyncio.run(
+        _collect_events(
+            provider.stream_chat(
+                messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
+                model="glm-5.2:cloud",
+                temperature=0.7,
+                max_tokens=64,
+                thinking_config={"effort": "max"},
+                thinking_mode="model",
+            )
+        )
+    )
+
+    request = _FakeAsyncClient.requests[0]
+    assert request["method"] == "POST"
+    assert request["url"] == "https://ollama.com/api/chat"
+    assert request["headers"]["Authorization"] == "Bearer ollama-key"
+    assert request["json"]["think"] == "max"
+    assert request["json"]["options"] == {"temperature": 0.7, "num_predict": 64}
+    assert [event.delta.thinking_delta for event in events if event.delta and event.delta.thinking_delta] == ["plan "]
+    assert [event.delta.content_delta for event in events if event.delta and event.delta.content_delta] == ["answer"]
+    meta_events = [event for event in events if event.meta is not None]
+    assert meta_events[-1].meta.usage == {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12}
+    assert meta_events[-1].meta.finish_reason == "stop"
+    assert meta_events[-1].raw_response == {
+        "chunks": [
+            {"message": {"thinking": "plan "}, "done": False},
+            {"message": {"content": "answer"}, "done": False},
+            {"done": True, "done_reason": "stop", "prompt_eval_count": 5, "eval_count": 7},
+        ]
+    }
+
+
+def test_ollama_cloud_stream_chat_parses_custom_thinking_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    _FakeAsyncClient.stream_responses = [
+        _FakeStreamResponse(
+            [
+                '{"message":{"content":"<thinking>plan</thinking>answer"},"done":false}',
+                '{"done":true,"done_reason":"stop"}',
+            ]
+        )
+    ]
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    events = asyncio.run(
+        _collect_events(
+            provider.stream_chat(
+                messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
+                model="qwen3",
+                thinking_config={"effort": "max"},
+                thinking_mode="custom",
+            )
+        )
+    )
+
+    assert _FakeAsyncClient.requests[0]["json"]["think"] is False
+    assert [event.delta.thinking_delta for event in events if event.delta and event.delta.thinking_delta] == ["plan"]
+    assert [event.delta.content_delta for event in events if event.delta and event.delta.content_delta] == ["answer"]
+
+
+def test_ollama_cloud_stream_chat_parses_native_tool_call_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    _FakeAsyncClient.stream_responses = [
+        _FakeStreamResponse(
+            [
+                '{"message":{"content":"<tool_call>{\\"tool\\":\\"lookup\\",\\"query\\":\\"x\\"}</tool_call>"},"done":false}',
+                '{"done":true,"done_reason":"stop"}',
+            ]
+        )
+    ]
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    events = asyncio.run(
+        _collect_events(
+            provider.stream_chat(
+                messages=[{"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}],
+                model="qwen3",
+                thinking_mode="off",
+                native_tool_call=True,
+            )
+        )
+    )
+
+    assembler = FallbackSnapshotAssembler(provider="ollama_cloud", model="qwen3")
+    for event in events:
+        if event.delta is not None:
+            assembler.apply_delta(event.delta)
+    snapshot = assembler.finalize_or_raise()
+
+    assert [event.delta.content_delta for event in events if event.delta and event.delta.content_delta] == []
+    assert len(snapshot.tool_calls) == 1
+    assert snapshot.tool_calls[0].tool_name == "lookup"
+    assert snapshot.tool_calls[0].arguments == {"query": "x"}
+    assert any(event.meta and event.meta.finish_reason == "tool_calls" for event in events)
+
+
+async def _collect_events(stream) -> list[Any]:
+    events = []
+    async for event in stream:
+        events.append(event)
+    return events
 
 
 def test_ollama_cloud_models_use_api_tags(monkeypatch: pytest.MonkeyPatch) -> None:

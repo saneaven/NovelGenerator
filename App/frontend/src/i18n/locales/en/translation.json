@@ -837,6 +837,21 @@
         },
         "customFields": "Custom Fields",
         "customFieldsHint": "JSON object merged into the request body last. If keys collide, these values win."
+      },
+      "ollamaCloud": {
+        "options": "Native Options",
+        "optionsHint": "JSON object merged into the Ollama options field. The think key is ignored here; use Thinking Mode instead.",
+        "format": "Response Format",
+        "formatHint": "JSON schema object for Ollama structured output. Use Custom Fields for string formats such as \"json\".",
+        "keepAlive": "Keep Alive",
+        "keepAlivePlaceholder": "5m",
+        "keepAliveHint": "How long Ollama should keep the model loaded after the request.",
+        "logprobs": "Log Probabilities",
+        "logprobsHint": "Ask Ollama to return log probability data when supported.",
+        "topLogprobs": "Top Log Probabilities",
+        "topLogprobsHint": "Number of likely token alternatives to return when logprobs are enabled.",
+        "customFields": "Custom Fields",
+        "customFieldsHint": "JSON object merged into the native /api/chat request body last. If keys collide, these values win."
       }
     },
     "llmLog": {
