@@ -176,12 +176,15 @@
 }
 
 .thread-message-row__collapse-toggle {
-  margin-top: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs) 0;
   background: transparent;
   border: none;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
   cursor: pointer;
   border-radius: var(--border-radius-sm);
 }

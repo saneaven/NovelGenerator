@@ -35,6 +35,12 @@
     line-height: var(--line-height-normal);
 }
 
+@media (max-width: 768px) {
+    .prompt-manager-description {
+        display: none;
+    }
+}
+
 /* ========================================
    ERROR BANNER
    ======================================== */
