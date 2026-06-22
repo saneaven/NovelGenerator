@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VectorStorageEmbeddingProfileResponse(BaseModel):
@@ -46,10 +46,28 @@ class VectorStorageReindexResponse(BaseModel):
     missing_main_language_sources: int
 
 
+SearchFilterGroup = Literal["story_entity", "outline", "manuscript", "timeline"]
+
+
+class SearchFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groups: List[SearchFilterGroup] = Field(default_factory=list)
+    object_ids: List[UUID] = Field(default_factory=list, alias="objectIds")
+
+
 class SemanticSearchRequest(BaseModel):
     queries: List[str] = Field(..., min_length=1)
     top_k_per_query: int = Field(default=20, ge=1, le=200)
     neighbor_window: int = Field(default=0, ge=0, le=10)
+    filter: Optional[SearchFilter] = None
+
+
+class RegexSearchRequest(BaseModel):
+    pattern: str = Field(..., min_length=1)
+    case_sensitive: bool = False
+    page: int = Field(default=1, ge=1)
+    filter: Optional[SearchFilter] = None
 
 
 class SemanticSearchResult(BaseModel):

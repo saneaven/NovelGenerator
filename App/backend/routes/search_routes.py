@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -15,6 +15,7 @@ from ..schemas.search import (
     VectorStorageDeleteObjectRequest,
     VectorStorageReindexRequest,
     VectorStorageReindexResponse,
+    RegexSearchRequest,
     SemanticSearchRequest,
     SemanticSearchResponse,
     SemanticSearchResult,
@@ -186,6 +187,7 @@ async def semantic_search(
             neighbor_window=request.neighbor_window,
             max_primary_items=search_settings.retrieval.max_primary_items,
             max_total_items=search_settings.retrieval.max_total_items,
+            search_filter=request.filter,
         )
         return SemanticSearchResponse(results=[SemanticSearchResult(**r) for r in results])
     except ValueError as e:
@@ -194,19 +196,17 @@ async def semantic_search(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/projects/{project_id}/search/regex", response_model=RegexSearchResponse)
+@router.post("/projects/{project_id}/search/regex", response_model=RegexSearchResponse)
 async def regex_search(
     project_id: UUID,
-    pattern: str = Query(..., min_length=1),
-    case_sensitive: bool = Query(False),
-    page: int = Query(1, ge=1),
+    request: RegexSearchRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_owned_project(db, user_id=current_user.id, project_id=project_id)
     _require_vector_storage_enabled(db, user_id=current_user.id)
 
-    regex_pattern = (pattern or "").strip()
+    regex_pattern = (request.pattern or "").strip()
     if not regex_pattern:
         raise HTTPException(status_code=400, detail="Pattern must not be empty")
 
@@ -218,14 +218,15 @@ async def regex_search(
             user_id=current_user.id,
             project_id=project_id,
             pattern=regex_pattern,
-            case_sensitive=case_sensitive,
-            page=page,
+            case_sensitive=request.case_sensitive,
+            page=request.page,
             page_size=page_size,
+            search_filter=request.filter,
         )
         return RegexSearchResponse(
             pattern=regex_pattern,
-            case_sensitive=case_sensitive,
-            page=page,
+            case_sensitive=request.case_sensitive,
+            page=request.page,
             page_size=page_size,
             total=int(data.get("total") or 0),
             results=[SemanticSearchResult(**r) for r in (data.get("results") or [])],

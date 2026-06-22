@@ -155,6 +155,20 @@ def test_search_tools_are_offer_gated_by_vector_storage() -> None:
     assert legacy_gate not in source
 
 
+def test_search_tool_filter_schema_uses_object_ids_without_object_type() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    source = (
+        backend_root / "services" / "tool_engine" / "modules" / "search_feature_module.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"filter": _SEARCH_FILTER_SCHEMA' in source
+    assert '"objectIds"' in source
+    assert '"object_type"' not in source
+    assert '"story_entity"' in source
+    assert '"timeline"' in source
+    assert '"additionalProperties": False' in source
+
+
 def test_archive_orchestrator_invalidates_resume_cache() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     source = (backend_root / "services" / "memory" / "archive_orchestrator.py").read_text(encoding="utf-8")

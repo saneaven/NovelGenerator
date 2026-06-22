@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pydantic import ValidationError
+
+from ....schemas.search import SearchFilter
 from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolExecutionOutcome, ToolFeatureModule, ToolSpec
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
@@ -8,6 +11,37 @@ from ....services.semantic_search_service import build_search_payload, search_pr
 from ....services.settings_service import settings_service
 from .feature_common import filter_allowed_bindings
 from .shared import filter_allowed_specs, is_non_journey, obj_schema
+
+
+_SEARCH_FILTER_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "groups": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": ["story_entity", "outline", "manuscript", "timeline"],
+            },
+        },
+        "objectIds": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "format": "uuid",
+            },
+        },
+    },
+}
+
+
+def _coerce_search_filter(raw_filter) -> SearchFilter | None:
+    if raw_filter is None:
+        return None
+    try:
+        return SearchFilter.model_validate(raw_filter)
+    except ValidationError as exc:
+        raise ValueError("filter must include only groups and objectIds with valid values") from exc
 
 
 def _search_specs(ctx) -> list[ToolSpec]:
@@ -24,6 +58,7 @@ def _search_specs(ctx) -> list[ToolSpec]:
                         "pattern": {"type": "string"},
                         "page": {"type": "integer"},
                         "case_sensitive": {"type": "boolean"},
+                        "filter": _SEARCH_FILTER_SCHEMA,
                     },
                     ["pattern"],
                 ),
@@ -32,7 +67,13 @@ def _search_specs(ctx) -> list[ToolSpec]:
             ToolSpec(
                 name="search_semantic",
                 description="Semantic search in the project knowledge base.",
-                parameters=obj_schema({"queries": {"type": "array", "items": {"type": "string"}}}, ["queries"]),
+                parameters=obj_schema(
+                    {
+                        "queries": {"type": "array", "items": {"type": "string"}},
+                        "filter": _SEARCH_FILTER_SCHEMA,
+                    },
+                    ["queries"],
+                ),
                 auto_approve_category="search",
             ),
         ],
@@ -73,14 +114,23 @@ class SearchFeatureModule(ToolFeatureModule):
                     page = args.get("page")
                     if page is not None and (not isinstance(page, int) or page < 1):
                         return invalid_result("validate_search_regex", "page must be a positive integer")
+                    try:
+                        _coerce_search_filter(args.get("filter"))
+                    except ValueError as exc:
+                        return invalid_result("validate_search_regex", str(exc))
                     return valid_result()
 
                 queries = args.get("queries")
                 if not isinstance(queries, list) or len(queries) == 0 or not all(isinstance(q, str) and q.strip() for q in queries):
                     return invalid_result("validate_search_semantic", "queries must be non-empty string[]")
+                try:
+                    _coerce_search_filter(args.get("filter"))
+                except ValueError as exc:
+                    return invalid_result("validate_search_semantic", str(exc))
                 return valid_result()
 
             async def _execute(args, execution_ctx, _tool_name=tool_name):
+                search_filter = _coerce_search_filter(args.get("filter"))
                 if _tool_name == "search_regex":
                     pattern = str(args.get("pattern") or "").strip()
                     case_sensitive = args.get("case_sensitive") is True
@@ -95,6 +145,7 @@ class SearchFeatureModule(ToolFeatureModule):
                         case_sensitive=case_sensitive,
                         page=page,
                         page_size=page_size,
+                        search_filter=search_filter,
                     )
                     total = raw.get("total", 0)
                     grouped = build_search_payload(
@@ -107,6 +158,7 @@ class SearchFeatureModule(ToolFeatureModule):
                         page=page,
                         page_size=page_size,
                         total=total,
+                        search_filter=search_filter,
                     )
                     return ToolExecutionOutcome(
                         lifecycle="applied",
@@ -135,6 +187,7 @@ class SearchFeatureModule(ToolFeatureModule):
                     neighbor_window=search_cfg.retrieval.neighbor_window,
                     max_primary_items=search_cfg.retrieval.max_primary_items,
                     max_total_items=search_cfg.retrieval.max_total_items,
+                    search_filter=search_filter,
                 )
                 grouped = build_search_payload(
                     execution_ctx.db,
@@ -143,6 +196,7 @@ class SearchFeatureModule(ToolFeatureModule):
                     language=execution_ctx.language,
                     queries=queries,
                     total=len(raw_results),
+                    search_filter=search_filter,
                 )
                 return ToolExecutionOutcome(
                     lifecycle="applied",

@@ -17,6 +17,14 @@ from .semantic_embedding_service import embed_many
 from .semantic_index_service import get_main_language
 
 
+SEARCH_FILTER_GROUP_OBJECT_TYPES: Dict[str, Tuple[str, ...]] = {
+    "story_entity": ("story_entity",),
+    "outline": ("outline",),
+    "manuscript": ("manuscript",),
+    "timeline": ("timeline_track", "timeline_event"),
+}
+
+
 def _vec_to_pg(vec: List[float]) -> str:
     return "[" + ",".join(str(float(x)) for x in vec) + "]"
 
@@ -27,6 +35,93 @@ def _raise_if_invalid_regex(exc: DBAPIError) -> None:
         raise ValueError("Invalid regex pattern") from exc
 
 
+def _normalize_search_filter(search_filter: Any | None) -> Dict[str, Any] | None:
+    if search_filter is None:
+        return None
+
+    if isinstance(search_filter, dict):
+        unknown = set(search_filter.keys()) - {"groups", "objectIds"}
+        if unknown:
+            raise ValueError(f"Unknown search filter fields: {', '.join(sorted(unknown))}")
+        raw_groups = search_filter.get("groups") or []
+        raw_object_ids = search_filter.get("objectIds") or []
+    else:
+        raw_groups = getattr(search_filter, "groups", [])
+        raw_object_ids = getattr(search_filter, "object_ids", [])
+
+    if not isinstance(raw_groups, list):
+        raise ValueError("search filter groups must be an array")
+    if not isinstance(raw_object_ids, list):
+        raise ValueError("search filter objectIds must be an array")
+
+    groups: List[str] = []
+    object_types: List[str] = []
+    for raw_group in raw_groups:
+        group = str(raw_group or "").strip()
+        mapped_types = SEARCH_FILTER_GROUP_OBJECT_TYPES.get(group)
+        if mapped_types is None:
+            raise ValueError(f"Invalid search filter group: {raw_group}")
+        if group not in groups:
+            groups.append(group)
+        for object_type in mapped_types:
+            if object_type not in object_types:
+                object_types.append(object_type)
+
+    object_ids: List[UUID] = []
+    for raw_object_id in raw_object_ids:
+        try:
+            object_id = raw_object_id if isinstance(raw_object_id, UUID) else UUID(str(raw_object_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError(f"Invalid search filter object id: {raw_object_id}") from exc
+        if object_id not in object_ids:
+            object_ids.append(object_id)
+
+    if not groups and not object_ids:
+        return None
+
+    return {
+        "groups": groups,
+        "object_types": object_types,
+        "object_ids": object_ids,
+    }
+
+
+def _public_search_filter(search_filter: Any | None) -> Dict[str, Any] | None:
+    normalized = _normalize_search_filter(search_filter)
+    if normalized is None:
+        return None
+
+    payload: Dict[str, Any] = {}
+    groups = normalized.get("groups") or []
+    object_ids = normalized.get("object_ids") or []
+    if groups:
+        payload["groups"] = list(groups)
+    if object_ids:
+        payload["objectIds"] = [str(object_id) for object_id in object_ids]
+    return payload or None
+
+
+def _search_filter_sql(search_filter: Dict[str, Any] | None) -> Tuple[str, Dict[str, Any]]:
+    if search_filter is None:
+        return "", {}
+
+    conditions: List[str] = []
+    params: Dict[str, Any] = {}
+    object_types = list(search_filter.get("object_types") or [])
+    object_ids = list(search_filter.get("object_ids") or [])
+
+    if object_types:
+        conditions.append("s.object_type = ANY(:filter_object_types)")
+        params["filter_object_types"] = object_types
+    if object_ids:
+        conditions.append("s.object_id = ANY(:filter_object_ids)")
+        params["filter_object_ids"] = object_ids
+
+    if not conditions:
+        return "", {}
+    return "\n          AND (" + " OR ".join(conditions) + ")", params
+
+
 def _has_searchable_semantic_chunks(
     db: Session,
     *,
@@ -35,9 +130,11 @@ def _has_searchable_semantic_chunks(
     language: str,
     provider: str,
     model: str,
+    search_filter: Dict[str, Any] | None = None,
 ) -> bool:
+    filter_clause, filter_params = _search_filter_sql(search_filter)
     stmt = sql_text(
-        """
+        f"""
         SELECT 1
         FROM semantic_chunks c
         JOIN semantic_sources s ON s.id = c.source_id
@@ -46,6 +143,7 @@ def _has_searchable_semantic_chunks(
           AND s.language = :language
           AND s.indexed_provider = :provider
           AND s.indexed_model = :model
+          {filter_clause}
         LIMIT 1
         """
     )
@@ -57,6 +155,7 @@ def _has_searchable_semantic_chunks(
             "language": language,
             "provider": provider,
             "model": model,
+            **filter_params,
         },
     ).first()
     return row is not None
@@ -71,6 +170,7 @@ def search_project_by_regex(
     case_sensitive: bool = False,
     page: int = 1,
     page_size: int = 20,
+    search_filter: Any | None = None,
 ) -> Dict[str, Any]:
     regex_pattern = (pattern or "").strip()
     if not regex_pattern:
@@ -87,6 +187,8 @@ def search_project_by_regex(
 
     language = get_main_language(db, user_id=user_id)
     regex_operator = "~" if case_sensitive else "~*"
+    normalized_filter = _normalize_search_filter(search_filter)
+    filter_clause, filter_params = _search_filter_sql(normalized_filter)
 
     base_params = {
         "user_id": user_id,
@@ -95,6 +197,7 @@ def search_project_by_regex(
         "pattern": regex_pattern,
         "provider": str(profile["provider"]),
         "model": str(profile["model"]),
+        **filter_params,
     }
 
     count_stmt = sql_text(
@@ -108,6 +211,7 @@ def search_project_by_regex(
           AND s.indexed_provider = :provider
           AND s.indexed_model = :model
           AND c.text {regex_operator} :pattern
+          {filter_clause}
         """
     )
 
@@ -148,6 +252,7 @@ def search_project_by_regex(
           AND s.indexed_provider = :provider
           AND s.indexed_model = :model
           AND c.text {regex_operator} :pattern
+          {filter_clause}
         ORDER BY
           CASE s.type_group
             WHEN 'story_entity' THEN 0
@@ -249,6 +354,7 @@ def _run_vector_queries(
     neighbor_window: int,
     max_primary_items: int,
     max_total_items: int,
+    search_filter: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
     """Run vector similarity queries in a worker thread with a dedicated DB session.
 
@@ -258,9 +364,10 @@ def _run_vector_queries(
     db_thread = SessionLocal()
     try:
         best: Dict[UUID, Dict[str, Any]] = {}
+        filter_clause, filter_params = _search_filter_sql(search_filter)
 
         stmt = sql_text(
-            """
+            f"""
             SELECT
               c.id AS chunk_id,
               c.source_id AS source_id,
@@ -284,6 +391,7 @@ def _run_vector_queries(
               AND s.language = :language
               AND s.indexed_provider = :provider
               AND s.indexed_model = :model
+              {filter_clause}
             ORDER BY c.embedding <-> (:qv)::vector
             LIMIT :k
             """
@@ -302,6 +410,7 @@ def _run_vector_queries(
                         "provider": provider,
                         "model": model,
                         "k": int(top_k_per_query),
+                        **filter_params,
                     },
                 ).fetchall()
             except Exception as exc:
@@ -394,6 +503,7 @@ async def search_project(
     neighbor_window: int = 0,
     max_primary_items: int = 20,
     max_total_items: int = 60,
+    search_filter: Any | None = None,
 ) -> List[Dict[str, Any]]:
     profile = get_embedding_profile(db, user_id=user_id, feature="search")
     if not profile:
@@ -402,6 +512,7 @@ async def search_project(
     language = get_main_language(db, user_id=user_id)
     provider = str(profile["provider"])
     model = str(profile["model"])
+    normalized_filter = _normalize_search_filter(search_filter)
 
     if not _has_searchable_semantic_chunks(
         db,
@@ -410,6 +521,7 @@ async def search_project(
         language=language,
         provider=provider,
         model=model,
+        search_filter=normalized_filter,
     ):
         return []
 
@@ -434,6 +546,7 @@ async def search_project(
         neighbor_window=neighbor_window,
         max_primary_items=max_primary_items,
         max_total_items=max_total_items,
+        search_filter=normalized_filter,
     )
     return results
 
@@ -528,6 +641,7 @@ def build_search_payload(
     page: Optional[int] = None,
     page_size: Optional[int] = None,
     total: Optional[int] = None,
+    search_filter: Any | None = None,
 ) -> Dict[str, Any]:
     """Transform flat search results into the grouped searchPayload format."""
     # Collect unique (object_type, object_id) pairs
@@ -584,5 +698,8 @@ def build_search_payload(
         payload["pageSize"] = page_size
     if total is not None:
         payload["total"] = total
+    filter_payload = _public_search_filter(search_filter)
+    if filter_payload is not None:
+        payload["filter"] = filter_payload
 
     return payload

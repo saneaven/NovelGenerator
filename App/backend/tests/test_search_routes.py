@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -77,9 +78,11 @@ def test_regex_search_route_returns_http_400_on_invalid_regex(monkeypatch) -> No
         asyncio.run(
             search_routes.regex_search(
                 project_id=uuid4(),
-                pattern="(",
-                case_sensitive=False,
-                page=1,
+                request=search_routes.RegexSearchRequest(
+                    pattern="(",
+                    case_sensitive=False,
+                    page=1,
+                ),
                 current_user=SimpleNamespace(id=uuid4()),
                 db=object(),
             )
@@ -124,9 +127,11 @@ def test_regex_search_route_returns_regex_response(monkeypatch) -> None:
     response = asyncio.run(
         search_routes.regex_search(
             project_id=uuid4(),
-            pattern="hero.*",
-            case_sensitive=True,
-            page=2,
+            request=search_routes.RegexSearchRequest(
+                pattern="hero.*",
+                case_sensitive=True,
+                page=2,
+            ),
             current_user=SimpleNamespace(id=uuid4()),
             db=object(),
         )
@@ -138,3 +143,93 @@ def test_regex_search_route_returns_regex_response(monkeypatch) -> None:
     assert response.page_size == 7
     assert response.total == 1
     assert len(response.results) == 1
+
+
+def test_semantic_search_route_passes_filter_to_service(monkeypatch) -> None:
+    object_id = uuid4()
+    captured: dict[str, object] = {}
+
+    async def _fake_search_project(*_args, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(search_routes, "require_owned_project", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(search_routes, "_require_vector_storage_enabled", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        search_routes.settings_service,
+        "get_search_settings",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            retrieval=SimpleNamespace(max_primary_items=5, max_total_items=9)
+        ),
+    )
+    monkeypatch.setattr(search_routes, "search_project", _fake_search_project)
+
+    response = asyncio.run(
+        search_routes.semantic_search(
+            project_id=uuid4(),
+            request=search_routes.SemanticSearchRequest(
+                queries=["hero"],
+                filter={"groups": ["timeline"], "objectIds": [str(object_id)]},
+            ),
+            current_user=SimpleNamespace(id=uuid4()),
+            db=object(),
+        )
+    )
+
+    assert response.results == []
+    search_filter = captured["search_filter"]
+    assert search_filter.groups == ["timeline"]
+    assert search_filter.object_ids == [object_id]
+
+
+def test_regex_search_route_passes_filter_to_service(monkeypatch) -> None:
+    object_id = uuid4()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(search_routes, "require_owned_project", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(search_routes, "_require_vector_storage_enabled", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        search_routes.settings_service,
+        "get_search_settings",
+        lambda *_args, **_kwargs: SimpleNamespace(regex_page_size=7),
+    )
+
+    def _fake_regex(*_args, **kwargs):
+        captured.update(kwargs)
+        return {"total": 0, "results": []}
+
+    monkeypatch.setattr(search_routes, "search_project_by_regex", _fake_regex)
+
+    response = asyncio.run(
+        search_routes.regex_search(
+            project_id=uuid4(),
+            request=search_routes.RegexSearchRequest(
+                pattern="hero.*",
+                case_sensitive=True,
+                page=2,
+                filter={"groups": ["story_entity"], "objectIds": [str(object_id)]},
+            ),
+            current_user=SimpleNamespace(id=uuid4()),
+            db=object(),
+        )
+    )
+
+    assert response.pattern == "hero.*"
+    assert response.case_sensitive is True
+    assert response.page == 2
+    assert response.page_size == 7
+    assert response.total == 0
+    search_filter = captured["search_filter"]
+    assert search_filter.groups == ["story_entity"]
+    assert search_filter.object_ids == [object_id]
+
+
+def test_search_filter_schema_rejects_invalid_group_and_uuid() -> None:
+    with pytest.raises(ValidationError):
+        search_routes.SemanticSearchRequest(queries=["hero"], filter={"groups": ["basic_info"]})
+
+    with pytest.raises(ValidationError):
+        search_routes.RegexSearchRequest(pattern="hero", filter={"objectIds": ["not-a-uuid"]})
+
+    with pytest.raises(ValidationError):
+        search_routes.RegexSearchRequest(pattern="hero", filter={"object_ids": [str(uuid4())]})

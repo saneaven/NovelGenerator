@@ -145,6 +145,46 @@ def test_search_project_returns_empty_without_embedding_when_index_is_empty(monk
     }
 
 
+def test_search_project_applies_filter_before_embedding(monkeypatch) -> None:
+    db = FakeDB([None])
+    user_id = uuid4()
+    project_id = uuid4()
+    object_id = uuid4()
+    embed_called = {"value": False}
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    async def _fake_embed_many(**_kwargs):
+        embed_called["value"] = True
+        return [[0.1, 0.2]]
+
+    monkeypatch.setattr(semantic_search_service, "embed_many", _fake_embed_many)
+
+    result = asyncio.run(
+        semantic_search_service.search_project(
+            db,
+            user_id=user_id,
+            project_id=project_id,
+            queries=["find hero"],
+            provider_config={"api_key": "x"},
+            search_filter={"groups": ["timeline"], "objectIds": [str(object_id)]},
+        )
+    )
+
+    assert result == []
+    assert embed_called["value"] is False
+    statement, params = db.calls[0]
+    assert "s.object_type = ANY(:filter_object_types)" in statement
+    assert "s.object_id = ANY(:filter_object_ids)" in statement
+    assert params["filter_object_types"] == ["timeline_track", "timeline_event"]
+    assert params["filter_object_ids"] == [object_id]
+
+
 def test_search_project_calls_embedding_when_matching_index_exists(monkeypatch) -> None:
     db = FakeDB([object()])
     user_id = uuid4()
@@ -214,6 +254,48 @@ def test_search_project_calls_embedding_when_matching_index_exists(monkeypatch) 
     assert vector_calls[0]["max_total_items"] == 9
 
 
+def test_run_vector_queries_applies_filter_to_primary_query(monkeypatch) -> None:
+    object_id = uuid4()
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class VectorFakeSession:
+        def execute(self, stmt: object, params: dict[str, object]):
+            calls.append((str(stmt), dict(params)))
+            return RegexFakeResult(rows=[])
+
+        def rollback(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(semantic_search_service, "SessionLocal", lambda: VectorFakeSession())
+
+    result = semantic_search_service._run_vector_queries(
+        query_vectors=[[0.1, 0.2]],
+        user_id=uuid4(),
+        project_id=uuid4(),
+        language="English",
+        provider="openai",
+        model="embed",
+        top_k_per_query=7,
+        neighbor_window=0,
+        max_primary_items=5,
+        max_total_items=9,
+        search_filter=semantic_search_service._normalize_search_filter(
+            {"groups": ["story_entity"], "objectIds": [str(object_id)]}
+        ),
+    )
+
+    assert result == []
+    assert len(calls) == 1
+    statement, params = calls[0]
+    assert "s.object_type = ANY(:filter_object_types)" in statement
+    assert "s.object_id = ANY(:filter_object_ids)" in statement
+    assert params["filter_object_types"] == ["story_entity"]
+    assert params["filter_object_ids"] == [object_id]
+
+
 def test_search_project_by_regex_uses_case_insensitive_operator_by_default(monkeypatch) -> None:
     row = SimpleNamespace(
         chunk_id=uuid4(),
@@ -255,6 +337,81 @@ def test_search_project_by_regex_uses_case_insensitive_operator_by_default(monke
     count_stmt, count_params = db.calls[0]
     assert "c.text ~* :pattern" in count_stmt
     assert count_params["pattern"] == "hero.*wound"
+
+
+def test_search_project_by_regex_applies_story_entity_group_filter(monkeypatch) -> None:
+    db = RegexFakeDB([RegexFakeResult(first_row=SimpleNamespace(total=0))])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    result = semantic_search_service.search_project_by_regex(
+        db,
+        user_id=uuid4(),
+        project_id=uuid4(),
+        pattern="Hero",
+        search_filter={"groups": ["story_entity"]},
+    )
+
+    assert result == {"total": 0, "results": []}
+    statement, params = db.calls[0]
+    assert "s.object_type = ANY(:filter_object_types)" in statement
+    assert "s.object_id = ANY(:filter_object_ids)" not in statement
+    assert params["filter_object_types"] == ["story_entity"]
+
+
+def test_search_project_by_regex_applies_timeline_group_filter(monkeypatch) -> None:
+    db = RegexFakeDB([RegexFakeResult(first_row=SimpleNamespace(total=0))])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    result = semantic_search_service.search_project_by_regex(
+        db,
+        user_id=uuid4(),
+        project_id=uuid4(),
+        pattern="Hero",
+        search_filter={"groups": ["timeline"]},
+    )
+
+    assert result == {"total": 0, "results": []}
+    statement, params = db.calls[0]
+    assert "s.object_type = ANY(:filter_object_types)" in statement
+    assert params["filter_object_types"] == ["timeline_track", "timeline_event"]
+
+
+def test_search_project_by_regex_applies_object_ids_without_type(monkeypatch) -> None:
+    object_id = uuid4()
+    db = RegexFakeDB([RegexFakeResult(first_row=SimpleNamespace(total=0))])
+
+    monkeypatch.setattr(
+        semantic_search_service,
+        "get_embedding_profile",
+        lambda *_args, **_kwargs: {"provider": "openai", "model": "embed"},
+    )
+    monkeypatch.setattr(semantic_search_service, "get_main_language", lambda *_args, **_kwargs: "English")
+
+    result = semantic_search_service.search_project_by_regex(
+        db,
+        user_id=uuid4(),
+        project_id=uuid4(),
+        pattern="Hero",
+        search_filter={"objectIds": [str(object_id)]},
+    )
+
+    assert result == {"total": 0, "results": []}
+    statement, params = db.calls[0]
+    assert "s.object_type = ANY(:filter_object_types)" not in statement
+    assert "s.object_id = ANY(:filter_object_ids)" in statement
+    assert params["filter_object_ids"] == [object_id]
 
 
 def test_search_project_by_regex_uses_case_sensitive_operator_when_enabled(monkeypatch) -> None:
