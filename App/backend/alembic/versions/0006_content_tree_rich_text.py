@@ -23,7 +23,6 @@ from models.db_models import (
     StoryEntity,
 )
 from models.translation_models import ObjectVersion
-from services.asset_markdown import build_markdown_image_alt
 from services.rich_text import (
     empty_doc,
     extract_image_refs,
@@ -56,6 +55,11 @@ def _is_uuid_stem_internal_src(src: str) -> str | None:
         return str(UUID(stem))
     except Exception:
         return None
+
+
+def _build_markdown_image_alt(asset: Asset) -> str | None:
+    asset_id = str(asset.id or "").strip()
+    return asset_id or None
 
 
 def _rewrite_asset_storage(asset: Asset) -> tuple[str, str]:
@@ -109,7 +113,7 @@ def _rewrite_tree_images(
             next_attrs["assetId"] = asset_id
             next_attrs["src"] = new_src_by_asset_id.get(asset_id, src)
             if not str(next_attrs.get("alt") or "").strip():
-                generated_alt = build_markdown_image_alt(asset_by_id[asset_id])
+                generated_alt = _build_markdown_image_alt(asset_by_id[asset_id])
                 if generated_alt:
                     next_attrs["alt"] = generated_alt
         else:
