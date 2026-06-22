@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 from uuid import UUID
 
 from markdown_it_pyrs import MarkdownIt
@@ -18,14 +16,9 @@ def _text_meta(node: Any) -> str:
     return str(getattr(node, "meta", {}).get("content") or "")
 
 
-def _extract_asset_id_from_src(src: str) -> str | None:
-    parsed = urlparse(str(src or ""))
-    path = parsed.path or str(src or "")
-    if not path.startswith("/storage/assets/originals/"):
-        return None
-    stem = Path(path).stem
+def _parse_asset_id_alt(alt: str) -> str | None:
     try:
-        return str(UUID(stem))
+        return str(UUID(str(alt).strip()))
     except Exception:
         return None
 
@@ -105,7 +98,10 @@ def _convert_inline(node: Any, active_marks: list[dict[str, Any]] | None = None)
         alt = "".join(alt_parts).strip()
         if alt:
             attrs["alt"] = alt
-        asset_id = _extract_asset_id_from_src(src)
+        title = str(getattr(node, "meta", {}).get("title") or "")
+        if title:
+            attrs["title"] = title
+        asset_id = _parse_asset_id_alt(alt)
         if asset_id:
             attrs["assetId"] = asset_id
         return [{"type": "image", "attrs": attrs}]

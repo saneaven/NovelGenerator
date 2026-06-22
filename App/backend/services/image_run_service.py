@@ -35,8 +35,8 @@ from ..services.notification_service import (
 )
 from ..services.object_change_events import queue_object_change
 from ..services.object_service import object_service
-from ..services.asset_markdown import build_markdown_image_alt
-from ..services.rich_text import tree_to_markdown
+from ..services.asset_markdown import build_asset_title_map, build_markdown_image_title
+from ..services.rich_text import render_markdown_image, tree_to_markdown
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.settings_service import settings_service
 from ..services.storage_service import storage_service
@@ -273,7 +273,14 @@ async def markdown_for_manuscript(
     content_tree = lang_data.get("content")
     if not isinstance(content_tree, dict):
         raise ValueError("MANUSCRIPT_EMPTY")
-    return tree_to_markdown(content_tree)
+    return tree_to_markdown(
+        content_tree,
+        image_titles_by_asset_id=build_asset_title_map(
+            db,
+            project_id=project_id,
+            trees=[content_tree],
+        ),
+    )
 
 
 def anchor_excerpts(markdown: str, anchor: str) -> tuple[str, str]:
@@ -1090,10 +1097,14 @@ class ImageRunService:
             raise ValueError("insert_before must still match exactly once before applying")
 
         image_src = storage_service.build_public_asset_path(str(asset.file_path))
-        image_alt = build_markdown_image_alt(asset) or ""
+        image_markdown = render_markdown_image(
+            image_src,
+            asset_id=str(asset.id),
+            title=build_markdown_image_title(asset),
+        )
         next_markdown = markdown.replace(
             anchor,
-            f"![{image_alt}]({image_src})\n\n{anchor}",
+            f"{image_markdown}\n\n{anchor}",
             1,
         )
         object_service.update_object(

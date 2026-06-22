@@ -19,6 +19,7 @@ from ...models.translation_models import ObjectVersion, ObjectVersionLanguage
 from ...utils.timeline_calendar import default_calendar, format_date, to_base_units
 from ...utils.story_entities import STORY_ENTITY_TYPE
 from ..basic_info_utils import basic_info_summary_text, normalize_basic_info_data
+from ..asset_markdown import build_asset_title_map
 from ..rich_text import tree_to_markdown
 from ..story_entity_tree_service import (
     build_story_entity_folder_content_map,
@@ -74,9 +75,14 @@ def _resolve_manuscript_lang_data(
     return dict(requested_entry) if isinstance(requested_entry, dict) else {}
 
 
-def _render_rich_text(value: Any) -> str:
+def _render_rich_text(value: Any, *, db: Session | None = None, project_id: UUID | None = None) -> str:
     if isinstance(value, dict):
-        return tree_to_markdown(value)
+        image_titles_by_asset_id = (
+            build_asset_title_map(db, project_id=project_id, trees=[value])
+            if db is not None and project_id is not None
+            else None
+        )
+        return tree_to_markdown(value, image_titles_by_asset_id=image_titles_by_asset_id)
     if isinstance(value, str):
         return value
     return ""
@@ -87,6 +93,8 @@ def _story_entity_payload(
     *,
     lang_data: dict[str, Any],
     folder_path: list[str],
+    db: Session | None = None,
+    project_id: UUID | None = None,
 ) -> dict[str, Any]:
     return {
         "type": STORY_ENTITY_TYPE,
@@ -94,7 +102,7 @@ def _story_entity_payload(
         "id": str(row.id),
         "name": str(lang_data.get("name") or ""),
         "description": str(lang_data.get("description") or ""),
-        "content": _render_rich_text(lang_data.get("content")),
+        "content": _render_rich_text(lang_data.get("content"), db=db, project_id=project_id),
         "folderId": str(row.folder_id) if row.folder_id else None,
         "folderPath": list(folder_path),
         "displayOrder": int(row.display_order or 0),
@@ -269,6 +277,8 @@ def _build_timeline_payload(
     events: list[TimelineEvent],
     get_latest: Any,
     language: str,
+    db: Session | None = None,
+    project_id: UUID | None = None,
 ) -> dict[str, Any]:
     if timeline is None:
         return {
@@ -312,7 +322,7 @@ def _build_timeline_payload(
             "trackName": str(track_data.get("name") or ""),
             "name": str(lang_data.get("name") or ""),
             "description": str(lang_data.get("description") or ""),
-            "content": _render_rich_text(lang_data.get("content")),
+            "content": _render_rich_text(lang_data.get("content"), db=db, project_id=project_id),
             "startDate": dict(event.start_date) if isinstance(event.start_date, dict) else {},
             "endDate": dict(event.end_date) if isinstance(event.end_date, dict) else None,
             "tags": list(event.tags) if isinstance(event.tags, list) else [],
@@ -335,7 +345,7 @@ def _build_timeline_payload(
                     "color": track.color,
                     "name": str(lang_data.get("name") or ""),
                     "description": str(lang_data.get("description") or ""),
-                    "content": _render_rich_text(lang_data.get("content")),
+                    "content": _render_rich_text(lang_data.get("content"), db=db, project_id=project_id),
                     "events": [event_payload(event) for event in events_by_track_id.get(track.id, [])],
                     "children": build_track_tree(track.id),
                 }
@@ -443,7 +453,11 @@ async def build_project_data(
         if guidelines is None:
             return {"id": "", "authorNote": ""}, None
         guideline_data = _lang_data(get_latest("guidelines", guidelines.id), lang)
-        author_note = _render_rich_text(guideline_data.get("authorNote"))
+        author_note = _render_rich_text(
+            guideline_data.get("authorNote"),
+            db=db,
+            project_id=project_id,
+        )
         payload = {
             "id": str(guidelines.id),
             "authorNote": author_note,
@@ -481,6 +495,8 @@ async def build_project_data(
                 row,
                 lang_data=_lang_data(get_latest(STORY_ENTITY_TYPE, row.id), lang),
                 folder_path=folder_path_map.get(row.folder_id, []) if row.folder_id else [],
+                db=db,
+                project_id=project_id,
             )
         story_entity_tree = _build_story_entity_tree(
             folders=story_entity_folders,
@@ -512,7 +528,11 @@ async def build_project_data(
                 "position": int(row.position or 0),
                 "name": str(outline_data.get("name") or ""),
                 "description": str(outline_data.get("description") or ""),
-                "content": _render_rich_text(outline_data.get("content")),
+                "content": _render_rich_text(
+                    outline_data.get("content"),
+                    db=db,
+                    project_id=project_id,
+                ),
                 "manuscriptId": str(manuscript.id) if manuscript is not None else None,
                 "actNumber": numbering.get("actNumber"),
                 "chapterNumber": numbering.get("chapterNumber"),
@@ -577,7 +597,11 @@ async def build_project_data(
             chapter_data = _lang_data(get_latest("outline", chapter.id), lang) if chapter is not None else {}
             numbering = outline_numbering.get(chapter.id, {}) if chapter is not None else {}
 
-            markdown = _render_rich_text(manuscript_data.get("content"))
+            markdown = _render_rich_text(
+                manuscript_data.get("content"),
+                db=db,
+                project_id=project_id,
+            )
 
             payload.append(
                 {
@@ -601,6 +625,8 @@ async def build_project_data(
         events=timeline_events,
         get_latest=get_latest,
         language=language,
+        db=db,
+        project_id=project_id,
     )
 
     content_by_lang: dict[str, Any] = {}
@@ -622,6 +648,8 @@ async def build_project_data(
                 events=timeline_events,
                 get_latest=get_latest,
                 language=lang,
+                db=db,
+                project_id=project_id,
             ),
         }
 

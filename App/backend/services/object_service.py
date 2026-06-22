@@ -59,6 +59,7 @@ from .outline_service import (
     resolve_outline_parent,
 )
 from .asset_change_events import queue_scene_assets_change
+from .asset_markdown import build_payload_asset_title_map
 from .object_change_events import queue_object_change
 from .semantic_index_queue import (
     invalidate_semantic_index as _invalidate_semantic_index,
@@ -236,6 +237,33 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
     return metadata
 
 
+def _metadata_project_uuid(metadata: dict[str, Any]) -> UUID | None:
+    raw_project_id = metadata.get("project_id")
+    try:
+        return UUID(str(raw_project_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _render_asset_titles_for_payload(
+    db: Session,
+    *,
+    project_id: UUID | None,
+    object_type: str,
+    data: dict[str, Any],
+    rich_text_format: str,
+    include_content: bool,
+) -> dict[str, str] | None:
+    if rich_text_format != "markdown" or not include_content or project_id is None:
+        return None
+    return build_payload_asset_title_map(
+        db,
+        project_id=project_id,
+        object_type=object_type,
+        data=data,
+    )
+
+
 def _language_state(
     *,
     requested_language: str,
@@ -265,6 +293,8 @@ def _serialize_object(
     storage_type = _canonical_object_type(object_type)
     latest = latest_version_with_all_languages(db, storage_type, obj.id)
     requested_language = str(language or fallback_language or "").strip()
+    metadata = _get_metadata(db, obj, object_type)
+    project_id_for_assets = _metadata_project_uuid(metadata)
 
     if latest is None:
         if not requested_language:
@@ -293,11 +323,20 @@ def _serialize_object(
             selected_row = rows[0] if rows else None
 
         if selected_row is not None:
+            image_titles_by_asset_id = _render_asset_titles_for_payload(
+                db,
+                project_id=project_id_for_assets,
+                object_type=object_type,
+                data=selected_row.data,
+                rich_text_format=rich_text_format,
+                include_content=include_content,
+            )
             data = _render_language_payload(
                 object_type=object_type,
                 data=selected_row.data,
                 rich_text_format=rich_text_format,
                 include_content=include_content,
+                image_titles_by_asset_id=image_titles_by_asset_id,
             )
             content_language = str(selected_row.language)
         else:
@@ -327,7 +366,7 @@ def _serialize_object(
     serialized = {
         "id": str(obj.id),
         "type": object_type,
-        "metadata": _get_metadata(db, obj, object_type),
+        "metadata": metadata,
         "data": data,
         "language_state": lang_state,
         "version": version,
@@ -345,10 +384,10 @@ def _normalize_rich_value(value: Any, *, rich_text_format: str) -> dict[str, Any
     return tiptap_to_tree(value)
 
 
-def _render_rich_value(value: Any, *, rich_text_format: str) -> Any:
+def _render_rich_value(value: Any, *, rich_text_format: str, image_titles_by_asset_id: dict[str, str] | None = None) -> Any:
     tree = normalize_tree(value)
     if rich_text_format == "markdown":
-        return tree_to_markdown(tree)
+        return tree_to_markdown(tree, image_titles_by_asset_id=image_titles_by_asset_id)
     if rich_text_format == "tree":
         return tree
     return tree_to_tiptap(tree)
@@ -388,6 +427,7 @@ def _render_language_payload(
     data: dict[str, Any],
     rich_text_format: str,
     include_content: bool = True,
+    image_titles_by_asset_id: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Project a stored language payload for the API.
 
@@ -409,14 +449,24 @@ def _render_language_payload(
     if object_type == "guidelines":
         if not include_content:
             return {}
-        return {"authorNote": _render_rich_value(current.get("authorNote"), rich_text_format=rich_text_format)}
+        return {
+            "authorNote": _render_rich_value(
+                current.get("authorNote"),
+                rich_text_format=rich_text_format,
+                image_titles_by_asset_id=image_titles_by_asset_id,
+            )
+        }
     if object_type in {STORY_ENTITY_TYPE, "outline", "timeline_track", "timeline_event"}:
         payload = {
             "name": str(current.get("name") or ""),
             "description": str(current.get("description") or ""),
         }
         if include_content:
-            payload["content"] = _render_rich_value(current.get("content"), rich_text_format=rich_text_format)
+            payload["content"] = _render_rich_value(
+                current.get("content"),
+                rich_text_format=rich_text_format,
+                image_titles_by_asset_id=image_titles_by_asset_id,
+            )
         return payload
     if object_type == "manuscript":
         if not include_content:
@@ -424,7 +474,11 @@ def _render_language_payload(
             return {"wordCount": int(current.get("wordCount") or 0)}
         content = normalize_tree(current.get("content"))
         return {
-            "content": _render_rich_value(content, rich_text_format=rich_text_format),
+            "content": _render_rich_value(
+                content,
+                rich_text_format=rich_text_format,
+                image_titles_by_asset_id=image_titles_by_asset_id,
+            ),
             "wordCount": int(current.get("wordCount") or word_count(content)),
         }
     return current
@@ -1366,16 +1420,29 @@ class ObjectService:
             ]
 
         versions = _versions_desc(db, storage_type, object_id)
+
+        def render_version_payload(lang_data: dict[str, Any]) -> dict[str, Any]:
+            image_titles_by_asset_id = _render_asset_titles_for_payload(
+                db,
+                project_id=project_id,
+                object_type=storage_type,
+                data=lang_data,
+                rich_text_format=rich_text_format,
+                include_content=True,
+            )
+            return _render_language_payload(
+                object_type=storage_type,
+                data=lang_data,
+                rich_text_format=rich_text_format,
+                image_titles_by_asset_id=image_titles_by_asset_id,
+            )
+
         return [
             {
                 "id": str(v.id),
                 "number": int(v.version_number),
                 "data": {
-                    lang: _render_language_payload(
-                        object_type=storage_type,
-                        data=lang_data,
-                        rich_text_format=rich_text_format,
-                    )
+                    lang: render_version_payload(lang_data)
                     for lang, lang_data in payload_map_from_rows(v.languages).items()
                     if isinstance(lang_data, dict)
                 },
@@ -1414,15 +1481,27 @@ class ObjectService:
         if version is None:
             return None
 
+        def render_version_payload(lang_data: dict[str, Any]) -> dict[str, Any]:
+            image_titles_by_asset_id = _render_asset_titles_for_payload(
+                db,
+                project_id=project_id,
+                object_type=storage_type,
+                data=lang_data,
+                rich_text_format=rich_text_format,
+                include_content=True,
+            )
+            return _render_language_payload(
+                object_type=storage_type,
+                data=lang_data,
+                rich_text_format=rich_text_format,
+                image_titles_by_asset_id=image_titles_by_asset_id,
+            )
+
         return {
             "id": str(version.id),
             "number": int(version.version_number),
             "data": {
-                lang: _render_language_payload(
-                    object_type=storage_type,
-                    data=lang_data,
-                    rich_text_format=rich_text_format,
-                )
+                lang: render_version_payload(lang_data)
                 for lang, lang_data in payload_map_from_rows(version.languages).items()
                 if isinstance(lang_data, dict)
             },

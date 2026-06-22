@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from .asset_markdown import build_asset_title_map
 from .object_service import ObjectService
 from .object_version_language_service import latest_payload_with_fallback
 from .patch_utils import apply_single_replacement
@@ -86,7 +87,14 @@ class ManuscriptBatch:
         if not isinstance(content, dict):
             raise ValueError("MANUSCRIPT_EMPTY")
 
-        markdown = tree_to_markdown(content)
+        markdown = tree_to_markdown(
+            content,
+            image_titles_by_asset_id=build_asset_title_map(
+                db,
+                project_id=project_id,
+                trees=[content],
+            ),
+        )
         self._states[key] = BatchState(
             manuscript_id=manuscript_id,
             project_id=project_id,

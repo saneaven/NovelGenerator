@@ -1,6 +1,6 @@
 from .image_refs import extract_image_refs
 from .markdown_parser import markdown_to_tree
-from .markdown_renderer import tree_to_markdown
+from .markdown_renderer import render_markdown_image, tree_to_markdown
 from .normalize import empty_doc, normalize_tree
 from .plain_text import tree_to_text, word_count
 from .registry import RICH_TEXT_FIELDS, get_rich_text_fields, is_rich_text_field
@@ -14,6 +14,7 @@ __all__ = [
     "is_rich_text_field",
     "markdown_to_tree",
     "normalize_tree",
+    "render_markdown_image",
     "tiptap_to_tree",
     "tree_to_markdown",
     "tree_to_text",

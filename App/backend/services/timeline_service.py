@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.db_models import (
+    Asset,
     Project,
     Timeline,
     TimelineEvent,
@@ -139,7 +140,14 @@ def _latest_versions_map(
     }
 
 
-def _with_content_markdown(payload: Any) -> Any:
+def _project_asset_title_map(db: Session, project_id: UUID) -> dict[str, str]:
+    return {
+        str(asset.id): str(asset.name or "").strip() or "Image"
+        for asset in db.query(Asset).filter(Asset.project_id == project_id).all()
+    }
+
+
+def _with_content_markdown(payload: Any, *, image_titles_by_asset_id: dict[str, str] | None = None) -> Any:
     """Augment a per-language payload with a rendered markdown view of its content.
 
     The stored `content` is a rich-text tree; the frontend has no tree→markdown
@@ -148,7 +156,11 @@ def _with_content_markdown(payload: Any) -> Any:
     """
     if not isinstance(payload, dict) or "content" not in payload:
         return payload
-    rendered = tree_to_markdown(payload.get("content")) if payload.get("content") else ""
+    rendered = (
+        tree_to_markdown(payload.get("content"), image_titles_by_asset_id=image_titles_by_asset_id)
+        if payload.get("content")
+        else ""
+    )
     if not rendered:
         return payload
     return {**payload, "content_markdown": rendered}
@@ -157,6 +169,8 @@ def _with_content_markdown(payload: Any) -> Any:
 def _extract_version_payload(
     version_entry: tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None] | None,
     language: str | None,
+    *,
+    image_titles_by_asset_id: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if version_entry is None:
         return {}, {"id": None, "number": 0, "created_at": None}
@@ -178,7 +192,10 @@ def _extract_version_payload(
     else:
         data = payload_map_from_rows(rows)
 
-    data = {language_key: _with_content_markdown(payload) for language_key, payload in data.items()}
+    data = {
+        language_key: _with_content_markdown(payload, image_titles_by_asset_id=image_titles_by_asset_id)
+        for language_key, payload in data.items()
+    }
 
     return data, {
         "id": str(version.id),
@@ -508,8 +525,13 @@ def _serialize_event(
     language: str | None,
     version_map: dict[UUID, tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None]],
     links_by_event_id: dict[UUID, list[TimelineEventLink]],
+    image_titles_by_asset_id: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    data, version = _extract_version_payload(version_map.get(event.id), language)
+    data, version = _extract_version_payload(
+        version_map.get(event.id),
+        language,
+        image_titles_by_asset_id=image_titles_by_asset_id,
+    )
     return {
         "id": str(event.id),
         "track_id": str(event.track_id),
@@ -533,8 +555,13 @@ def _serialize_track_tree(
     event_versions: dict[UUID, tuple[ObjectVersion, list[ObjectVersionLanguage], datetime | None]],
     links_by_event_id: dict[UUID, list[TimelineEventLink]],
     children_by_parent_id: dict[UUID | None, list[TimelineTrack]],
+    image_titles_by_asset_id: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    data, version = _extract_version_payload(track_versions.get(track.id), language)
+    data, version = _extract_version_payload(
+        track_versions.get(track.id),
+        language,
+        image_titles_by_asset_id=image_titles_by_asset_id,
+    )
     return {
         "id": str(track.id),
         "timeline_id": str(track.timeline_id),
@@ -551,6 +578,7 @@ def _serialize_track_tree(
                 language=language,
                 version_map=event_versions,
                 links_by_event_id=links_by_event_id,
+                image_titles_by_asset_id=image_titles_by_asset_id,
             )
             for event in events_by_track_id.get(track.id, [])
         ],
@@ -563,6 +591,7 @@ def _serialize_track_tree(
                 event_versions=event_versions,
                 links_by_event_id=links_by_event_id,
                 children_by_parent_id=children_by_parent_id,
+                image_titles_by_asset_id=image_titles_by_asset_id,
             )
             for child in children_by_parent_id.get(track.id, [])
         ],
@@ -658,6 +687,7 @@ class TimelineService:
 
         track_versions = _latest_versions_map(db, TIMELINE_TRACK_TYPE, [track.id for track in tracks])
         event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events])
+        image_titles_by_asset_id = _project_asset_title_map(db, project_id)
 
         children_by_parent_id: dict[UUID | None, list[TimelineTrack]] = {}
         for track in tracks:
@@ -687,6 +717,7 @@ class TimelineService:
                     event_versions=event_versions,
                     links_by_event_id=links_by_event_id,
                     children_by_parent_id=children_by_parent_id,
+                    image_titles_by_asset_id=image_titles_by_asset_id,
                 )
                 for track in children_by_parent_id.get(None, [])
             ],
@@ -756,6 +787,7 @@ class TimelineService:
             query = query.filter(TimelineEvent.track_id == track_id)
         events = query.all()
         event_versions = _latest_versions_map(db, TIMELINE_EVENT_TYPE, [event.id for event in events])
+        image_titles_by_asset_id = _project_asset_title_map(db, project_id)
         links = _event_link_query(db, project_id).all()
         links_by_event_id: dict[UUID, list[TimelineEventLink]] = {}
         for link in links:
@@ -766,6 +798,7 @@ class TimelineService:
                 language=language,
                 version_map=event_versions,
                 links_by_event_id=links_by_event_id,
+                image_titles_by_asset_id=image_titles_by_asset_id,
             )
             for event in events
         ]

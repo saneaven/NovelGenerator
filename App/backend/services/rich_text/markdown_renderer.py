@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from .normalize import normalize_tree
 
@@ -9,8 +9,47 @@ def _escape_text(text: str) -> str:
     return str(text or "")
 
 
+def _escape_image_alt(text: str) -> str:
+    return (
+        str(text or "")
+        .replace("\\", "\\\\")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace("\r", "\\n")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+    )
 
-def _render_inline(nodes: list[Any] | None) -> str:
+
+def _escape_image_title(text: str) -> str:
+    return (
+        str(text or "")
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace("\r", "\\n")
+    )
+
+
+def render_markdown_image(
+    src: str,
+    *,
+    asset_id: str | None = None,
+    alt: str | None = None,
+    title: str | None = None,
+) -> str:
+    src = str(src or "").strip()
+    if not src:
+        return ""
+    alt_text = str(asset_id or alt or "")
+    image = f"![{_escape_image_alt(alt_text)}]({src}"
+    if title:
+        image += f' "{_escape_image_title(title)}"'
+    return f"{image})"
+
+
+def _render_inline(nodes: list[Any] | None, *, image_titles_by_asset_id: Mapping[str, str] | None = None) -> str:
     parts: list[str] = []
     for node in nodes or []:
         if not isinstance(node, dict):
@@ -37,30 +76,44 @@ def _render_inline(nodes: list[Any] | None) -> str:
             parts.append(text)
         elif node_type == "image":
             attrs = node.get("attrs") or {}
-            alt = _escape_text(str(attrs.get("alt") or ""))
             src = str(attrs.get("src") or "").strip()
             if not src:
                 continue
-            parts.append(f"![{alt}]({src})")
+            asset_id = str(attrs.get("assetId") or "").strip()
+            title = (
+                str(image_titles_by_asset_id.get(asset_id) or "")
+                if image_titles_by_asset_id is not None and asset_id
+                else str(attrs.get("title") or "")
+            )
+            parts.append(render_markdown_image(src, asset_id=asset_id or None, alt=str(attrs.get("alt") or ""), title=title or None))
         elif node_type == "hard_break":
             parts.append("\\\n")
     return "".join(parts)
 
 
-def _render_list_item(node: Any, *, indent: int, marker: str) -> str:
+def _render_list_item(
+    node: Any,
+    *,
+    indent: int,
+    marker: str,
+    image_titles_by_asset_id: Mapping[str, str] | None = None,
+) -> str:
     content = node.get("content") or []
     if not content:
         return " " * indent + f"{marker} \n"
     first = content[0] if content else None
     lines: list[str] = []
     if isinstance(first, dict) and str(first.get("type") or "") == "paragraph":
-        lines.append(" " * indent + f"{marker} {_render_inline(first.get('content') or [])}")
+        lines.append(
+            " " * indent
+            + f"{marker} {_render_inline(first.get('content') or [], image_titles_by_asset_id=image_titles_by_asset_id)}"
+        )
         remaining = content[1:]
     else:
         lines.append(" " * indent + f"{marker}")
         remaining = content
     for child in remaining:
-        rendered = _render_block(child, indent=indent + 2).rstrip("\n")
+        rendered = _render_block(child, indent=indent + 2, image_titles_by_asset_id=image_titles_by_asset_id).rstrip("\n")
         if not rendered:
             continue
         for line in rendered.splitlines():
@@ -68,7 +121,7 @@ def _render_list_item(node: Any, *, indent: int, marker: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_table(node: Any, *, indent: int) -> str:
+def _render_table(node: Any, *, indent: int, image_titles_by_asset_id: Mapping[str, str] | None = None) -> str:
     rows = node.get("content") or []
     if not rows:
         return ""
@@ -78,7 +131,7 @@ def _render_table(node: Any, *, indent: int) -> str:
         for cell in row.get("content") or []:
             cell_content = cell.get("content") or []
             if cell_content and isinstance(cell_content[0], dict):
-                cells.append(_render_inline(cell_content[0].get("content") or []))
+                cells.append(_render_inline(cell_content[0].get("content") or [], image_titles_by_asset_id=image_titles_by_asset_id))
             else:
                 cells.append("")
         rendered_rows.append(cells)
@@ -95,33 +148,58 @@ def _render_table(node: Any, *, indent: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_block(node: Any, *, indent: int = 0) -> str:
+def _render_block(node: Any, *, indent: int = 0, image_titles_by_asset_id: Mapping[str, str] | None = None) -> str:
     if not isinstance(node, dict):
         return ""
     node_type = str(node.get("type") or "")
     if node_type == "paragraph":
-        return " " * indent + _render_inline(node.get("content") or []) + "\n"
+        return " " * indent + _render_inline(node.get("content") or [], image_titles_by_asset_id=image_titles_by_asset_id) + "\n"
     if node_type == "heading":
         level = int((node.get("attrs") or {}).get("level") or 1)
-        return " " * indent + f"{'#' * max(1, min(level, 6))} {_render_inline(node.get('content') or [])}\n"
+        return (
+            " " * indent
+            + f"{'#' * max(1, min(level, 6))} "
+            + _render_inline(node.get("content") or [], image_titles_by_asset_id=image_titles_by_asset_id)
+            + "\n"
+        )
     if node_type == "blockquote":
-        inner = "".join(_render_block(child, indent=0) for child in node.get("content") or []).strip("\n")
+        inner = "".join(
+            _render_block(child, indent=0, image_titles_by_asset_id=image_titles_by_asset_id)
+            for child in node.get("content") or []
+        ).strip("\n")
         if not inner:
             return ""
         return "\n".join(" " * indent + f"> {line}" if line else " " * indent + ">" for line in inner.splitlines()) + "\n"
     if node_type == "bullet_list":
-        return "".join(_render_list_item(child, indent=indent, marker="-") for child in node.get("content") or [])
+        return "".join(
+            _render_list_item(child, indent=indent, marker="-", image_titles_by_asset_id=image_titles_by_asset_id)
+            for child in node.get("content") or []
+        )
     if node_type == "ordered_list":
         start = int((node.get("attrs") or {}).get("start") or 1)
         out = []
         for index, child in enumerate(node.get("content") or []):
-            out.append(_render_list_item(child, indent=indent, marker=f"{start + index}."))
+            out.append(
+                _render_list_item(
+                    child,
+                    indent=indent,
+                    marker=f"{start + index}.",
+                    image_titles_by_asset_id=image_titles_by_asset_id,
+                )
+            )
         return "".join(out)
     if node_type == "task_list":
         out = []
         for child in node.get("content") or []:
             checked = bool((child.get("attrs") or {}).get("checked"))
-            out.append(_render_list_item(child, indent=indent, marker="- [x]" if checked else "- [ ]"))
+            out.append(
+                _render_list_item(
+                    child,
+                    indent=indent,
+                    marker="- [x]" if checked else "- [ ]",
+                    image_titles_by_asset_id=image_titles_by_asset_id,
+                )
+            )
         return "".join(out)
     if node_type == "code_block":
         language = str((node.get("attrs") or {}).get("language") or "").strip()
@@ -134,17 +212,20 @@ def _render_block(node: Any, *, indent: int = 0) -> str:
     if node_type == "horizontal_rule":
         return " " * indent + "---\n"
     if node_type == "table":
-        return _render_table(node, indent=indent)
+        return _render_table(node, indent=indent, image_titles_by_asset_id=image_titles_by_asset_id)
     if node_type in {"list_item", "task_item"}:
-        return _render_list_item(node, indent=indent, marker="-")
-    return "".join(_render_block(child, indent=indent) for child in node.get("content") or [])
+        return _render_list_item(node, indent=indent, marker="-", image_titles_by_asset_id=image_titles_by_asset_id)
+    return "".join(
+        _render_block(child, indent=indent, image_titles_by_asset_id=image_titles_by_asset_id)
+        for child in node.get("content") or []
+    )
 
 
-def tree_to_markdown(tree: Any) -> str:
+def tree_to_markdown(tree: Any, *, image_titles_by_asset_id: Mapping[str, str] | None = None) -> str:
     doc = normalize_tree(tree)
     blocks = []
     for child in doc.get("content") or []:
-        rendered = _render_block(child).rstrip("\n")
+        rendered = _render_block(child, image_titles_by_asset_id=image_titles_by_asset_id).rstrip("\n")
         if rendered:
             blocks.append(rendered)
     return "\n\n".join(blocks).strip()
