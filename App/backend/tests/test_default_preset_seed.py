@@ -190,9 +190,10 @@ def test_default_translation_fragments_include_timeline_content_contract() -> No
         assert "ctx.timelineTracks" in fragment
         assert "<timeline-tracks>" in fragment
         assert '<timeline-track id="{{ track.id|e }}" name="{{ track.name|e }}"' in fragment
-        assert "<content>{{ track.content|e }}</content>" in fragment
+        assert "<name>{{ track.name }}</name>" in fragment
+        assert "<content>{{ track.content }}</content>" in fragment
         assert '<event id="{{ ev.id|e }}" track-id="{{ ev.trackId|e }}" track="{{ ev.trackName|e }}">' in fragment
-        assert "<content>{{ ev.content|e }}</content>" in fragment
+        assert "<content>{{ ev.content }}</content>" in fragment
         assert "<tags>" in fragment
         assert "<tag>{{ tag|e }}</tag>" in fragment
 

@@ -356,6 +356,7 @@ def test_default_translation_object_context_renders_timeline_content() -> None:
     )
 
     assert '<timeline-track id="track-child" name="Child Track" parent-id="track-main" position="0">' in rendered
+    assert "<name>Child Track</name>" in rendered
     assert "<content>Child track content</content>" in rendered
     assert '<event id="event-early" track-id="track-secondary" track="Secondary Track">' in rendered
     assert "<content>Early event content</content>" in rendered
@@ -380,10 +381,40 @@ def test_default_translation_reference_context_renders_timeline_content() -> Non
     )
 
     assert '<timeline-track id="track-child" name="Child Track" parent-id="track-main" position="0">' in rendered
+    assert "<name>Child Track</name>" in rendered
     assert "<content>Child track content</content>" in rendered
     assert '<event id="event-early" track-id="track-secondary" track="Secondary Track">' in rendered
     assert "<content>Early event content</content>" in rendered
     assert "<tag>setup</tag>" in rendered
+
+
+def test_default_object_context_renders_patchable_body_text_without_html_escape() -> None:
+    env = create_environment(
+        fragment_map={
+            "common/objectContext": _load_default_fragment("common/objectContext"),
+            "translation/objectContext": _load_default_fragment("translation/objectContext"),
+        }
+    )
+    project = _project_fixture()
+    raw_content = "A & B < C > D"
+    project["storyEntities"][0]["content"] = raw_content
+
+    common_rendered = render_template(
+        env,
+        '{% with selectedIds = ["entity-1"] %}{% include "fragment:common/objectContext" %}{% endwith %}',
+        {"project": project},
+    )
+    translation_rendered = render_template(
+        env,
+        '{% with lang = "English", ids = ["entity-1"] %}'
+        '{% include "fragment:translation/objectContext" %}'
+        "{% endwith %}",
+        {"project": project},
+    )
+
+    for rendered in (common_rendered, translation_rendered):
+        assert f"<content>{raw_content}</content>" in rendered
+        assert "A &amp; B &lt; C &gt; D" not in rendered
 
 
 def test_render_template_supports_select_object_context_helper() -> None:
