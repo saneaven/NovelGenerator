@@ -1000,7 +1000,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
                   selectedIds={selectedContextIds}
                   onChange={(ids) => setSelectedContextIds(ids as string[])}
                   projectId={projectId}
-                  language={sourceLanguage}
+                  language={settings.mainLanguage}
                   loading={isContextPickerLoading}
                   maxHeight="var(--size-content-sm)"
                   showSearch={true}

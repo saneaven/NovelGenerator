@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Close, Warning } from '../../components/icons';
 import { useObjectPickerData } from '../../components/ObjectPicker/useObjectPickerData';
+import { useSettings } from '../../data/settings';
 import { confirm as confirmDialog } from '../../store/dialogStore';
 import { useSelectionStore } from '../../store/selectionStore';
 import { useUiStore } from '../../store/uiStore';
@@ -83,6 +84,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
+  const settings = useSettings();
 
   const activeTagFilter = useUiStore((s) => s.activeTagFilter);
   const setTagFilter = useUiStore((s) => s.setTagFilter);
@@ -153,7 +155,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   });
 
   // link names for cards + the edit modal
-  const { groups: pickerGroups } = useObjectPickerData({ projectId: pid, language: displayLanguage, mode: 'all' });
+  const { groups: pickerGroups } = useObjectPickerData({ projectId: pid, language: settings.mainLanguage, mode: 'all' });
   const linkGroups = useMemo(() => filterLinkGroups(pickerGroups), [pickerGroups]);
   const linkItems = useMemo(() => collectLinkItems(linkGroups), [linkGroups]);
 

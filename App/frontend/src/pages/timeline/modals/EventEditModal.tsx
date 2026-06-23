@@ -11,6 +11,7 @@ import { RichTextEditor } from '../../../components/RichTextEditor';
 import { Close, Plus, Trash } from '../../../components/icons';
 import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
+import { useSettings } from '../../../data/settings';
 import { createEvent, updateEvent, deleteEvent, createEventLink, deleteEventLink } from '../../../data/timeline';
 import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import type { TipTapDoc } from '../../../types/tiptap';
@@ -101,6 +102,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const settings = useSettings();
   // Story-entity editor pattern: details and content are separate tabs on
   // mobile; on desktop both are visible (content fills the remaining height).
   const [activeTab, setActiveTab] = useState<'details' | 'content'>('details');
@@ -526,7 +528,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
                 selectedIds=""
                 onChange={(ids) => { void handlePickLink(ids); }}
                 projectId={projectId}
-                language={displayLanguage}
+                language={settings.mainLanguage}
                 customGroups={linkGroups}
                 maxHeight={240}
               />
