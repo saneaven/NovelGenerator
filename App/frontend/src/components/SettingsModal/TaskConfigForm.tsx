@@ -12,6 +12,7 @@ import type {
 import { normalizeEffectiveTaskConfig } from '../../store/taskConfigSettings';
 import ModelBrowser from './ModelBrowser';
 import ThinkingTemplateEditor from './ThinkingTemplateEditor';
+import ToggleSwitch from '../common/ToggleSwitch';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
@@ -357,14 +358,11 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         </div>
 
         <div className="form-field">
-          <label className="task-config-toggle">
-            <input
-              type="checkbox"
-              checked={config.supports_image_input ?? true}
-              onChange={(event) => emitChange({ ...config, supports_image_input: event.target.checked })}
-            />
-            {t('settings.taskConfig.supportsImageInput')}
-          </label>
+          <ToggleSwitch
+            checked={config.supports_image_input ?? true}
+            onChange={(checked) => emitChange({ ...config, supports_image_input: checked })}
+            label={t('settings.taskConfig.supportsImageInput')}
+          />
           <p className="field-hint">{t('settings.taskConfig.supportsImageInputHint')}</p>
         </div>
 
