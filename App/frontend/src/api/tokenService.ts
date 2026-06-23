@@ -14,6 +14,16 @@ export interface CountTokensRequest {
   variant_hint?: string | null;
 }
 
+export interface CountObjectContentTokensRequest {
+  project_id: string;
+  language: string;
+  object_ids: string[];
+  provider: ProviderType;
+  model: string;
+  tokenizer_override?: TokenizerOverride;
+  variant_hint?: string | null;
+}
+
 export interface CountTokensResponse {
   token_count: number;
   provider: string;
@@ -34,6 +44,21 @@ export const tokenService = {
   ): Promise<CountTokensResponse> {
     return await apiClient.post<CountTokensResponse>(
       `${BASE_PATH}/count`,
+      request,
+      undefined,
+      options
+    );
+  },
+
+  /**
+   * Count tokens for selected project object content with backend object loading.
+   */
+  async countObjectContentTokens(
+    request: CountObjectContentTokensRequest,
+    options?: RequestOptions
+  ): Promise<CountTokensResponse> {
+    return await apiClient.post<CountTokensResponse>(
+      `${BASE_PATH}/count-object-content`,
       request,
       undefined,
       options

@@ -50,3 +50,36 @@ export async function countTokens(
     effectiveTokenizer: response.effective_tokenizer,
   };
 }
+
+export async function countObjectContentTokens(
+  projectId: string,
+  language: string,
+  objectIds: string[],
+  provider: ProviderType,
+  model: string,
+  tokenizer_override?: TokenizerType,
+  variant_hint?: string | null,
+  signal?: AbortSignal
+): Promise<TokenCountResult> {
+  const response = await tokenService.countObjectContentTokens(
+    {
+      project_id: projectId,
+      language,
+      object_ids: objectIds,
+      provider,
+      model,
+      tokenizer_override,
+      variant_hint,
+    },
+    { signal }
+  );
+
+  return {
+    tokenCount: response.token_count,
+    provider: response.provider,
+    isEstimate: response.is_estimate,
+    fallbackUsed: response.fallback_used,
+    method: response.method,
+    effectiveTokenizer: response.effective_tokenizer,
+  };
+}

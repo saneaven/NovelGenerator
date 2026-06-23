@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Literal
+from uuid import UUID
 
 from ..auth import get_current_user
 from ..database import get_db
 from ..models.db_models import User
+from ..services.object_content_token_service import build_selected_object_token_text
 from ..services.token_count_service import count_text_tokens
 
 router = APIRouter(prefix="/api/v1/tokens", tags=["tokens"])
@@ -18,6 +20,17 @@ class CountTokensRequest(BaseModel):
     provider: str
     model: str
     text: str
+    tokenizer_override: Literal["openai", "claude", "gemini"] | None = None
+    variant_hint: str | None = None
+
+
+class CountObjectContentTokensRequest(BaseModel):
+    """Request body for object-content token counting."""
+    project_id: UUID
+    language: str
+    object_ids: list[UUID]
+    provider: str
+    model: str
     tokenizer_override: Literal["openai", "claude", "gemini"] | None = None
     variant_hint: str | None = None
 
@@ -61,6 +74,55 @@ async def count_tokens(
             fallback_used=result.fallback_used,
             method=result.method,
         )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token counting request is invalid: {str(e)}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Token counting failed: {str(e)}",
+        )
+
+
+@router.post("/count-object-content", response_model=CountTokensResponse)
+async def count_object_content_tokens(
+    request: CountObjectContentTokensRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Count tokens for selected project object content without rendering prompts."""
+    try:
+        text = build_selected_object_token_text(
+            db,
+            user_id=current_user.id,
+            project_id=request.project_id,
+            object_ids=request.object_ids,
+            language=request.language,
+        )
+        result = await count_text_tokens(
+            db,
+            user_id=current_user.id,
+            provider=request.provider,
+            model=request.model,
+            text=text,
+            tokenizer_override=request.tokenizer_override,
+            variant_hint=request.variant_hint,
+            # SSRF hardening for route-level counting.
+            allow_custom_base_url=False,
+        )
+        return CountTokensResponse(
+            token_count=result.token_count,
+            provider=result.provider,
+            model=result.model,
+            effective_tokenizer=result.effective_tokenizer,
+            is_estimate=result.is_estimate,
+            fallback_used=result.fallback_used,
+            method=result.method,
+        )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=400,

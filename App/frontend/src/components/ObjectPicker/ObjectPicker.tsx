@@ -15,8 +15,9 @@ import type { AnyObjectType, ObjectType } from '../../types/unifiedObject';
 import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
 import { useObjectPickerData } from './useObjectPickerData';
-import { useTokenCount } from '../../hooks/useTokenCount';
+import { useObjectContentTokenCount } from '../../hooks/useObjectContentTokenCount';
 import { useResolvedTaskConfig } from '../../data/settings';
+import { getObjectPickerTokenObjectIds } from './objectPickerTokenIds';
 import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group, SelectionState } from './types';
 import './ObjectPicker.css';
 
@@ -72,23 +73,6 @@ function getAllItemIds(groups: Group[]): string[] {
   return ids;
 }
 
-/**
- * Get all items from groups (including deeply nested child groups)
- */
-function getAllItems(groups: Group[]): PickerItem[] {
-  const items: PickerItem[] = [];
-
-  function collectItems(group: Group) {
-    items.push(...group.items);
-    if (group.childGroups) {
-      group.childGroups.forEach(childGroup => collectItems(childGroup));
-    }
-  }
-
-  groups.forEach(group => collectItems(group));
-  return items;
-}
-
 function isSubset<T>(subset: Set<T>, superset: Set<T>): boolean {
   for (const value of subset) {
     if (!superset.has(value)) return false;
@@ -99,51 +83,6 @@ function isSubset<T>(subset: Set<T>, superset: Set<T>): boolean {
 function isSameSet<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
   return isSubset(a, b);
-}
-
-function getMetadataString(item: PickerItem, key: string): string | undefined {
-  const value = item.metadata?.[key];
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function getMetadataStringList(item: PickerItem, key: string): string[] {
-  const value = item.metadata?.[key];
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => String(entry ?? '').trim())
-    .filter((entry) => entry.length > 0);
-}
-
-function buildTokenTextForItem(item: PickerItem): string {
-  const parts: string[] = [];
-  const add = (label: string, value: string | undefined) => {
-    const text = value?.trim();
-    if (text) {
-      parts.push(`${label}: ${text}`);
-    }
-  };
-
-  if (item.type === 'timeline_event') {
-    const formattedDate = getMetadataString(item, 'formattedDate');
-    const eventDescription = getMetadataString(item, 'description')
-      ?? (formattedDate ? undefined : item.description);
-    const tags = getMetadataStringList(item, 'tags');
-
-    add('Timeline event', item.name);
-    add('Track', getMetadataString(item, 'trackName'));
-    add('Date', formattedDate);
-    add('Description', eventDescription);
-    if (tags.length > 0) {
-      add('Tags', tags.join(', '));
-    }
-    return parts.join('\n');
-  }
-
-  add('Name', item.name);
-  add('Description', item.description);
-  return parts.join('\n');
 }
 
 /**
@@ -353,32 +292,9 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     return 'indeterminate';
   }, [groups, selectedIdSet, excludedIdSet, preSelectedIdSet]);
 
-  // Calculate combined content from selected items for token counting.
-  // In "all" mode, include content from structural ancestor items (closure parents).
-  const selectedItemsContent = useMemo(() => {
-    if (!showTokenCount) return '';
-    const allItems = getAllItems(groups);
-    let relevantIds = selectedIdSet;
-
-    if (mode === 'all' || mode === 'manuscript') {
-      // Build closure: add parent IDs for selected items
-      const itemsById = new Map(allItems.map(item => [item.id, item]));
-      const closureIds = new Set(selectedIdSet);
-      for (const id of selectedIdSet) {
-        let parentId = itemsById.get(id)?.parentId;
-        while (parentId) {
-          closureIds.add(parentId);
-          parentId = itemsById.get(parentId)?.parentId;
-        }
-      }
-      relevantIds = closureIds;
-    }
-
-    const relevantItems = allItems.filter(item => relevantIds.has(item.id));
-    return relevantItems
-      .map(buildTokenTextForItem)
-      .filter(content => content.length > 0)
-      .join('\n\n');
+  const tokenObjectIds = useMemo(() => {
+    if (!showTokenCount) return EMPTY_STRING_ARRAY;
+    return getObjectPickerTokenObjectIds(groups, selectedIdSet, mode);
   }, [groups, selectedIdSet, showTokenCount, mode]);
 
   // Token counting for selected items
@@ -386,13 +302,15 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     tokenCount,
     isLoading: isCountingTokens,
     isEstimate: isTokenCountEstimate,
-  } = useTokenCount({
-    text: selectedItemsContent,
+  } = useObjectContentTokenCount({
+    projectId,
+    language,
+    objectIds: tokenObjectIds,
     provider: agentConfig?.provider || 'openrouter',
     model: agentConfig?.model || '',
     tokenizer_override: agentConfig?.advanced?.tokenizer_override ?? undefined,
     variant_hint: agentConfig?.advanced?.custom_kind ?? undefined,
-    enabled: showTokenCount && selectedItemsContent.length > 0,
+    enabled: showTokenCount && tokenObjectIds.length > 0,
   });
 
   // Handle select/deselect all toggle

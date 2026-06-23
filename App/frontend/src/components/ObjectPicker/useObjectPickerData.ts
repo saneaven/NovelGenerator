@@ -185,9 +185,6 @@ export function buildTimelineEventGroups(
             parentId: track.id,
             metadata: {
               trackId: track.id,
-              trackName,
-              formattedDate,
-              description: eventDescription,
               startDate: event.startDate,
               endDate: event.endDate,
               tags: event.tags,
