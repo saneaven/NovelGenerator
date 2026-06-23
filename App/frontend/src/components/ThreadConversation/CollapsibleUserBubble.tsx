@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from '../icons';
+import { ChevronDown } from '../icons';
 
 const COLLAPSE_THRESHOLD_PX = 100;
 
@@ -29,8 +29,10 @@ const CollapsibleUserBubble: React.FC<CollapsibleUserBubbleProps> = ({ children 
 
   return (
     <div className={className}>
-      <div ref={innerRef} className="thread-message-row__content-inner">
-        {children}
+      <div className="thread-message-row__content-collapser">
+        <div ref={innerRef} className="thread-message-row__content-inner">
+          {children}
+        </div>
       </div>
       {isOverflowing && (
         <button
@@ -41,7 +43,9 @@ const CollapsibleUserBubble: React.FC<CollapsibleUserBubbleProps> = ({ children 
           aria-label={isExpanded ? t('agent.showLess') : t('agent.showMore')}
           title={isExpanded ? t('agent.showLess') : t('agent.showMore')}
         >
-          {isExpanded ? <ChevronUp size="sm" /> : <ChevronDown size="sm" />}
+          <span className="thread-message-row__collapse-chevron">
+            <ChevronDown size="sm" />
+          </span>
         </button>
       )}
     </div>

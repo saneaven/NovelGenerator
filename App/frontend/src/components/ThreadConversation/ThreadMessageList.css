@@ -168,13 +168,29 @@
   position: relative;
 }
 
-.thread-message-row__content--collapsed .thread-message-row__content-inner {
-  max-height: 100px;
+/* Grid 0fr->1fr trick: animates the 100px preview to natural height, no JS measuring */
+.thread-message-row__content-collapser {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 300ms ease;
+}
+
+.thread-message-row__content--collapsed .thread-message-row__content-collapser {
+  grid-template-rows: 0fr;
+}
+
+.thread-message-row__content-inner {
   overflow: hidden;
+  min-width: 0;
+}
+
+.thread-message-row__content--collapsed .thread-message-row__content-inner {
+  min-height: 100px;
   mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
 }
 
+/* Expanded look: plain centered chevron below */
 .thread-message-row__collapse-toggle {
   display: flex;
   align-items: center;
@@ -187,11 +203,32 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   border-radius: var(--border-radius-sm);
+  position: relative;
+  z-index: 1;
+  transition: margin-top 300ms ease, padding-top 300ms ease, background 300ms ease,
+    color 150ms ease;
+}
+
+/* Collapsed look: pulled up to overlap the faded preview, with gradient */
+.thread-message-row__content--collapsed .thread-message-row__collapse-toggle {
+  margin-top: -40px;
+  padding-top: var(--spacing-xl);
+  background: linear-gradient(to bottom, transparent, var(--color-surface-subtle));
 }
 
 .thread-message-row__collapse-toggle:hover {
   color: var(--color-text-primary);
-  background: var(--color-surface-default);
+}
+
+/* Flip: single ChevronDown rotates between down (collapsed) and up (expanded) */
+.thread-message-row__collapse-chevron {
+  display: inline-flex;
+  transform: rotate(180deg);
+  transition: transform 300ms ease;
+}
+
+.thread-message-row__content--collapsed .thread-message-row__collapse-chevron {
+  transform: rotate(0deg);
 }
 
 .thread-message-row--assistant .thread-message-row__content {
