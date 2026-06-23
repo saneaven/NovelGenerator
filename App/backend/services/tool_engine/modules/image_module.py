@@ -13,6 +13,7 @@ from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolExe
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, valid_result
 from .feature_common import filter_allowed_bindings
+from .image_read_module import build_read_image_bindings
 from .shared import filter_allowed_specs, is_non_journey, obj_schema
 
 
@@ -158,4 +159,5 @@ class ImageFeatureModule(ToolFeatureModule):
                     ),
                 )
             )
+        bindings.extend(build_read_image_bindings(ctx))
         return filter_allowed_bindings(ctx, bindings)

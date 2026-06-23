@@ -736,6 +736,8 @@
       "hide": "숨기기",
       "modelPlaceholder": "예: gpt-4o, anthropic/claude-3.5-sonnet",
       "modelHint": "이 기능에 대한 모델 식별자. 여기에 입력하면 모델 목록이 검색됩니다.",
+      "supportsImageInput": "이미지 입력",
+      "supportsImageInputHint": "이 모델이 이미지 입력을 지원하는지 설정합니다.",
       "temperature": "온도",
       "temperatureLabels": {
         "precise": "정확 (0.0)",

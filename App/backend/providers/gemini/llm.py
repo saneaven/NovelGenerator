@@ -315,6 +315,7 @@ class GeminiProvider(BaseProvider):
                 tool_results = msg.get("tool_results", [])
                 if tool_results:
                     parts = []
+                    image_parts: list = []
                     for tr in tool_results:
                         parts.append(
                             types.Part.from_function_response(
@@ -322,8 +323,19 @@ class GeminiProvider(BaseProvider):
                                 response={"result": tr.get("content", "")},
                             )
                         )
+                        for part in build_gemini_binary_parts(tr.get("image_parts") or []):
+                            if part.get("type") == "binary":
+                                image_parts.append(
+                                    types.Part.from_bytes(
+                                        data=part.get("data"),
+                                        mime_type=str(part.get("mime_type") or ""),
+                                    )
+                                )
                     if parts:
                         contents.append(types.Content(role="user", parts=parts))
+                    # functionResponse parts cannot carry images; deliver them in a following user turn.
+                    if image_parts:
+                        contents.append(types.Content(role="user", parts=image_parts))
                 continue
 
             mapped_role = "user" if role == "user" else "model"

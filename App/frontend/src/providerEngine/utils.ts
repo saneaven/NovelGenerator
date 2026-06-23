@@ -379,6 +379,34 @@ export function projectImageModels(provider: PublicProviderSpec | undefined): Pu
   return provider?.image?.models ?? [];
 }
 
+// null when the provider exposes no modality info (caller defaults to allowing images)
+export function deriveSupportsImageInput(model: unknown): boolean | null {
+  if (!isPlainObject(model)) return null;
+
+  const hasImageModality = (value: unknown): boolean =>
+    Array.isArray(value) && value.some((item) => String(item).toLowerCase() === 'image');
+
+  const architecture = model.architecture;
+  if (isPlainObject(architecture) && Array.isArray(architecture.input_modalities)) {
+    return hasImageModality(architecture.input_modalities);
+  }
+  if (Array.isArray(model.input_modalities)) {
+    return hasImageModality(model.input_modalities);
+  }
+
+  const capabilities = model.capabilities;
+  if (Array.isArray(capabilities)) {
+    return capabilities.some((item) => String(item).toLowerCase() === 'vision');
+  }
+  if (isPlainObject(capabilities)) {
+    const imageInput = capabilities.image_input;
+    if (isPlainObject(imageInput) && typeof imageInput.supported === 'boolean') {
+      return imageInput.supported;
+    }
+  }
+  return null;
+}
+
 export function toImageModelInfo(model: PublicImageModelDescriptor) {
   return {
     id: model.id,

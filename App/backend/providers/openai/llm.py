@@ -175,12 +175,19 @@ class OpenAIResponsesProvider(BaseProvider):
             # Handle tool_results messages
             if role == "tool_results":
                 tool_results = msg.get("tool_results", [])
+                pending_images: List[Dict] = []
                 for tr in tool_results:
                     result.append({
                         "type": "function_call_output",
                         "call_id": tr.get("tool_call_id", ""),
                         "output": tr.get("content", "")
                     })
+                    image_parts = tr.get("image_parts")
+                    if image_parts:
+                        pending_images.extend(build_openai_responses_content(image_parts, role="user"))
+                # Function outputs cannot carry images; deliver them in a following user turn.
+                if pending_images:
+                    result.append({"role": "user", "content": pending_images})
                 continue
 
             # Helpers: collect reasoning items and output message ID

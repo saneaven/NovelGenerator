@@ -19,6 +19,7 @@ import { Warning, Settings, Advenced, Close } from '../icons';
 import { useProviderSpecs } from '../../data/providers/useProviderSpecsQuery';
 import {
   buildSelectOptions,
+  deriveSupportsImageInput,
   getVisibleSpecEntries,
   isObjectSpec,
   resolveEffectiveLlmTaskSpec,
@@ -345,10 +346,26 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               custom_kind={providerSpec?.llm?.variant_path ? (config.advanced.custom_kind ?? undefined) : undefined}
               currentModel={config.model}
               provider_preference={config.provider_preference ?? undefined}
-              onSelectModel={(model) => emitChange({ ...config, model })}
+              onSelectModel={(model, modelObj) => emitChange({
+                ...config,
+                model,
+                supports_image_input: deriveSupportsImageInput(modelObj) ?? true,
+              })}
               onUpdateProviderPreference={(pref) => emitChange({ ...config, provider_preference: pref })}
             />
           ) : null}
+        </div>
+
+        <div className="form-field">
+          <label className="task-config-toggle">
+            <input
+              type="checkbox"
+              checked={config.supports_image_input ?? true}
+              onChange={(event) => emitChange({ ...config, supports_image_input: event.target.checked })}
+            />
+            {t('settings.taskConfig.supportsImageInput')}
+          </label>
+          <p className="field-hint">{t('settings.taskConfig.supportsImageInputHint')}</p>
         </div>
 
         {verbosityField ? (

@@ -165,10 +165,21 @@ class ClaudeProvider(BaseProvider):
                 if tool_results:
                     content_blocks = []
                     for tr in tool_results:
+                        result_text = tr.get("content", "")
+                        image_parts = tr.get("image_parts")
+                        if image_parts:
+                            # Anthropic accepts image blocks inside tool_result content.
+                            tr_blocks: List[Dict[str, Any]] = []
+                            if result_text:
+                                tr_blocks.append({"type": "text", "text": result_text})
+                            tr_blocks.extend(build_claude_content(image_parts))
+                            tr_content: Any = tr_blocks
+                        else:
+                            tr_content = result_text
                         content_blocks.append({
                             "type": "tool_result",
                             "tool_use_id": tr.get("tool_call_id", ""),
-                            "content": tr.get("content", "")
+                            "content": tr_content,
                         })
                     # Claude requires tool_result in a user message
                     anthropic_messages.append({"role": "user", "content": content_blocks})
@@ -708,13 +719,22 @@ class ClaudeProvider(BaseProvider):
 
         models = []
         for model in response.data:
-            models.append(
-                {
-                    "id": model.id,
-                    "display_name": model.display_name,
-                    "created_at": model.created_at,
-                }
-            )
+            entry = {
+                "id": model.id,
+                "display_name": model.display_name,
+                "created_at": model.created_at,
+            }
+            # expose per-model capabilities for vision detection
+            capabilities = getattr(model, "capabilities", None)
+            if capabilities is None:
+                extra = getattr(model, "model_extra", None)
+                if isinstance(extra, dict):
+                    capabilities = extra.get("capabilities")
+            if hasattr(capabilities, "model_dump"):
+                entry["capabilities"] = capabilities.model_dump()
+            elif isinstance(capabilities, dict):
+                entry["capabilities"] = capabilities
+            models.append(entry)
         return {"data": models}
 
 

@@ -58,7 +58,7 @@ TOOL_GRANT_CATALOG: Final[dict[str, dict[str, object]]] = {
     },
     "image": {
         "display_name": "Image Generation",
-        "supported_categories": ("generate",),
+        "supported_categories": ("generate", "read"),
     },
     "sub_agent": {
         "display_name": "Sub Agents",

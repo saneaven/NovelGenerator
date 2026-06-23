@@ -91,6 +91,8 @@ class TaskAIConfig(BaseModel):
     max_output_tokens: Optional[int] = Field(default=None, ge=1, le=1000000)
     # Context window upper bound used for local prompt budgeting (e.g. agent memory preflight).
     context_window_tokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
+    # Whether the selected model accepts image input (gates read_image returning pixels).
+    supports_image_input: bool = True
     advanced: AdvancedTaskSettings
 
 class TaskConfigSettings(BaseModel):

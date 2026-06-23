@@ -108,6 +108,7 @@ def build_demo_task_config() -> TaskConfig:
         provider_preference=None,
         max_output_tokens=config.max_output_tokens,
         context_window_tokens=config.context_window_tokens,
+        supports_image_input=True,
         advanced=advanced,
     )
 

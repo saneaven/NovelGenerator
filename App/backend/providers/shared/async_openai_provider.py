@@ -188,6 +188,7 @@ class AsyncOpenAIProvider(BaseProvider):
             if role == "tool_results":
                 # OpenAI: separate message per tool result with role "tool"
                 tool_results = msg.get("tool_results", [])
+                pending_images: List[Dict[str, object]] = []
                 for tr in tool_results:
                     tool_msg: Dict[str, object] = {
                         "role": "tool",
@@ -198,6 +199,12 @@ class AsyncOpenAIProvider(BaseProvider):
                     if tool_name:
                         tool_msg["name"] = tool_name
                     converted.append(tool_msg)
+                    image_parts = tr.get("image_parts")
+                    if image_parts:
+                        pending_images.extend(build_openai_chat_content(image_parts))
+                # Tool messages cannot carry images; deliver them in a following user turn.
+                if pending_images:
+                    converted.append({"role": "user", "content": pending_images})
                 continue
 
             converted_msg: Dict[str, object] = {

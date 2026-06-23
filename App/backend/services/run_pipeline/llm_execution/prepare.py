@@ -43,6 +43,25 @@ def _strip_internal_message_keys(messages: list[dict[str, Any]]) -> list[dict[st
     return out
 
 
+def _strip_tool_result_images(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "tool_results":
+            out.append(message)
+            continue
+        item = dict(message)
+        tool_results = item.get("tool_results")
+        if isinstance(tool_results, list):
+            item["tool_results"] = [
+                {key: value for key, value in tr.items() if key != "image_parts"}
+                if isinstance(tr, dict)
+                else tr
+                for tr in tool_results
+            ]
+        out.append(item)
+    return out
+
+
 def _apply_provider_history_filters(
     *,
     system_prompt: str,
@@ -293,6 +312,9 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     )
 
     provider_messages = _strip_internal_message_keys(provider_messages)
+
+    if not bool(getattr(task_config, "supports_image_input", True)):
+        provider_messages = _strip_tool_result_images(provider_messages)
 
     if advanced.get("_resolved_template"):
         effective_thinking_config = None

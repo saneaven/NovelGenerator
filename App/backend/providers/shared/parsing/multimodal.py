@@ -46,7 +46,12 @@ def _load_binary_part(part: dict[str, Any]) -> tuple[str, str, bytes]:
     storage_key = str(part.get("storage_key") or "").strip()
     if not mime_type or not storage_key:
         raise ValueError("Attachment content part is missing mime_type or storage_key")
-    data = chat_attachment_service.load_attachment_bytes(storage_key)
+    if part.get("source") == "asset":
+        from ....services.storage_service import storage_service
+
+        data = storage_service.read_asset_file(storage_key)
+    else:
+        data = chat_attachment_service.load_attachment_bytes(storage_key)
     return mime_type, filename, data
 
 

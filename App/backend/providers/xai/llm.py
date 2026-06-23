@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from ..shared.async_openai_provider import AsyncOpenAIProvider
 
 
@@ -78,7 +80,43 @@ class XAIProvider(AsyncOpenAIProvider):
                     "x-grok-conv-id": cache_key,
                 }
         return request
-    # get_models() inherited from AsyncOpenAIProvider - xAI supports /v1/models endpoint
+
+    async def get_models(self) -> Dict:
+        # /v1/models omits input_modalities; /v1/language-models includes it
+        import httpx
+
+        api_key = str(self.api_key or "").strip()
+        if not api_key:
+            raise ValueError("Missing api_key for provider 'xai'")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self.base_url}/language-models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+        if response.status_code >= 400:
+            raise RuntimeError(f"Request failed ({response.status_code}): {response.text}")
+
+        payload = response.json()
+        raw_models: Any = None
+        if isinstance(payload, dict):
+            raw_models = payload.get("models")
+            if not isinstance(raw_models, list):
+                raw_models = payload.get("data")
+        if not isinstance(raw_models, list):
+            raw_models = payload if isinstance(payload, list) else []
+
+        models: list[dict[str, Any]] = []
+        for item in raw_models:
+            if not isinstance(item, dict):
+                continue
+            model_id = item.get("id") or item.get("model")
+            if not isinstance(model_id, str) or not model_id.strip():
+                continue
+            entry = dict(item)
+            entry["id"] = model_id.strip()
+            models.append(entry)
+        return {"data": models}
 
 
 def create_provider(*, provider_config: dict[str, object], runtime_spec: object):

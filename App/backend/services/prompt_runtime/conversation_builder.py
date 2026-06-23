@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
+from ...models.db_models import Asset, RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
 from ...providers.shared.parsing.multimodal import attachment_to_content_part
 
 
@@ -209,7 +209,47 @@ def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
     return _to_xml_string(root)
 
 
-def _tool_result_from_tool_call(tool: RunToolCallModel) -> dict[str, Any] | None:
+def _build_asset_image_part(db: Session, asset_id_raw: Any) -> dict[str, Any] | None:
+    asset_id_str = str(asset_id_raw or "").strip()
+    if not asset_id_str:
+        return None
+    try:
+        asset_id = UUID(asset_id_str)
+    except (ValueError, TypeError):
+        return None
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if asset is None:
+        return None
+    mime_type = str(asset.mime_type or "").strip()
+    file_path = str(asset.file_path or "").strip()
+    if not file_path or not mime_type.startswith("image/"):
+        return None
+    return {
+        "type": "image",
+        "source": "asset",
+        "mime_type": mime_type,
+        "storage_key": file_path,
+        "filename": str(asset.name or "") or "image",
+        "asset_id": str(asset.id),
+    }
+
+
+def _tool_result_image_parts(db: Session, result: Any) -> list[dict[str, Any]]:
+    if not isinstance(result, dict):
+        return []
+    data = result.get("data")
+    asset_ids = data.get("image_asset_ids") if isinstance(data, dict) else None
+    if not isinstance(asset_ids, list):
+        return []
+    parts: list[dict[str, Any]] = []
+    for asset_id in asset_ids:
+        part = _build_asset_image_part(db, asset_id)
+        if part is not None:
+            parts.append(part)
+    return parts
+
+
+def _tool_result_from_tool_call(db: Session, tool: RunToolCallModel) -> dict[str, Any] | None:
     result = tool.result
     tool_name = str(tool.tool_name or "")
 
@@ -227,11 +267,15 @@ def _tool_result_from_tool_call(tool: RunToolCallModel) -> dict[str, Any] | None
     llm_tool_call_id = str(getattr(tool, "llm_call_id", "") or "").strip()
     if not llm_tool_call_id:
         llm_tool_call_id = str(tool.id)
-    return {
+    payload: dict[str, Any] = {
         "tool_call_id": llm_tool_call_id,
         "tool_name": tool_name or "tool_result",
         "content": content,
     }
+    image_parts = _tool_result_image_parts(db, result)
+    if image_parts:
+        payload["image_parts"] = image_parts
+    return payload
 
 
 def build_from_runs(
@@ -329,7 +373,7 @@ def build_from_runs(
             if row.role == "assistant":
                 payloads = []
                 for tool in terminal_tools_by_assistant.get(row.id, []):
-                    payload = _tool_result_from_tool_call(tool)
+                    payload = _tool_result_from_tool_call(db, tool)
                     if payload is not None:
                         payloads.append(payload)
                 if payloads:

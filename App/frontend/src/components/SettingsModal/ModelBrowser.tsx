@@ -14,7 +14,7 @@ interface ModelBrowserProps {
   mode?: 'chat' | 'embedding';
   currentModel: string;
   provider_preference?: ProviderPreference;
-  onSelectModel: (modelId: string) => void;
+  onSelectModel: (modelId: string, model?: any) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
   autoExpand?: boolean;
 }
@@ -697,7 +697,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
             type="button"
             onClick={(e) => {
               e.preventDefault();
-              onSelectModel(model.id);
+              onSelectModel(model.id, model);
             }}
             className={`model-card__select-btn ${isSelected ? 'model-card__select-btn--selected' : ''}`}
             title={isSelected ? t('settings.modelBrowser.currentlySelected') : t('settings.modelBrowser.useThisModel')}

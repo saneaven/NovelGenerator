@@ -32,7 +32,7 @@ def _install_import_stubs() -> None:
 
 _install_import_stubs()
 
-from App.backend.models.db_models import RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
+from App.backend.models.db_models import Asset, RunMessageAttachmentModel, RunMessageModel, RunToolCallModel
 from App.backend.services.prompt_runtime.conversation_builder import build_from_runs
 
 
@@ -48,6 +48,9 @@ class _FakeQuery:
 
     def all(self) -> list[object]:
         return list(self._rows)
+
+    def first(self) -> object | None:
+        return self._rows[0] if self._rows else None
 
 
 class _FakeDb:
@@ -121,4 +124,64 @@ def test_build_from_runs_keeps_tool_call_only_assistant_and_attached_tool_result
         }
     ]
     assert conversation[1]["tool_results"][0]["tool_call_id"] == "call_1"
+
+
+def test_build_from_runs_attaches_read_image_asset_parts() -> None:
+    thread_id = uuid4()
+    run_id = uuid4()
+    assistant_id = uuid4()
+    tool_id = uuid4()
+    asset_id = uuid4()
+
+    assistant_row = SimpleNamespace(
+        id=assistant_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        role="assistant",
+        seq_in_thread=2,
+        created_at=None,
+        data={"English": {"contentParts": []}},
+    )
+    tool_row = SimpleNamespace(
+        id=tool_id,
+        assistant_message_id=assistant_id,
+        call_seq=0,
+        status="applied",
+        llm_call_id="call_1",
+        tool_name="read_image",
+        arguments={"image_id": str(asset_id)},
+        extra_content=None,
+        result={"success": True, "message": "image meta", "data": {"image_asset_ids": [str(asset_id)]}},
+        reason=None,
+    )
+    asset_row = SimpleNamespace(
+        id=asset_id,
+        project_id=uuid4(),
+        mime_type="image/png",
+        file_path="assets/pic.png",
+        name="pic",
+    )
+
+    db = _FakeDb(
+        {
+            RunMessageModel: [assistant_row],
+            RunMessageAttachmentModel: [],
+            RunToolCallModel: [tool_row],
+            Asset: [asset_row],
+        }
+    )
+
+    conversation = build_from_runs(db, thread_id=thread_id, language="English")
+
+    tool_results = conversation[1]["tool_results"][0]
+    assert tool_results["image_parts"] == [
+        {
+            "type": "image",
+            "source": "asset",
+            "mime_type": "image/png",
+            "storage_key": "assets/pic.png",
+            "filename": "pic",
+            "asset_id": str(asset_id),
+        }
+    ]
 

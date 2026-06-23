@@ -35,6 +35,7 @@ export interface TaskAIConfig {
   provider_preference?: ProviderPreference | null;
   max_output_tokens?: number | null;
   context_window_tokens?: number | null;
+  supports_image_input?: boolean;
   advanced: AdvancedTaskSettings;
 }
 

@@ -52,6 +52,25 @@ def _project_model_item(item: dict[str, Any]) -> dict[str, Any] | None:
     return projected
 
 
+async def _fetch_model_capabilities(client: Any, api_key: str, model_id: str) -> list[str] | None:
+    try:
+        response = await client.post(
+            f"{OLLAMA_CLOUD_API_BASE}/show",
+            headers=_headers(api_key),
+            json={"model": model_id},
+        )
+    except Exception:
+        return None
+    if response.status_code >= 400:
+        return None
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+    capabilities = payload.get("capabilities") if isinstance(payload, dict) else None
+    return capabilities if isinstance(capabilities, list) else None
+
+
 def _text_from_parts(parts: list[dict[str, Any]]) -> str:
     chunks: list[str] = []
     for part in parts:
@@ -566,6 +585,7 @@ class OllamaCloudProvider(BaseProvider):
         )
 
     async def get_models(self) -> Dict:
+        import asyncio
         import httpx
 
         api_key = str(self.api_key or "").strip()
@@ -574,14 +594,23 @@ class OllamaCloudProvider(BaseProvider):
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{OLLAMA_CLOUD_API_BASE}/tags", headers=_headers(api_key))
-        if response.status_code >= 400:
-            raise RuntimeError(f"Request failed ({response.status_code}): {response.text}")
+            if response.status_code >= 400:
+                raise RuntimeError(f"Request failed ({response.status_code}): {response.text}")
 
-        projected: list[dict[str, Any]] = []
-        for item in _extract_model_items(response.json()):
-            model = _project_model_item(item)
-            if model is not None:
-                projected.append(model)
+            projected: list[dict[str, Any]] = []
+            for item in _extract_model_items(response.json()):
+                model = _project_model_item(item)
+                if model is not None:
+                    projected.append(model)
+
+            # Enrich each model with its capabilities (vision, tools, ...) from /api/show.
+            capabilities_list = await asyncio.gather(
+                *(_fetch_model_capabilities(client, api_key, model["id"]) for model in projected)
+            )
+            for model, capabilities in zip(projected, capabilities_list):
+                if capabilities is not None:
+                    model["capabilities"] = capabilities
+
         return {"data": projected}
 
 

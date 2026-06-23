@@ -65,6 +65,7 @@ SPEC = ProviderSpec(
             "provider_preference": FieldSpec(kind="object", expose=False),
             "max_output_tokens": FieldSpec(kind="int", default=None, expose=False, min_value=1, max_value=1000000),
             "context_window_tokens": FieldSpec(kind="int", default=None, expose=False, min_value=1024, max_value=1000000),
+            "supports_image_input": FieldSpec(kind="bool", default=True, expose=False),
             "advanced": ObjectSpec(fields={
                 "thinking_mode": FieldSpec(
                     kind="enum",

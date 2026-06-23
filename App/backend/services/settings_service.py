@@ -35,6 +35,7 @@ class TaskConfig:
     provider_preference: dict[str, Any] | None
     max_output_tokens: int | None
     context_window_tokens: int | None
+    supports_image_input: bool
     advanced: dict[str, Any]
 
 
@@ -115,6 +116,7 @@ class SettingsService:
             provider_preference=provider_preference if isinstance(provider_preference, dict) else None,
             max_output_tokens=cfg.get("max_output_tokens"),
             context_window_tokens=cfg.get("context_window_tokens"),
+            supports_image_input=bool(cfg.get("supports_image_input", True)),
             advanced=cfg.get("advanced") if isinstance(cfg.get("advanced"), dict) else {},
         )
 

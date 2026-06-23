@@ -736,6 +736,8 @@
       "hide": "Hide",
       "modelPlaceholder": "e.g., gpt-4o, anthropic/claude-3.5-sonnet",
       "modelHint": "Model identifier for this function. Type here to search the model list.",
+      "supportsImageInput": "Image input",
+      "supportsImageInputHint": "Sets whether this model supports image input.",
       "temperature": "Temperature",
       "temperatureLabels": {
         "precise": "Precise (0.0)",
