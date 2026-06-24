@@ -4,7 +4,7 @@
  * by `useThreadView`.
  *
  * - The query caches a `ThreadSnapshot` under `threadKeys.messages(threadId)`.
- * - Fetching also seeds live thread metadata + image runs as a side effect.
+ * - Fetching seeds thread metadata only when absent, plus image runs as a side effect.
  * - SSE-finalized events and optimistic edits write through the imperative cache
  *   mutators below (never token deltas — those go to the overlay store).
  */
@@ -15,9 +15,8 @@ import { threadKeys } from '../keys/threadKeys';
 import { threadService } from '../../api/threadService';
 import { seedImageRunsInCache } from '../imageRuns';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
-import { isNonLiveThreadStatus } from '../../runtime/threadStreamLifecycle';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
-import { toThreadSnapshot, toThreadRuntimeFromSnapshot, type ThreadSnapshot } from './threadSnapshot';
+import { toLatestRunContext, toThreadSnapshot, type ThreadSnapshot } from './threadSnapshot';
 
 const EMPTY_SNAPSHOT: ThreadSnapshot = { messages: [], toolCalls: [] };
 
@@ -26,19 +25,18 @@ function sortMessages(messages: ThreadMessage[]): ThreadMessage[] {
 }
 
 /**
- * Seed live state from a freshly fetched snapshot. The message/tool-call content
- * is the query's return value (cached automatically); here we only push the live
- * metadata into the stream store and drop the now-stale overlay.
+ * Seed thread metadata only for a cold thread. Message snapshot fetches are not
+ * the runtime status source and must not clear live streaming overlay state.
  */
 function applyThreadSnapshotSideEffects(threadId: string, response: Awaited<ReturnType<typeof threadService.listMessages>>): void {
   const store = useThreadStreamStore.getState();
-  store.upsertThread(response.thread);
-  store.setThreadRuntime(threadId, toThreadRuntimeFromSnapshot(response));
   seedImageRunsInCache(response.imageRuns);
-  store.setThreadStreamActive(threadId, false);
-  store.clearOverlayForThread(threadId);
-  if (isNonLiveThreadStatus(response.thread.status)) {
-    store.clearPreexistingLiveThread(threadId);
+  const existing = store.threadsById[threadId];
+  if (!existing) {
+    store.upsertThread({
+      ...response.thread,
+      latestRunContext: toLatestRunContext(response.latestRun),
+    });
   }
 }
 

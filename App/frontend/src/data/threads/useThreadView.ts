@@ -4,9 +4,8 @@
  * read off the monolithic thread store. Consumers therefore change only their data
  * SOURCE, not their logic — all merge risk is concentrated here.
  *
- * Merge rule: the snapshot is finalized truth and WINS for any shared id; the
- * overlay contributes ids it alone holds (optimistic user msgs, the in-progress
- * streaming assistant msg, streaming temp tool calls).
+ * Merge rule: finalized snapshot truth wins for shared ids, except the
+ * in-progress streaming assistant overlay stays visible over its DB placeholder.
  */
 
 import { useMemo } from 'react';
@@ -48,8 +47,12 @@ export function mergeThreadMessages(snapshotMessages: ThreadMessage[], overlayMe
     return snapshotMessages.length > 0 ? [...snapshotMessages].sort(bySeq) : EMPTY_MESSAGES;
   }
   const byId = new Map<string, ThreadMessage>();
-  for (const m of overlayMessages) byId.set(m.id, m);
-  for (const m of snapshotMessages) byId.set(m.id, m); // snapshot wins for shared ids
+  for (const m of snapshotMessages) byId.set(m.id, m);
+  for (const m of overlayMessages) {
+    if (m.isStreaming === true || !byId.has(m.id)) {
+      byId.set(m.id, m);
+    }
+  }
   return [...byId.values()].sort(bySeq);
 }
 
