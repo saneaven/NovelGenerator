@@ -1,10 +1,7 @@
-import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useSelectionStore } from '../../store/selectionStore';
-import { readSettingsFromCache } from '../../data/settings';
 import type { ObjectChangedEvent } from '../../api/sseClient';
-import { defaultRichTextFormatForType, isRichPreviewType } from '../../domain/objectFormat';
-import { writeObjectToCacheFromSSE, removeObjectFromCacheFromSSE } from '../../data/sse/sseObjectBridge';
-import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
+import { invalidateObjectFromSSE, type ObjectChangeAction } from '../../data/sse/sseObjectBridge';
+import type { ObjectType } from '../../types/unifiedObject';
 
 const FLUSH_DEBOUNCE_MS = 50;
 
@@ -24,12 +21,14 @@ type PendingUpsert = {
   objectType: ObjectType;
   objectId: string;
   revision: number;
+  action: Extract<ObjectChangeAction, 'created' | 'updated'>;
 };
 
 type PendingDelete = {
   projectId: string;
   objectType: ObjectType;
   objectId: string;
+  action: Extract<ObjectChangeAction, 'deleted'>;
 };
 
 export class ObjectEventConsumer {
@@ -75,7 +74,7 @@ export class ObjectEventConsumer {
       this.bumpRevision(key);
 
       if (action === 'deleted') {
-        this.pendingDeletes.set(key, { projectId, objectType, objectId });
+        this.pendingDeletes.set(key, { projectId, objectType, objectId, action });
         this.pendingDeleteKeys.add(key);
         this.pendingUpserts.delete(key);
         continue;
@@ -87,6 +86,7 @@ export class ObjectEventConsumer {
           projectId,
           objectType,
           objectId,
+          action,
           revision: this.revisionByKey.get(key) ?? 0,
         });
       }
@@ -129,48 +129,22 @@ export class ObjectEventConsumer {
 
     if (!deletes.length && !upserts.length) return;
 
-    for (const item of deletes) {
-      removeObjectFromCacheFromSSE({
-        type: item.objectType,
-        id: item.objectId,
-        projectId: item.projectId,
-      });
-    }
-    if (upserts.length === 0) return;
-
-    const settings = readSettingsFromCache();
-    const preferredDisplayLanguage = useSelectionStore.getState().preferredDisplayLanguage;
-    const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
-
     await Promise.all(
-      upserts.map(async (item) => {
-        const key = this.objectKey(item.objectType, item.objectId);
-        try {
-          const isRich = isRichPreviewType(item.objectType);
-          const [object, markdownObject] = await Promise.all([
-            unifiedObjectService.getObject(
-              item.objectType,
-              item.objectId,
-              language,
-              defaultRichTextFormatForType(item.objectType),
-            ),
-            isRich
-              ? unifiedObjectService.getObject(item.objectType, item.objectId, language, 'markdown')
-              : Promise.resolve(null),
-          ]);
+      [
+        ...deletes,
+        ...upserts.filter((item) => {
+          const key = this.objectKey(item.objectType, item.objectId);
           const latestRevision = this.revisionByKey.get(key) ?? 0;
-          if (latestRevision !== item.revision) return;
-          if (deleteKeys.has(key) || this.pendingDeleteKeys.has(key)) return;
-          writeObjectToCacheFromSSE(object as UnifiedObject, markdownObject as UnifiedObject | null, language);
-        } catch (error) {
-          console.warn('Failed to fetch changed object from SSE event', {
-            projectId: item.projectId,
-            objectType: item.objectType,
-            objectId: item.objectId,
-            error,
-          });
-        }
-      }),
+          return latestRevision === item.revision && !deleteKeys.has(key) && !this.pendingDeleteKeys.has(key);
+        }),
+      ].map((item) =>
+        invalidateObjectFromSSE({
+          type: item.objectType,
+          id: item.objectId,
+          projectId: item.projectId,
+          action: item.action,
+        }),
+      ),
     );
   }
 }
