@@ -126,6 +126,153 @@ def test_build_from_runs_keeps_tool_call_only_assistant_and_attached_tool_result
     assert conversation[1]["tool_results"][0]["tool_call_id"] == "call_1"
 
 
+def test_build_from_runs_preserves_project_tree_payload_in_tool_result_content() -> None:
+    thread_id = uuid4()
+    run_id = uuid4()
+    assistant_id = uuid4()
+    tool_id = uuid4()
+
+    assistant_row = SimpleNamespace(
+        id=assistant_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        role="assistant",
+        seq_in_thread=2,
+        created_at=None,
+        data={"English": {"contentParts": []}},
+    )
+    tool_row = SimpleNamespace(
+        id=tool_id,
+        assistant_message_id=assistant_id,
+        call_seq=0,
+        status="applied",
+        llm_call_id="call_1",
+        tool_name="get_project_tree",
+        arguments={},
+        extra_content=None,
+        result={
+            "success": True,
+            "message": "Project tree retrieved",
+            "data": {
+                "tree": {
+                    "title": "The Last Kingdom",
+                    "storyEntities": [
+                        {
+                            "nodeType": "folder",
+                            "id": "folder-1",
+                            "name": "Cast",
+                            "children": [
+                                {
+                                    "nodeType": "entity",
+                                    "id": "entity-1",
+                                    "name": "Ari",
+                                    "kind": "character",
+                                }
+                            ],
+                        }
+                    ],
+                    "outline": [
+                        {
+                            "id": "outline-root",
+                            "kind": "outline",
+                            "name": "Book",
+                            "children": [
+                                {
+                                    "id": "chapter-1",
+                                    "kind": "chapter",
+                                    "name": "Opening",
+                                    "actNumber": 1,
+                                    "chapterNumber": 1,
+                                    "manuscriptId": "manuscript-1",
+                                }
+                            ],
+                        }
+                    ],
+                    "timeline": {
+                        "tracks": [
+                            {
+                                "id": "track-1",
+                                "name": "Main",
+                                "eventCount": 2,
+                                "position": 0,
+                                "children": [],
+                            }
+                        ]
+                    },
+                }
+            },
+        },
+        reason=None,
+    )
+
+    db = _FakeDb(
+        {
+            RunMessageModel: [assistant_row],
+            RunMessageAttachmentModel: [],
+            RunToolCallModel: [tool_row],
+        }
+    )
+
+    conversation = build_from_runs(db, thread_id=thread_id, language="English")
+
+    content = conversation[1]["tool_results"][0]["content"]
+    assert "<project_tree>" in content
+    assert "<title>The Last Kingdom</title>" in content
+    assert '<folder id="folder-1" name="Cast">' in content
+    assert '<entity id="entity-1" name="Ari" kind="character" />' in content
+    assert 'id="chapter-1"' in content
+    assert 'manuscriptId="manuscript-1"' in content
+    assert '<track id="track-1" name="Main" eventCount="2" position="0" />' in content
+    assert "Project tree retrieved" not in content
+
+
+def test_build_from_runs_preserves_structured_fallback_payloads() -> None:
+    thread_id = uuid4()
+    run_id = uuid4()
+    assistant_id = uuid4()
+    tool_id = uuid4()
+
+    assistant_row = SimpleNamespace(
+        id=assistant_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        role="assistant",
+        seq_in_thread=2,
+        created_at=None,
+        data={"English": {"contentParts": []}},
+    )
+    tool_row = SimpleNamespace(
+        id=tool_id,
+        assistant_message_id=assistant_id,
+        call_seq=0,
+        status="applied",
+        llm_call_id="call_1",
+        tool_name="mcp_example",
+        arguments={},
+        extra_content=None,
+        result={
+            "success": True,
+            "message": "MCP text",
+            "data": {"structured": {"foo": "bar", "count": 2}},
+        },
+        reason=None,
+    )
+
+    db = _FakeDb(
+        {
+            RunMessageModel: [assistant_row],
+            RunMessageAttachmentModel: [],
+            RunToolCallModel: [tool_row],
+        }
+    )
+
+    conversation = build_from_runs(db, thread_id=thread_id, language="English")
+
+    content = conversation[1]["tool_results"][0]["content"]
+    assert "<message>MCP text</message>" in content
+    assert '<payload key="structured">{"foo":"bar","count":2}</payload>' in content
+
+
 def test_build_from_runs_attaches_read_image_asset_parts() -> None:
     thread_id = uuid4()
     run_id = uuid4()
@@ -184,4 +331,3 @@ def test_build_from_runs_attaches_read_image_asset_parts() -> None:
             "asset_id": str(asset_id),
         }
     ]
-

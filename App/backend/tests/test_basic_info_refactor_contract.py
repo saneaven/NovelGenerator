@@ -111,6 +111,67 @@ def test_read_result_xml_renders_nested_genres_and_tags() -> None:
     assert "<logline>A fallen prince returns.</logline>" in xml
 
 
+def test_outline_read_result_xml_includes_kind_attribute() -> None:
+    xml = _format_read_result_xml(
+        {
+            "objectType": "outline",
+            "objectId": "outline-1",
+            "data": {
+                "object": {
+                    "kind": "chapter",
+                    "name": "Opening",
+                    "description": "A first chapter.",
+                    "content": "Chapter outline.",
+                }
+            },
+        }
+    )
+
+    assert '<read_result type="outline" id="outline-1" kind="chapter">' in xml
+    assert "<name>Opening</name>" in xml
+
+
+def test_story_entity_read_result_xml_includes_kind_attribute() -> None:
+    xml = _format_read_result_xml(
+        {
+            "objectType": "story_entity",
+            "objectId": "entity-1",
+            "data": {
+                "object": {
+                    "kind": "character",
+                    "name": "Ari",
+                    "description": "A mapmaker.",
+                    "content": "Carries a forbidden map.",
+                }
+            },
+        }
+    )
+
+    assert '<read_result type="story_entity" id="entity-1" kind="character">' in xml
+    assert "<name>Ari</name>" in xml
+
+
+def test_story_entity_folder_read_result_xml_includes_parent_and_position() -> None:
+    xml = _format_read_result_xml(
+        {
+            "objectType": "story_entity_folder",
+            "objectId": "folder-1",
+            "data": {
+                "object": {
+                    "name": "Cast",
+                    "description": "Primary characters.",
+                    "parentId": "folder-parent",
+                    "position": 2,
+                }
+            },
+        }
+    )
+
+    assert '<read_result type="story_entity_folder" id="folder-1">' in xml
+    assert "<parentId>folder-parent</parentId>" in xml
+    assert "<position>2</position>" in xml
+
+
 def test_timeline_track_read_result_xml_renders_reference_ids_only() -> None:
     xml = _format_read_result_xml(
         {

@@ -48,7 +48,8 @@ def _to_xml_string(root: ET.Element) -> str:
 
 
 def _format_search_result_xml(result: dict[str, Any]) -> str:
-    data = result.get("data") or {}
+    raw_data = result.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
     payload = data.get("searchPayload") or {}
 
     root = ET.Element("search_result", type=str(payload.get("type", "semantic")), total=str(payload.get("total", 0)))
@@ -72,7 +73,7 @@ def _format_search_result_xml(result: dict[str, Any]) -> str:
     return _to_xml_string(root)
 
 
-def _append_timeline_scalar_fields(root: ET.Element, obj: dict[str, Any], keys: tuple[str, ...]) -> None:
+def _append_scalar_fields(root: ET.Element, obj: dict[str, Any], keys: tuple[str, ...]) -> None:
     for key in keys:
         if key not in obj:
             continue
@@ -128,14 +129,29 @@ def _append_timeline_links(root: ET.Element, obj: dict[str, Any]) -> None:
         ET.SubElement(links_el, "link", **attrs)
 
 
+def _xml_attrs(obj: dict[str, Any], keys: tuple[str, ...]) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for key in keys:
+        if key in obj and obj.get(key) is not None:
+            attrs[key] = str(obj.get(key))
+    return attrs
+
+
 def _format_read_result_xml(result: dict[str, Any]) -> str:
     object_type = str(result.get("objectType", ""))
-    root = ET.Element("read_result",
-        type=object_type,
-        id=str(result.get("objectId", "")),
-    )
-    data = result.get("data") or {}
-    obj = data.get("object") or {}
+    raw_data = result.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
+    raw_obj = data.get("object")
+    obj = raw_obj if isinstance(raw_obj, dict) else {}
+    root_attrs = {
+        "type": object_type,
+        "id": str(result.get("objectId", "")),
+    }
+    if object_type in {"outline", "story_entity"}:
+        kind = obj.get("kind")
+        if kind is not None and str(kind):
+            root_attrs["kind"] = str(kind)
+    root = ET.Element("read_result", **root_attrs)
     for key in ("name", "title", "logline", "description", "content", "authorNote"):
         value = obj.get(key)
         if isinstance(value, str) and value.strip():
@@ -164,15 +180,89 @@ def _format_read_result_xml(result: dict[str, Any]) -> str:
         if len(tags_el) == 0:
             root.remove(tags_el)
     if object_type == "timeline_track":
-        _append_timeline_scalar_fields(root, obj, ("parentId", "position", "color"))
+        _append_scalar_fields(root, obj, ("parentId", "position", "color"))
         _append_timeline_id_list(root, obj, "childTrackIds")
         _append_timeline_id_list(root, obj, "eventIds")
     elif object_type == "timeline_event":
-        _append_timeline_scalar_fields(root, obj, ("trackId",))
+        _append_scalar_fields(root, obj, ("trackId",))
         _append_timeline_date(root, obj, "startDate")
         _append_timeline_date(root, obj, "endDate")
         _append_timeline_links(root, obj)
+    elif object_type == "story_entity_folder":
+        _append_scalar_fields(root, obj, ("parentId", "position"))
     return _to_xml_string(root)
+
+
+def _append_project_tree_story_nodes(parent: ET.Element, nodes: Any) -> None:
+    if not isinstance(nodes, list):
+        return
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = str(node.get("nodeType") or "")
+        if node_type == "folder":
+            folder_el = ET.SubElement(parent, "folder", **_xml_attrs(node, ("id", "name")))
+            _append_project_tree_story_nodes(folder_el, node.get("children"))
+        elif node_type == "entity":
+            ET.SubElement(parent, "entity", **_xml_attrs(node, ("id", "name", "kind")))
+
+
+def _append_project_tree_outline_nodes(parent: ET.Element, nodes: Any) -> None:
+    if not isinstance(nodes, list):
+        return
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        attrs = _xml_attrs(
+            node,
+            ("id", "kind", "name", "actNumber", "chapterNumber", "manuscriptId"),
+        )
+        item_el = ET.SubElement(parent, "item", **attrs)
+        _append_project_tree_outline_nodes(item_el, node.get("children"))
+
+
+def _append_project_tree_timeline_tracks(parent: ET.Element, tracks: Any) -> None:
+    if not isinstance(tracks, list):
+        return
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        track_el = ET.SubElement(
+            parent,
+            "track",
+            **_xml_attrs(track, ("id", "name", "eventCount", "position")),
+        )
+        _append_project_tree_timeline_tracks(track_el, track.get("children"))
+
+
+def _format_project_tree_result_xml(result: dict[str, Any]) -> str:
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    tree = data.get("tree") if isinstance(data, dict) else None
+    if not isinstance(tree, dict):
+        return ""
+
+    root = ET.Element("project_tree")
+    title = tree.get("title")
+    if isinstance(title, str) and title.strip():
+        title_el = ET.SubElement(root, "title")
+        title_el.text = title
+
+    story_entities_el = ET.SubElement(root, "story_entities")
+    _append_project_tree_story_nodes(story_entities_el, tree.get("storyEntities"))
+
+    outline_el = ET.SubElement(root, "outline")
+    _append_project_tree_outline_nodes(outline_el, tree.get("outline"))
+
+    timeline_el = ET.SubElement(root, "timeline")
+    timeline = tree.get("timeline")
+    tracks = timeline.get("tracks") if isinstance(timeline, dict) else []
+    _append_project_tree_timeline_tracks(timeline_el, tracks)
+
+    return _to_xml_string(root)
+
+
+def _is_scalar_payload_value(value: Any) -> bool:
+    return (isinstance(value, str) and bool(value)) or isinstance(value, (int, float, bool))
 
 
 def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
@@ -185,9 +275,13 @@ def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
         return _to_xml_string(root)
 
     # Search results
-    data = result.get("data") or {}
+    raw_data = result.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
     if data.get("searchPayload"):
         return _format_search_result_xml(result)
+
+    if tool_name == "get_project_tree" and isinstance(data.get("tree"), dict):
+        return _format_project_tree_result_xml(result)
 
     # Read results
     if data.get("object") and tool_name.startswith("read_"):
@@ -202,10 +296,20 @@ def _format_result_content(result: dict[str, Any], tool_name: str) -> str:
     if oid:
         attrs["id"] = str(oid)
     for key, val in data.items():
-        if isinstance(val, str) and val:
-            attrs[key] = val
+        if _is_scalar_payload_value(val):
+            attrs[key] = str(val)
     root = ET.Element("tool_result", **attrs)
-    root.text = str(result.get("message") or "")
+    message = str(result.get("message") or "")
+    has_payload = any(isinstance(val, (dict, list)) for val in data.values())
+    if has_payload and message:
+        message_el = ET.SubElement(root, "message")
+        message_el.text = message
+    for key, val in data.items():
+        if isinstance(val, (dict, list)):
+            payload = ET.SubElement(root, "payload", key=str(key))
+            payload.text = json.dumps(val, ensure_ascii=False, separators=(",", ":"))
+    if not has_payload:
+        root.text = message
     return _to_xml_string(root)
 
 
