@@ -4,7 +4,8 @@
  * by `useThreadView`.
  *
  * - The query caches a `ThreadSnapshot` under `threadKeys.messages(threadId)`.
- * - Fetching seeds thread metadata only when absent, plus image runs as a side effect.
+ * - Fetching seeds thread metadata when absent and latest-run context from the
+ *   snapshot, plus image runs as a side effect.
  * - SSE-finalized events and optimistic edits write through the imperative cache
  *   mutators below (never token deltas — those go to the overlay store).
  */
@@ -25,19 +26,23 @@ function sortMessages(messages: ThreadMessage[]): ThreadMessage[] {
 }
 
 /**
- * Seed thread metadata only for a cold thread. Message snapshot fetches are not
- * the runtime status source and must not clear live streaming overlay state.
+ * Seed thread metadata only for a cold thread. Existing thread runtime status
+ * stays live-owned, but the snapshot is the source of truth for latest-run
+ * context used by follow-up journey feedback.
  */
 function applyThreadSnapshotSideEffects(threadId: string, response: Awaited<ReturnType<typeof threadService.listMessages>>): void {
   const store = useThreadStreamStore.getState();
   seedImageRunsInCache(response.imageRuns);
   const existing = store.threadsById[threadId];
+  const latestRunContext = toLatestRunContext(response.latestRun);
   if (!existing) {
     store.upsertThread({
       ...response.thread,
-      latestRunContext: toLatestRunContext(response.latestRun),
+      latestRunContext,
     });
+    return;
   }
+  store.patchThread(threadId, { latestRunContext });
 }
 
 export function threadMessagesQueryOptions(threadId: string) {

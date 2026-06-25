@@ -116,6 +116,31 @@ describe('thread message snapshot side effects', () => {
     expect(useThreadStreamStore.getState().threadsById[threadId]?.latestRunStatus).toBe('running');
   });
 
+  it('hydrates latest run context for an existing thread without changing live status', async () => {
+    useThreadStreamStore.getState().upsertThread(makeThread({
+      status: 'running',
+      latestRunStatus: 'running',
+      latestRunContext: null,
+    }));
+    listMessagesMock.mockResolvedValueOnce(makeResponse({
+      thread: makeThread({ status: 'ready', latestRunStatus: 'ready' }),
+    }));
+
+    await refetchThreadSnapshot(threadId);
+
+    const thread = useThreadStreamStore.getState().threadsById[threadId];
+    expect(thread?.status).toBe('running');
+    expect(thread?.latestRunStatus).toBe('running');
+    expect(thread?.latestRunContext).toEqual({
+      inputPayload: { source: 'test' },
+      contextObjectIds: ['object-1'],
+      journeyTargetIds: ['journey-1'],
+      language: 'English',
+      runMode: 'agentMode',
+      surface: 'thread',
+    });
+  });
+
   it('does not clear streaming overlay during a message snapshot fetch', async () => {
     const store = useThreadStreamStore.getState();
     store.upsertThread(makeThread({ status: 'running', latestRunStatus: 'running' }));
