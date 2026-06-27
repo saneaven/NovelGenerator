@@ -242,7 +242,7 @@ class GeminiProvider(BaseProvider):
             level = "high"
             if thinking_config:
                 lvl = thinking_config.get("gemini_thinking_level")
-                if lvl in ("low", "high"):
+                if lvl in ("low", "medium", "high"):
                     level = lvl
             config["thinkingLevel"] = level
         else:

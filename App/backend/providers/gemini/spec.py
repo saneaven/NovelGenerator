@@ -100,7 +100,7 @@ SPEC = ProviderSpec(
                         "gemini_thinking_level": FieldSpec(
                             kind="enum",
                             default="high",
-                            options=("low", "high"),
+                            options=("low", "medium", "high"),
                             when=(
                                 Condition(op="eq", path="advanced.thinking_mode", value="model"),
                                 Condition(op="regex", path="model", pattern=r"(?i)gemini-3"),

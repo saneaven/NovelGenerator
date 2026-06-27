@@ -15,6 +15,8 @@ from App.backend.services.task_config_settings import (
     resolve_task_config,
     validate_task_config_settings,
 )
+from App.backend.providers.gemini.llm import GeminiProvider
+from App.backend.providers.registry import normalize_task_config
 
 
 def _task_config(
@@ -169,3 +171,55 @@ def test_resolve_task_config_defaults_custom_kind_for_custom_provider() -> None:
         "custom_thinking_template_id": "tpl_123",
         "tokenizer_override": "openai",
     }
+
+
+def test_openrouter_reasoning_effort_accepts_supported_model_values() -> None:
+    for effort in ("minimal", "low", "medium", "high", "xhigh", "max"):
+        normalized = normalize_task_config(
+            "openrouter",
+            _task_config(
+                advanced={
+                    "thinking_mode": "model",
+                    "thinking_config": {"effort": effort},
+                }
+            ),
+        )
+
+        assert normalized["advanced"]["thinking_config"]["effort"] == effort
+
+
+def test_openrouter_reasoning_effort_none_is_not_a_model_option() -> None:
+    normalized = normalize_task_config(
+        "openrouter",
+        _task_config(
+            advanced={
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "none"},
+            }
+        ),
+    )
+
+    assert normalized["advanced"]["thinking_config"]["effort"] == "medium"
+
+
+def test_gemini_three_accepts_medium_thinking_level() -> None:
+    normalized = normalize_task_config(
+        "gemini",
+        _task_config(
+            provider="gemini",
+            model="gemini-3-pro",
+            advanced={
+                "thinking_mode": "model",
+                "thinking_config": {"gemini_thinking_level": "medium"},
+            },
+        ),
+    )
+
+    assert normalized["advanced"]["thinking_config"]["gemini_thinking_level"] == "medium"
+
+    provider = GeminiProvider({})
+    assert provider._build_thinking_config(
+        "gemini-3-pro",
+        "model",
+        {"gemini_thinking_level": "medium"},
+    ) == {"includeThoughts": True, "thinkingLevel": "medium"}
