@@ -202,6 +202,24 @@ def test_openrouter_reasoning_effort_none_is_not_a_model_option() -> None:
     assert normalized["advanced"]["thinking_config"]["effort"] == "medium"
 
 
+def test_custom_claude_reasoning_effort_accepts_xhigh() -> None:
+    normalized = normalize_task_config(
+        "custom",
+        _task_config(
+            provider="custom",
+            model="claude-gateway-model",
+            advanced={
+                "custom_kind": "claude",
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "xhigh"},
+            },
+        ),
+    )
+
+    assert normalized["advanced"]["custom_kind"] == "claude"
+    assert normalized["advanced"]["thinking_config"]["effort"] == "xhigh"
+
+
 def test_gemini_three_accepts_medium_thinking_level() -> None:
     normalized = normalize_task_config(
         "gemini",

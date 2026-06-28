@@ -17,7 +17,15 @@ from ..storage_usage_service import (
 )
 from ..run_pipeline.status_logic import derive_run_status
 from .contexts import ToolAccessPolicy, ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
-from .contracts import PersistedToolMeta, ToolDecisionGroup, ToolDecisionItem, ToolExecutionOutcome, ToolExecutionResult, ToolOffer, ValidationResult
+from .contracts import (
+    PersistedToolMeta,
+    ToolDecisionGroup,
+    ToolDecisionItem,
+    ToolExecutionOutcome,
+    ToolExecutionResult,
+    ToolOffer,
+    ValidationResult,
+)
 from .grant_catalog import TOOL_GRANT_CATALOG
 from .registry import ToolRegistry
 from .result_utils import invalid_result, valid_result
@@ -345,7 +353,25 @@ class ToolEngineService:
         )
 
     @staticmethod
+    def _reason_from_failed_outcome(outcome: ToolExecutionOutcome) -> str:
+        if outcome.reason:
+            return outcome.reason
+        if isinstance(outcome.result, dict):
+            for key in ("error", "message", "reason"):
+                value = outcome.result.get(key)
+                if value:
+                    return str(value)
+        return "Tool execution failed"
+
+    @staticmethod
     def _apply_execution_outcome(row: RunToolCallModel, outcome: ToolExecutionOutcome) -> None:
+        if outcome.lifecycle == "failed":
+            reason = ToolEngineService._reason_from_failed_outcome(outcome)
+            ToolEngineService._mark_failed(row, reason)
+            if isinstance(outcome.result, dict):
+                row.result = outcome.result
+            return
+
         base_extra = row.extra_content if isinstance(row.extra_content, dict) else {}
         if outcome.extra_content_patch:
             row.extra_content = {**base_extra, **outcome.extra_content_patch}
@@ -464,7 +490,7 @@ class ToolEngineService:
                     before_amount=before_bytes,
                     after_amount=measure_tool_call_row(row),
                 ),
-                enforce_quota=True,
+                enforce_quota=outcome.lifecycle != "failed",
             )
             db.commit()
             db.refresh(row)
@@ -533,12 +559,15 @@ class ToolEngineService:
             execution_results = await module.apply_group(group=group, ctx=group_ctx)
             deltas = []
             out: list[AppliedToolCallResult] = []
+            has_failed_outcome = False
             for execution_result in execution_results:
                 row = rows_by_id.get(execution_result.tool_call_id)
                 if row is None:
                     continue
                 before_bytes = before_bytes_by_id.get(row.id, 0)
                 outcome = execution_result.outcome
+                if outcome.lifecycle == "failed":
+                    has_failed_outcome = True
                 self._apply_execution_outcome(row, outcome)
                 deltas.append(
                     build_usage_delta_for_amount(
@@ -562,7 +591,7 @@ class ToolEngineService:
                     user_id=user_id,
                     project_id=project_id,
                     deltas=deltas,
-                    enforce_quota=True,
+                    enforce_quota=not has_failed_outcome,
                 )
             db.commit()
             for row in rows_by_id.values():

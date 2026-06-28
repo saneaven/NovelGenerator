@@ -9,6 +9,7 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+from xml.etree import ElementTree
 
 os.environ.setdefault("DEFAULT_STORAGE_QUOTA_BYTES", "0")
 
@@ -780,11 +781,11 @@ def test_object_patch_batch_preserves_patch_mismatch_reason(monkeypatch) -> None
     )
 
     assert result["success"] is False
-    assert result["reason"] == (
-        'PATCH_NOT_FOUND\n'
-        'expected="제단 위에는 붉은 봉인석이 놓여 있었다."\n'
-        'actual="제단 위에는 검은 봉인석이 놓여 있었다."'
-    )
+    root = ElementTree.fromstring(result["reason"])
+    assert root.attrib == {"code": "PATCH_NOT_FOUND", "kind": "target_mismatch"}
+    [mismatch] = root.findall("./mismatches/mismatch")
+    assert mismatch.findtext("expected_block") == "붉"
+    assert mismatch.findtext("actual_block") == "검"
 
 
 def test_thread_routes_marks_processing_tool_calls_failed_after_flush_errors() -> None:

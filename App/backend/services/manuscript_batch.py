@@ -183,6 +183,8 @@ class ManuscriptBatch:
         key_to_call_ids: dict[str, set[str]] = {}
 
         for key, state in list(self._states.items()):
+            if not state.touched_call_ids:
+                continue
             key_to_call_ids[key] = set(state.touched_call_ids)
             try:
                 object_service.update_object(

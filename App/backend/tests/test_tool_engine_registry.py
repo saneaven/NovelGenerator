@@ -69,10 +69,13 @@ from App.backend.services.tool_engine.contracts import (
     ToolBindingMeta,
     ToolDecisionGroup,
     ToolDecisionItem,
+    ToolExecutionOutcome,
+    ToolExecutionResult,
     ToolFeatureModule,
     ToolOffer,
     ToolSpec,
 )
+from App.backend.services.tool_engine.modules.feature_common import apply_object_batch_group
 from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 from App.backend.services.tool_engine.service import ToolEngineService
@@ -309,6 +312,281 @@ def test_feature_apply_group_rejects_non_outcome_result() -> None:
 
     with pytest.raises(ValueError, match="Invalid execution outcome"):
         asyncio.run(module.apply_group(group=group, ctx=ctx))
+
+
+class _GroupResultQuery:
+    def __init__(self, db: "_GroupResultDb") -> None:
+        self._db = db
+
+    def filter(self, *_args: object, **_kwargs: object) -> "_GroupResultQuery":
+        return self
+
+    def first(self) -> object:
+        if not self._db.rows_to_return:
+            raise AssertionError("No queued group result row")
+        return self._db.rows_to_return.pop(0)
+
+
+class _GroupResultDb:
+    def __init__(self, rows: list[RunToolCallModel]) -> None:
+        self.rows_to_return = list(rows)
+        self.rollbacks = 0
+        self.commits = 0
+        self.refreshes: list[RunToolCallModel] = []
+
+    def query(self, model: object) -> _GroupResultQuery:
+        assert model is RunToolCallModel
+        return _GroupResultQuery(self)
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def refresh(self, row: RunToolCallModel) -> None:
+        self.refreshes.append(row)
+
+
+def test_execute_group_collects_success_and_failure_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    failed_reason = (
+        '<patch_failure code="PATCH_NOT_FOUND" kind="target_mismatch">'
+        "<mismatches><mismatch>"
+        "<expected_block>missing</expected_block>"
+        "<actual_block>current</actual_block>"
+        "</mismatch></mismatches>"
+        "</patch_failure>"
+    )
+    first_id = uuid4()
+    failed_id = uuid4()
+    third_id = uuid4()
+
+    class _CollectingGroupedModule(ToolFeatureModule):
+        feature_key = "story_entity"
+
+        def list_bindings(self, _ctx: ToolModuleContext) -> list[ToolBinding]:
+            return []
+
+        async def apply_group(self, *, group: ToolDecisionGroup, ctx) -> list[ToolExecutionResult]:
+            del group, ctx
+            return [
+                ToolExecutionResult(
+                    tool_call_id=first_id,
+                    outcome=ToolExecutionOutcome(
+                        lifecycle="applied",
+                        result={"success": True, "message": "first applied"},
+                    ),
+                ),
+                ToolExecutionResult(
+                    tool_call_id=failed_id,
+                    outcome=ToolExecutionOutcome(
+                        lifecycle="failed",
+                        reason=failed_reason,
+                    ),
+                ),
+                ToolExecutionResult(
+                    tool_call_id=third_id,
+                    outcome=ToolExecutionOutcome(
+                        lifecycle="applied",
+                        result={"success": True, "message": "third applied"},
+                    ),
+                ),
+            ]
+
+    registry = ToolRegistry()
+    registry.register_module(_CollectingGroupedModule())
+    service = ToolEngineService(registry)
+    monkeypatch.setattr(
+        service,
+        "_build_group_execution_context",
+        lambda **kwargs: ToolGroupExecutionContext(**kwargs),  # type: ignore[arg-type]
+    )
+
+    binding = ToolBinding(
+        spec=_make_spec("patch_story_entity"),
+        meta=ToolBindingMeta(
+            feature_key="story_entity",
+            category="write",
+            op="patch",
+            target_kind="story_entity",
+        ),
+        validate=lambda _args, _ctx: valid_result(),
+        execute=lambda _args, _ctx: None,
+        build_persisted_meta=lambda _ctx, _args: PersistedToolMeta(
+            feature_key="story_entity",
+            category="write",
+            op="patch",
+            target_kind="story_entity",
+            target_id=str(uuid4()),
+            merge_key="story_entity:test",
+        ),
+    )
+
+    items = tuple(
+        ToolDecisionItem(
+            tool_call_id=tool_call_id,
+            binding=binding,
+            args={"value": "x"},
+            meta=PersistedToolMeta(
+                feature_key="story_entity",
+                category="write",
+                op="patch",
+                target_kind="story_entity",
+                target_id=str(uuid4()),
+                merge_key="story_entity:test",
+            ),
+            call_seq=index,
+        )
+        for index, tool_call_id in enumerate((first_id, failed_id, third_id))
+    )
+    rows = [
+        RunToolCallModel(id=first_id, status="processing", tool_name="patch_story_entity", arguments={}),
+        RunToolCallModel(id=failed_id, status="processing", tool_name="patch_story_entity", arguments={}),
+        RunToolCallModel(id=third_id, status="processing", tool_name="patch_story_entity", arguments={}),
+    ]
+    db = _GroupResultDb(rows)
+    thread = Thread(id=uuid4(), project_id=uuid4(), user_id=uuid4(), thread_type="agent", status="processing")
+    run = RunModel(id=uuid4(), thread_id=thread.id, user_id=thread.user_id, project_id=thread.project_id, status="processing")
+
+    results = asyncio.run(
+        service._execute_group(  # pylint: disable=protected-access
+            db,  # type: ignore[arg-type]
+            thread=thread,
+            run=run,
+            settings=SimpleNamespace(),
+            rows_by_id={row.id: row for row in rows},
+            group=ToolDecisionGroup(feature_key="story_entity", merge_key="story_entity:test", items=items),
+            user_id=thread.user_id,
+            project_id=thread.project_id,
+            language="English",
+            preset_id=uuid4(),
+            input_payload={},
+            vector_storage_enabled=False,
+        )
+    )
+
+    assert [result.status for result in results] == ["applied", "failed", "applied"]
+    assert rows[0].status == "applied"
+    assert rows[0].reason is None
+    assert rows[0].result == {"success": True, "message": "first applied"}
+    assert rows[1].status == "failed"
+    assert rows[1].reason == failed_reason
+    assert rows[1].result == {"success": False, "message": failed_reason, "error": failed_reason}
+    assert rows[2].status == "applied"
+    assert rows[2].reason is None
+    assert rows[2].result == {"success": True, "message": "third applied"}
+    assert db.rollbacks == 0
+    assert db.commits == 1
+    assert db.refreshes == rows
+
+
+def test_apply_object_batch_group_collects_item_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    first_id = uuid4()
+    failed_id = uuid4()
+    third_id = uuid4()
+    object_id = uuid4()
+    failed_reason = "PATCH_NOT_FOUND"
+
+    class _FakeObjectPatchBatch:
+        instances: list["_FakeObjectPatchBatch"] = []
+
+        def __init__(self) -> None:
+            self.applied_call_ids: list[str] = []
+            self.success_keys: set[str] = set()
+            _FakeObjectPatchBatch.instances.append(self)
+
+        @staticmethod
+        def make_key(object_type: str, object_id, language: str) -> str:
+            return f"{object_type}:{object_id}:{language}"
+
+        def apply_patch(self, **kwargs):
+            call_id = str(kwargs["call_id"])
+            self.applied_call_ids.append(call_id)
+            if call_id == str(failed_id):
+                return {"success": False, "reason": failed_reason}
+            self.success_keys.add(self.make_key(kwargs["object_type"], kwargs["object_id"], kwargs["language"]))
+            return {"success": True}
+
+        def apply_replace(self, **_kwargs):
+            raise AssertionError("replace should not be used")
+
+        def flush_all(self, **_kwargs):
+            return (
+                {key: SimpleNamespace(success=True, reason=None) for key in self.success_keys},
+                {},
+            )
+
+    fake_patch_module = types.ModuleType("App.backend.services.object_patch_batch")
+    fake_patch_module.ObjectPatchBatch = _FakeObjectPatchBatch
+    monkeypatch.setitem(sys.modules, "App.backend.services.object_patch_batch", fake_patch_module)
+
+    fake_object_service = types.ModuleType("App.backend.services.object_service")
+    fake_object_service.object_service = SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "App.backend.services.object_service", fake_object_service)
+
+    binding = ToolBinding(
+        spec=_make_spec("patch_story_entity"),
+        meta=ToolBindingMeta(
+            feature_key="story_entity",
+            category="write",
+            op="patch",
+            target_kind="story_entity",
+        ),
+        validate=lambda _args, _ctx: valid_result(),
+        execute=lambda _args, _ctx: None,
+        build_persisted_meta=lambda _ctx, _args: PersistedToolMeta(
+            feature_key="story_entity",
+            category="write",
+            op="patch",
+            target_kind="story_entity",
+            target_id=str(object_id),
+            merge_key="story_entity:test",
+        ),
+    )
+    items = tuple(
+        ToolDecisionItem(
+            tool_call_id=tool_call_id,
+            binding=binding,
+            args={"field": "content", "old": "old", "new": "new"},
+            meta=PersistedToolMeta(
+                feature_key="story_entity",
+                category="write",
+                op="patch",
+                target_kind="story_entity",
+                target_id=str(object_id),
+                merge_key="story_entity:test",
+            ),
+            call_seq=index,
+        )
+        for index, tool_call_id in enumerate((first_id, failed_id, third_id))
+    )
+
+    results = asyncio.run(
+        apply_object_batch_group(
+            group=ToolDecisionGroup(feature_key="story_entity", merge_key="story_entity:test", items=items),
+            ctx=ToolGroupExecutionContext(
+                db=SimpleNamespace(),
+                thread=SimpleNamespace(),
+                run=SimpleNamespace(),
+                settings=SimpleNamespace(),
+                user_id=uuid4(),
+                project_id=uuid4(),
+                language="English",
+            ),
+            object_type_for_item=lambda _item: "story_entity",
+            replace_fields_for_item=lambda _item: {},
+            metadata_for_item=lambda _item: None,
+            result_for_item=lambda item: {"success": True, "message": f"applied:{item.tool_call_id}"},
+        )
+    )
+
+    assert [result.outcome.lifecycle for result in results] == ["applied", "failed", "applied"]
+    assert results[1].outcome.reason == failed_reason
+    assert _FakeObjectPatchBatch.instances[0].applied_call_ids == [
+        str(first_id),
+        str(failed_id),
+        str(third_id),
+    ]
 
 
 class _ParentCompletionQuery:

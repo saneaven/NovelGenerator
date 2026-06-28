@@ -104,7 +104,7 @@ function upsertThreadStatus(params: {
   });
 }
 
-function refreshUnresolvedCount(threadId: string): void {
+export function refreshUnresolvedCount(threadId: string): void {
   const view = getMergedThreadView(threadId);
   let unresolvedCount = 0;
   for (const toolCall of Object.values(view.toolCallsById)) {

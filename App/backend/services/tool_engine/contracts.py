@@ -92,8 +92,9 @@ class PersistedToolMeta:
 
 @dataclass(frozen=True)
 class ToolExecutionOutcome:
-    lifecycle: Literal["applied", "working"]
+    lifecycle: Literal["applied", "working", "failed"]
     result: dict[str, Any] | None = None
+    reason: str | None = None
     extra_content_patch: dict[str, Any] | None = None
     child_thread_id: UUID | None = None
     child_input_text: str | None = None

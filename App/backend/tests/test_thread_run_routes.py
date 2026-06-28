@@ -116,6 +116,7 @@ def _install_import_stubs() -> None:
         resume_run=lambda *_args, **_kwargs: None,
         pause_run=lambda *_args, **_kwargs: None,
         cancel_run=lambda *_args, **_kwargs: None,
+        cancel_run_for_delete=lambda *_args, **_kwargs: None,
     )
     sys.modules["App.backend.services.run_pipeline"] = fake_run_pipeline
 
@@ -720,6 +721,7 @@ class FakeDeleteMessageRouteDb:
         self.message = message
         self.latest_run = run
         self.deleted: list[object] = []
+        self.refreshed: list[object] = []
         self.committed = False
         self.flushed = False
 
@@ -728,6 +730,9 @@ class FakeDeleteMessageRouteDb:
 
     def delete(self, row: object) -> None:
         self.deleted.append(row)
+
+    def refresh(self, row: object) -> None:
+        self.refreshed.append(row)
 
     def flush(self) -> None:
         self.flushed = True
@@ -810,6 +815,106 @@ def test_delete_thread_message_pauses_thread_and_emits_snapshot_invalidation(mon
     assert [name for name, _ in emitted] == ["run:status", "thread:snapshot_invalidated"]
     assert emitted[0][1]["status"] == "paused"
     assert emitted[1][1]["run_id"] == str(run_id)
+
+
+def _patch_delete_message_route_helpers(monkeypatch: pytest.MonkeyPatch, thread: SimpleNamespace) -> None:
+    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(thread_routes, "_snapshot_assistant_tool_call_tree", lambda *_args, **_kwargs: ([], []))
+    monkeypatch.setattr(thread_routes, "_count_unresolved_run_tool_calls", lambda *_args, **_kwargs: 1)
+    monkeypatch.setattr(thread_routes, "snapshot_thread_row", lambda row: {"status": row.status})
+    monkeypatch.setattr(thread_routes, "snapshot_run_message_row", lambda row: {"id": str(row.id)})
+    monkeypatch.setattr(thread_routes, "build_thread_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_run_message_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_run_message_attachment_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "build_tool_call_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(thread_routes, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
+
+
+@pytest.mark.parametrize("run_status", ["running", "processing"])
+def test_delete_thread_message_cancels_active_streaming_run(
+    run_status: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread_id = uuid4()
+    user_id = uuid4()
+    run_id = uuid4()
+    message_id = uuid4()
+    thread = SimpleNamespace(id=thread_id, user_id=user_id, project_id=uuid4(), status=run_status, captured_prompt_snapshot=None)
+    run = SimpleNamespace(id=run_id, thread=thread, thread_id=thread_id, run_seq=1, status=run_status, error=None)
+    message = SimpleNamespace(id=message_id, thread_id=thread_id, run_id=run_id, role="assistant", data={})
+    db = FakeDeleteMessageRouteDb(thread=thread, run=run, message=message)
+    canceled: list[tuple[object, object]] = []
+    emitted: list[str] = []
+
+    _patch_delete_message_route_helpers(monkeypatch, thread)
+
+    async def _fake_cancel_run_for_delete(*, thread_id: object, user_id: object) -> None:
+        canceled.append((thread_id, user_id))
+        thread.status = "canceled"
+        run.status = "canceled"
+
+    async def _fake_emit_runtime_event(*, event_name: str, data: dict[str, object], **_kwargs):
+        emitted.append(event_name)
+        return {"event": event_name}
+
+    monkeypatch.setattr(thread_routes.run_pipeline, "cancel_run_for_delete", _fake_cancel_run_for_delete)
+    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+
+    response = asyncio.run(
+        thread_routes.delete_thread_message(
+            thread_id=thread_id,
+            message_id=message_id,
+            current_user=SimpleNamespace(id=user_id),
+            db=db,  # type: ignore[arg-type]
+        )
+    )
+
+    assert response.status_code == 204
+    assert canceled == [(thread_id, user_id)]
+    assert db.refreshed == [thread]
+    assert thread.status == "canceled"
+    # A canceled run is not flipped back to paused, and no extra run:status is emitted.
+    assert emitted == ["thread:snapshot_invalidated"]
+
+
+def test_delete_thread_message_does_not_cancel_unrelated_active_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    thread_id = uuid4()
+    user_id = uuid4()
+    old_run_id = uuid4()
+    active_run_id = uuid4()
+    message_id = uuid4()
+    thread = SimpleNamespace(id=thread_id, user_id=user_id, project_id=uuid4(), status="running", captured_prompt_snapshot=None)
+    old_run = SimpleNamespace(id=old_run_id, thread=thread, thread_id=thread_id, run_seq=1, status="done", error=None)
+    active_run = SimpleNamespace(id=active_run_id, thread=thread, thread_id=thread_id, run_seq=2, status="running", error=None)
+    message = SimpleNamespace(id=message_id, thread_id=thread_id, run_id=old_run_id, role="assistant", data={})
+    db = FakeDeleteMessageRouteDb(thread=thread, run=old_run, message=message)
+    db.latest_run = active_run
+    canceled: list[object] = []
+
+    _patch_delete_message_route_helpers(monkeypatch, thread)
+
+    async def _fake_cancel_run_for_delete(*, thread_id: object, user_id: object) -> None:
+        canceled.append(thread_id)
+
+    async def _fake_emit_runtime_event(*, event_name: str, data: dict[str, object], **_kwargs):
+        return {"event": event_name}
+
+    monkeypatch.setattr(thread_routes.run_pipeline, "cancel_run_for_delete", _fake_cancel_run_for_delete)
+    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+
+    response = asyncio.run(
+        thread_routes.delete_thread_message(
+            thread_id=thread_id,
+            message_id=message_id,
+            current_user=SimpleNamespace(id=user_id),
+            db=db,  # type: ignore[arg-type]
+        )
+    )
+
+    assert response.status_code == 204
+    assert canceled == []
+    assert db.refreshed == []
+    assert thread.status == "running"
 
 
 class ExpiringRow:

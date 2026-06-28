@@ -192,7 +192,7 @@ SPEC = ProviderSpec(
                                 "effort": FieldSpec(
                                     kind="enum",
                                     default="high",
-                                    options=("low", "medium", "high", "max"),
+                                    options=("low", "medium", "high", "xhigh", "max"),
                                     ui=UIHint(
                                         widget="select",
                                         label_key="settings.taskConfig.thinking_config.effortLevel",

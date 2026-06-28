@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from difflib import SequenceMatcher
-import json
 import re
 import unicodedata
+from xml.sax.saxutils import escape
 
 
 _WS_RE = re.compile(r"[\u00A0\u2000-\u200A\u202F\u205F\u3000]")
@@ -12,22 +11,10 @@ _ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\uFEFF]")
 _SINGLE_QUOTES_RE = re.compile(r"[\u2018\u2019\u201A\u201B]")
 _DOUBLE_QUOTES_RE = re.compile(r"[\u201C\u201D\u201E\u201F]")
 _DASH_RE = re.compile(r"[\u2013\u2014]")
-_SENTENCE_RE = re.compile(r"[^.!?。！？\n]+(?:[.!?。！？]+|$)")
-_CLAUSE_RE = re.compile(r"[^,;:，、；：.!?。！？\n]+")
-_WORD_RE = re.compile(r"\S+")
 
-_MAX_REASON_VALUE_CHARS = 160
-_MAX_REASON_CHARS = 500
-_MAX_SEQUENCE_UNITS = 2000
-_MAX_FALLBACK_UNITS = 350
-_MAX_ANCHOR_OCCURRENCES = 5
-
-
-@dataclass(frozen=True)
-class _NaturalUnit:
-    text: str
-    start: int
-    end: int
+_ANCHOR_COUNT = 20
+_MAX_MISMATCH_RECURSION_DEPTH = 4
+_CONTEXT_CHARS = 24
 
 
 @dataclass
@@ -36,6 +23,35 @@ class ReplacementResult:
     content: str
     code: str | None = None
     reason: str | None = None
+
+
+@dataclass(frozen=True)
+class _Anchor:
+    text: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class _AnchorMatch:
+    anchor: _Anchor
+    actual_start: int
+    actual_end: int
+
+
+@dataclass(frozen=True)
+class _TargetCandidate:
+    actual_start: int
+    actual_end: int
+    matches: tuple[_AnchorMatch, ...]
+
+
+@dataclass(frozen=True)
+class _MismatchBlock:
+    expected: str
+    actual: str
+    before_context: str
+    after_context: str
 
 
 def normalize_text(text: str) -> str:
@@ -51,106 +67,35 @@ def normalize_text(text: str) -> str:
     return out
 
 
-def _trim_unit(text: str, start: int, end: int) -> _NaturalUnit | None:
-    while start < end and text[start].isspace():
-        start += 1
-    while end > start and text[end - 1].isspace():
-        end -= 1
-    if start >= end:
-        return None
-    unit_text = text[start:end]
-    if not any(ch.isalnum() for ch in unit_text):
-        return None
-    return _NaturalUnit(text=unit_text, start=start, end=end)
+def _xml(value: str) -> str:
+    return escape(value, {'"': "&quot;"})
 
 
-def _split_on_blank_lines(text: str) -> list[_NaturalUnit]:
-    units: list[_NaturalUnit] = []
-    start = 0
-    for match in re.finditer(r"\n\s*\n", text):
-        unit = _trim_unit(text, start, match.start())
-        if unit is not None:
-            units.append(unit)
-        start = match.end()
-    unit = _trim_unit(text, start, len(text))
-    if unit is not None:
-        units.append(unit)
-    return units
+def _tag(name: str, value: str, *, indent: str = "  ") -> str:
+    return f"{indent}<{name}>{_xml(value)}</{name}>"
 
 
-def _split_lines(text: str) -> list[_NaturalUnit]:
-    units: list[_NaturalUnit] = []
-    start = 0
-    for line in text.splitlines(keepends=True):
-        end = start + len(line)
-        unit = _trim_unit(text, start, end)
-        if unit is not None:
-            units.append(unit)
-        start = end
-    if not text.endswith("\n") and start < len(text):
-        unit = _trim_unit(text, start, len(text))
-        if unit is not None and (not units or unit.start != units[-1].start):
-            units.append(unit)
-    return units
-
-
-def _regex_units(text: str, pattern: re.Pattern[str]) -> list[_NaturalUnit]:
-    units: list[_NaturalUnit] = []
-    for match in pattern.finditer(text):
-        unit = _trim_unit(text, match.start(), match.end())
-        if unit is not None:
-            units.append(unit)
-    return units
-
-
-def _word_group_units(text: str) -> list[_NaturalUnit]:
-    words = list(_WORD_RE.finditer(text))
-    if len(words) < 2:
-        return []
-    units: list[_NaturalUnit] = []
-    max_size = min(4, len(words))
-    for size in range(max_size, 1, -1):
-        for index in range(0, len(words) - size + 1):
-            start = words[index].start()
-            end = words[index + size - 1].end()
-            unit = _trim_unit(text, start, end)
-            if unit is not None:
-                units.append(unit)
-    return units
-
-
-def _units_by_natural_level(text: str) -> list[list[_NaturalUnit]]:
-    return [
-        _regex_units(text, _SENTENCE_RE),
-        _regex_units(text, _CLAUSE_RE),
-        _split_lines(text),
-        _split_on_blank_lines(text),
-        _word_group_units(text),
-    ]
-
-
-def _preview(value: str) -> str | None:
-    value = value.strip()
-    if not value:
-        return ""
-    if len(value) > _MAX_REASON_VALUE_CHARS:
-        return None
-    return value
-
-
-def _format_expected_actual_reason(expected: str, actual: str) -> str | None:
-    expected_preview = _preview(expected)
-    actual_preview = _preview(actual)
-    if expected_preview is None or actual_preview is None:
-        return None
-    reason = (
-        "PATCH_NOT_FOUND\n"
-        f"expected={json.dumps(expected_preview, ensure_ascii=False)}\n"
-        f"actual={json.dumps(actual_preview, ensure_ascii=False)}"
+def _format_simple_failure(code: str, kind: str, message: str) -> str:
+    return "\n".join(
+        [
+            f'<patch_failure code="{_xml(code)}" kind="{_xml(kind)}">',
+            _tag("message", message),
+            "</patch_failure>",
+        ]
     )
-    if len(reason) > _MAX_REASON_CHARS:
-        return None
-    return reason
+
+
+def _format_mismatch_failure(code: str, kind: str, blocks: list[_MismatchBlock]) -> str:
+    lines = [f'<patch_failure code="{_xml(code)}" kind="{_xml(kind)}">', "  <mismatches>"]
+    for block in blocks:
+        lines.append("    <mismatch>")
+        lines.append(_tag("before_context", block.before_context, indent="      "))
+        lines.append(_tag("expected_block", block.expected, indent="      "))
+        lines.append(_tag("actual_block", block.actual, indent="      "))
+        lines.append(_tag("after_context", block.after_context, indent="      "))
+        lines.append("    </mismatch>")
+    lines.extend(["  </mismatches>", "</patch_failure>"])
+    return "\n".join(lines)
 
 
 def _count_occurrences(text: str, needle: str, *, limit: int = 100) -> int:
@@ -167,117 +112,358 @@ def _count_occurrences(text: str, needle: str, *, limit: int = 100) -> int:
     return count
 
 
-def _find_sequence_mismatch(old: str, content: str) -> tuple[str, str] | None:
-    old_levels = _units_by_natural_level(old)
-    content_levels = _units_by_natural_level(content)
-    for level_index, old_units in enumerate(old_levels):
-        if not old_units or len(old_units) > _MAX_SEQUENCE_UNITS:
-            continue
-        content_units = content_levels[level_index]
-        if not content_units or len(content_units) > _MAX_SEQUENCE_UNITS:
-            continue
-
-        old_texts = [unit.text for unit in old_units]
-        content_texts = [unit.text for unit in content_units]
-        matcher = SequenceMatcher(None, old_texts, content_texts, autojunk=False)
-        for tag, old_start, old_end, content_start, content_end in matcher.get_opcodes():
-            if tag == "equal":
-                continue
-            old_count = old_end - old_start
-            content_count = content_end - content_start
-            if old_count == 1 and content_count == 1:
-                expected = old_units[old_start].text
-                actual = content_units[content_start].text
-                if SequenceMatcher(None, expected, actual, autojunk=False).ratio() < 0.45:
-                    continue
-                if _format_expected_actual_reason(expected, actual) is not None:
-                    return expected, actual
-            if old_count == 1 and content_count == 0:
-                expected = old_units[old_start].text
-                if _format_expected_actual_reason(expected, "") is not None:
-                    return expected, ""
-    return None
+def _trim_anchor(text: str, start: int, end: int) -> _Anchor | None:
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    if start >= end:
+        return None
+    return _Anchor(text=text[start:end], start=start, end=end)
 
 
-def _ordered_anchor_count(anchors: list[str], actual: str) -> int:
-    count = 0
-    start = 0
-    for anchor in anchors:
-        index = actual.find(anchor, start)
-        if index == -1:
-            continue
-        count += 1
-        start = index + len(anchor)
-    return count
+def _make_anchors(text: str) -> list[_Anchor]:
+    if not text:
+        return []
 
-
-def _anchor_candidates(unit: str, content: str) -> list[str]:
-    anchors: list[str] = []
-    seen: set[str] = set()
-    for candidate in _word_group_units(unit) + _regex_units(unit, _CLAUSE_RE):
-        text = candidate.text.strip()
-        if len(text) < 4 or text in seen:
-            continue
-        seen.add(text)
-        if _count_occurrences(content, text, limit=_MAX_ANCHOR_OCCURRENCES + 1) > _MAX_ANCHOR_OCCURRENCES:
-            continue
-        anchors.append(text)
+    count = min(_ANCHOR_COUNT, len(text))
+    anchors: list[_Anchor] = []
+    for index in range(count):
+        start = (len(text) * index) // count
+        end = (len(text) * (index + 1)) // count
+        anchor = _trim_anchor(text, start, end)
+        if anchor is not None:
+            anchors.append(anchor)
     return anchors
 
 
-def _find_anchor_mismatch(old: str, content: str) -> tuple[str, str] | None:
-    content_levels = _units_by_natural_level(content)
-    for level_index, old_units in enumerate(_units_by_natural_level(old)):
-        content_units = content_levels[level_index]
-        if not old_units or not content_units:
+def _find_occurrences(text: str, needle: str) -> list[int]:
+    if not needle:
+        return []
+    out: list[int] = []
+    start = 0
+    while start <= len(text):
+        index = text.find(needle, start)
+        if index == -1:
+            break
+        out.append(index)
+        start = index + 1
+    return out
+
+
+def _minimum_chain_length(anchor_count: int) -> int:
+    if anchor_count <= 1:
+        return anchor_count
+    return min(anchor_count, max(2, anchor_count // 3))
+
+
+def _chain_from_seed(
+    *,
+    anchors: list[_Anchor],
+    occurrences_by_index: dict[int, list[int]],
+    seed_anchor_index: int,
+    seed_actual_start: int,
+) -> tuple[_AnchorMatch, ...]:
+    seed_anchor = anchors[seed_anchor_index]
+    seed = _AnchorMatch(
+        anchor=seed_anchor,
+        actual_start=seed_actual_start,
+        actual_end=seed_actual_start + len(seed_anchor.text),
+    )
+
+    before: list[_AnchorMatch] = []
+    next_actual_start = seed.actual_start
+    for anchor_index in range(seed_anchor_index - 1, -1, -1):
+        anchor = anchors[anchor_index]
+        occurrence = None
+        for candidate_start in occurrences_by_index.get(anchor_index, []):
+            candidate_end = candidate_start + len(anchor.text)
+            if candidate_end <= next_actual_start:
+                occurrence = candidate_start
+            else:
+                break
+        if occurrence is None:
             continue
-        old_units = old_units[:_MAX_FALLBACK_UNITS]
-        content_units = content_units[:_MAX_FALLBACK_UNITS]
+        match = _AnchorMatch(
+            anchor=anchor,
+            actual_start=occurrence,
+            actual_end=occurrence + len(anchor.text),
+        )
+        before.append(match)
+        next_actual_start = match.actual_start
 
-        for old_unit in old_units:
-            if content.find(old_unit.text) != -1:
-                continue
-            expected = old_unit.text
-            if _preview(expected) is None:
-                continue
-            anchors = _anchor_candidates(expected, content)
-            if len(anchors) < 2:
-                continue
+    after: list[_AnchorMatch] = []
+    next_actual_end = seed.actual_end
+    for anchor_index in range(seed_anchor_index + 1, len(anchors)):
+        anchor = anchors[anchor_index]
+        occurrence = None
+        for candidate_start in occurrences_by_index.get(anchor_index, []):
+            if candidate_start >= next_actual_end:
+                occurrence = candidate_start
+                break
+        if occurrence is None:
+            continue
+        match = _AnchorMatch(
+            anchor=anchor,
+            actual_start=occurrence,
+            actual_end=occurrence + len(anchor.text),
+        )
+        after.append(match)
+        next_actual_end = match.actual_end
 
-            best: tuple[int, float, str] | None = None
-            for content_unit in content_units:
-                actual = content_unit.text
-                if _preview(actual) is None:
-                    continue
-                anchor_count = _ordered_anchor_count(anchors, actual)
-                if anchor_count < 2:
-                    continue
-                ratio = SequenceMatcher(None, expected, actual, autojunk=False).ratio()
-                if ratio < 0.35:
-                    continue
-                current = (anchor_count, ratio, actual)
-                if best is None or current[:2] > best[:2]:
-                    best = current
+    return tuple(reversed(before)) + (seed,) + tuple(after)
 
-            if best is not None:
-                return expected, best[2]
-    return None
+
+def _candidate_from_chain(chain: tuple[_AnchorMatch, ...], old_length: int, actual_length: int) -> _TargetCandidate | None:
+    if not chain:
+        return None
+    actual_start = chain[0].actual_start - chain[0].anchor.start
+    actual_end = chain[-1].actual_end + (old_length - chain[-1].anchor.end)
+    actual_start = max(0, actual_start)
+    actual_end = min(actual_length, actual_end)
+    if actual_start > actual_end:
+        return None
+    return _TargetCandidate(actual_start=actual_start, actual_end=actual_end, matches=chain)
+
+
+def _find_target_candidates(old: str, actual: str) -> list[_TargetCandidate]:
+    anchors = _make_anchors(old)
+    if not anchors:
+        return []
+
+    occurrences_by_index: dict[int, list[int]] = {
+        index: _find_occurrences(actual, anchor.text)
+        for index, anchor in enumerate(anchors)
+    }
+    min_chain_length = _minimum_chain_length(len(anchors))
+    candidates_by_range: dict[tuple[int, int], _TargetCandidate] = {}
+
+    for anchor_index, occurrences in occurrences_by_index.items():
+        for occurrence in occurrences:
+            chain = _chain_from_seed(
+                anchors=anchors,
+                occurrences_by_index=occurrences_by_index,
+                seed_anchor_index=anchor_index,
+                seed_actual_start=occurrence,
+            )
+            if len(chain) < min_chain_length:
+                continue
+            candidate = _candidate_from_chain(chain, len(old), len(actual))
+            if candidate is None:
+                continue
+            key = (candidate.actual_start, candidate.actual_end)
+            existing = candidates_by_range.get(key)
+            if existing is None or len(candidate.matches) > len(existing.matches):
+                candidates_by_range[key] = candidate
+
+    if not candidates_by_range:
+        return []
+
+    best_match_count = max(len(candidate.matches) for candidate in candidates_by_range.values())
+    return [
+        candidate
+        for candidate in candidates_by_range.values()
+        if len(candidate.matches) == best_match_count
+    ]
+
+
+def _find_split_chain(old: str, actual: str) -> tuple[_AnchorMatch, ...]:
+    anchors = _make_anchors(old)
+    if not anchors:
+        return ()
+
+    occurrences_by_index: dict[int, list[int]] = {
+        index: _find_occurrences(actual, anchor.text)
+        for index, anchor in enumerate(anchors)
+    }
+    chains: dict[tuple[tuple[int, int, int], ...], tuple[_AnchorMatch, ...]] = {}
+    for anchor_index, occurrences in occurrences_by_index.items():
+        for occurrence in occurrences:
+            chain = _chain_from_seed(
+                anchors=anchors,
+                occurrences_by_index=occurrences_by_index,
+                seed_anchor_index=anchor_index,
+                seed_actual_start=occurrence,
+            )
+            if not chain:
+                continue
+            key = tuple((match.anchor.start, match.actual_start, match.actual_end) for match in chain)
+            chains[key] = chain
+
+    if not chains:
+        return ()
+    best_count = max(len(chain) for chain in chains.values())
+    best_chains = [chain for chain in chains.values() if len(chain) == best_count]
+    if len(best_chains) != 1:
+        return ()
+    return best_chains[0]
+
+
+def _context(source: str, start: int, end: int) -> tuple[str, str]:
+    before = source[max(0, start - _CONTEXT_CHARS) : start]
+    after = source[end : min(len(source), end + _CONTEXT_CHARS)]
+    return before, after
+
+
+def _trim_mismatch_edges(
+    old: str,
+    actual: str,
+    old_start: int,
+    old_end: int,
+    actual_start: int,
+    actual_end: int,
+) -> tuple[int, int, int, int]:
+    while old_start < old_end and actual_start < actual_end and old[old_start] == actual[actual_start]:
+        old_start += 1
+        actual_start += 1
+    while old_start < old_end and actual_start < actual_end and old[old_end - 1] == actual[actual_end - 1]:
+        old_end -= 1
+        actual_end -= 1
+    return old_start, old_end, actual_start, actual_end
+
+
+def _block(old: str, actual: str, old_start: int, old_end: int, actual_start: int, actual_end: int) -> _MismatchBlock:
+    old_start, old_end, actual_start, actual_end = _trim_mismatch_edges(
+        old,
+        actual,
+        old_start,
+        old_end,
+        actual_start,
+        actual_end,
+    )
+    before, after = _context(old, old_start, old_end)
+    if not before and actual_start > 0:
+        before = actual[max(0, actual_start - _CONTEXT_CHARS) : actual_start]
+    if not after and actual_end < len(actual):
+        after = actual[actual_end : min(len(actual), actual_end + _CONTEXT_CHARS)]
+    return _MismatchBlock(
+        expected=old[old_start:old_end],
+        actual=actual[actual_start:actual_end],
+        before_context=before,
+        after_context=after,
+    )
+
+
+def _split_mismatches(
+    old: str,
+    actual: str,
+    *,
+    depth: int = 0,
+    old_offset: int = 0,
+    actual_offset: int = 0,
+    root_old: str | None = None,
+    root_actual: str | None = None,
+) -> list[_MismatchBlock]:
+    root_old = old if root_old is None else root_old
+    root_actual = actual if root_actual is None else root_actual
+    if old == actual:
+        return []
+    if depth >= _MAX_MISMATCH_RECURSION_DEPTH:
+        return [
+            _block(
+                root_old,
+                root_actual,
+                old_offset,
+                old_offset + len(old),
+                actual_offset,
+                actual_offset + len(actual),
+            )
+        ]
+
+    chain = _find_split_chain(old, actual)
+    if not chain:
+        return [
+            _block(
+                root_old,
+                root_actual,
+                old_offset,
+                old_offset + len(old),
+                actual_offset,
+                actual_offset + len(actual),
+            )
+        ]
+
+    out: list[_MismatchBlock] = []
+    old_cursor = 0
+    actual_cursor = 0
+    made_progress = False
+    for match in chain:
+        if match.anchor.start > old_cursor or match.actual_start > actual_cursor:
+            out.extend(
+                _split_mismatches(
+                    old[old_cursor : match.anchor.start],
+                    actual[actual_cursor : match.actual_start],
+                    depth=depth + 1,
+                    old_offset=old_offset + old_cursor,
+                    actual_offset=actual_offset + actual_cursor,
+                    root_old=root_old,
+                    root_actual=root_actual,
+                )
+            )
+            made_progress = True
+        old_cursor = match.anchor.end
+        actual_cursor = match.actual_end
+
+    if old_cursor < len(old) or actual_cursor < len(actual):
+        out.extend(
+            _split_mismatches(
+                old[old_cursor:],
+                actual[actual_cursor:],
+                depth=depth + 1,
+                old_offset=old_offset + old_cursor,
+                actual_offset=actual_offset + actual_cursor,
+                root_old=root_old,
+                root_actual=root_actual,
+            )
+        )
+        made_progress = True
+
+    if not made_progress:
+        return [
+            _block(
+                root_old,
+                root_actual,
+                old_offset,
+                old_offset + len(old),
+                actual_offset,
+                actual_offset + len(actual),
+            )
+        ]
+    return out
 
 
 def _format_not_found_reason(old: str, content: str) -> str:
-    mismatch = _find_sequence_mismatch(old, content) or _find_anchor_mismatch(old, content)
-    if mismatch is not None:
-        reason = _format_expected_actual_reason(*mismatch)
-        if reason is not None:
-            return reason
-    return "PATCH_NOT_FOUND\nno reliable close match"
+    candidates = _find_target_candidates(old, content)
+    if not candidates:
+        return _format_simple_failure(
+            "PATCH_NOT_FOUND",
+            "target_not_found",
+            "old text was not found in the current content.",
+        )
+    if len(candidates) > 1:
+        return _format_simple_failure(
+            "PATCH_NOT_FOUND",
+            "target_ambiguous",
+            "multiple possible target regions matched the anchors.",
+        )
+
+    candidate = candidates[0]
+    actual = content[candidate.actual_start : candidate.actual_end]
+    blocks = _split_mismatches(old, actual)
+    if not blocks:
+        return _format_simple_failure(
+            "PATCH_NOT_FOUND",
+            "target_not_found",
+            "old text was not found in the current content.",
+        )
+    return _format_mismatch_failure("PATCH_NOT_FOUND", "target_mismatch", blocks)
 
 
-def _format_not_unique_reason(match_count: int) -> str:
-    return (
-        "PATCH_NOT_UNIQUE\n"
-        f"matches={match_count}\n"
-        "old appears multiple times. Use a longer old string."
+def _format_not_unique_reason() -> str:
+    return _format_simple_failure(
+        "PATCH_NOT_UNIQUE",
+        "target_ambiguous",
+        "old text appears multiple times. Use a longer old string.",
     )
 
 
@@ -291,7 +477,11 @@ def apply_single_replacement(content: str, old_text: str, new_text: str) -> Repl
             success=False,
             content=content,
             code="EMPTY_OLD_TEXT",
-            reason="old text must not be empty",
+            reason=_format_simple_failure(
+                "EMPTY_OLD_TEXT",
+                "empty_old_text",
+                "old text must not be empty.",
+            ),
         )
 
     index = normalized_content.find(normalized_old)
@@ -305,12 +495,11 @@ def apply_single_replacement(content: str, old_text: str, new_text: str) -> Repl
 
     second_index = normalized_content.find(normalized_old, index + 1)
     if second_index != -1:
-        match_count = _count_occurrences(normalized_content, normalized_old)
         return ReplacementResult(
             success=False,
             content=content,
             code="PATCH_NOT_UNIQUE",
-            reason=_format_not_unique_reason(match_count),
+            reason=_format_not_unique_reason(),
         )
 
     replaced = (

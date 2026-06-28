@@ -20,6 +20,7 @@ import {
   getMergedThreadMessages,
 } from '../../data/threads';
 import { applyOptimisticDeletePause, getThreadDeletePauseContext } from '../../runtime/threadDeleteState';
+import { refreshUnresolvedCount } from '../../runtime/threadCommands';
 import { hasRenderableAssistantOutput } from '../../runtime/messageVisibility';
 import { isUuid } from '../../utils/idUtils';
 import { BaseModal } from '../BaseModal';
@@ -503,7 +504,10 @@ export function useThreadMessageRows({
     }
     removeSnapshotMessage(threadId, message.id);
     useThreadStreamStore.getState().removeOverlayMessage(threadId, message.id);
+    // Drop the orphaned streaming tool call so it can't keep the composer blocked.
+    useThreadStreamStore.getState().clearStreamingToolCallsForAssistant(threadId, message.id);
     applyOptimisticDeletePause(threadId, deletePauseContext);
+    refreshUnresolvedCount(threadId);
 
     if (!isUuid(message.id)) return;
 

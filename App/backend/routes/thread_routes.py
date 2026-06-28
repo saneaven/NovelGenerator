@@ -72,6 +72,8 @@ router = APIRouter(prefix="/api/v1", tags=["threads"])
 USER_STREAM_HEARTBEAT_INTERVAL_SECONDS = 15.0
 _DELETE_UNRESOLVED_TOOL_STATUSES = {"streaming", "validating", "pending", "processing", "working"}
 _DELETE_PAUSE_SOURCE_STATUSES = {"waiting", "processing"}
+# Run states with a live stream/task that must be canceled before deleting its message.
+_DELETE_CANCEL_RUN_STATUSES = {"running", "processing"}
 
 
 @dataclass
@@ -1049,6 +1051,21 @@ async def delete_thread_message(
     if row is None:
         raise HTTPException(status_code=404, detail="Message not found")
     run_id = row.run_id
+    # Cancel the active run first so the live stream can't re-persist tool calls after delete.
+    if run_id is not None:
+        latest_run = (
+            db.query(RunModel)
+            .filter(RunModel.thread_id == thread_id)
+            .order_by(RunModel.run_seq.desc())
+            .first()
+        )
+        if (
+            latest_run is not None
+            and latest_run.id == run_id
+            and latest_run.status in _DELETE_CANCEL_RUN_STATUSES
+        ):
+            await run_pipeline.cancel_run_for_delete(thread_id=thread_id, user_id=current_user.id)
+            db.refresh(thread)
     project_id = thread.project_id
     previous_thread_status = thread.status
     previous_unresolved_count = _count_unresolved_run_tool_calls(db, run_id=run_id)
