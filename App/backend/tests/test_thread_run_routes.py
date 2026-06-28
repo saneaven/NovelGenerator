@@ -238,7 +238,6 @@ def test_start_thread_run_passes_text_payload_to_start_run(monkeypatch: pytest.M
                     "surface": "workspace",
                     "context_object_ids": [str(uuid4())],
                     "journey_target_ids": [str(uuid4())],
-                    "language": "English",
                 }
             ),
             current_user=SimpleNamespace(id=user_id),
@@ -269,7 +268,7 @@ def test_start_thread_run_passes_multipart_attachments_to_start_run(monkeypatch:
         thread_routes.start_thread_run(
             thread_id=thread_id,
             request=FakeMultipartRequest(
-                fields={"input_text": "", "language": "English"},
+                fields={"input_text": ""},
                 attachments=[
                     FakeUpload(filename="note.txt", content_type="text/plain", content=b"attachment-body"),
                 ],
@@ -398,6 +397,28 @@ def test_start_thread_run_rejects_other_unexpected_json_field_with_422() -> None
     assert exc_info.value.detail[0]["type"] == "extra_forbidden"
 
 
+def test_start_thread_run_rejects_language_field_with_422() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            thread_routes.start_thread_run(
+                thread_id=uuid4(),
+                request=FakeJsonRequest(
+                    {
+                        "input_text": "hello",
+                        "language": "Korean",
+                    }
+                ),
+                current_user=SimpleNamespace(id=uuid4()),
+                db=None,
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert isinstance(exc_info.value.detail, list)
+    assert exc_info.value.detail[0]["loc"] == ["body", "language"]
+    assert exc_info.value.detail[0]["type"] == "extra_forbidden"
+
+
 def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.MonkeyPatch) -> None:
     thread_id = uuid4()
     user_id = uuid4()
@@ -419,7 +440,6 @@ def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.Monk
                 surface="workspace",
                 context_object_ids=[context_object_id],
                 journey_target_ids=[journey_target_id],
-                language="Korean",
             ),
             current_user=SimpleNamespace(id=user_id),
             db=None,
@@ -434,7 +454,6 @@ def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.Monk
     assert captured["surface"] == "workspace"
     assert captured["context_object_ids"] == [context_object_id]
     assert captured["journey_target_ids"] == [journey_target_id]
-    assert captured["language"] == "Korean"
 
 
 class FakeListThreadMessagesQuery:
@@ -525,12 +544,10 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
         raising=False,
     )
 
-    response = asyncio.run(
-        thread_routes.list_thread_messages(
-            thread_id=thread_id,
-            current_user=SimpleNamespace(id=user_id),
-            db=db,  # type: ignore[arg-type]
-        )
+    response = thread_routes.list_thread_messages(
+        thread_id=thread_id,
+        current_user=SimpleNamespace(id=user_id),
+        db=db,  # type: ignore[arg-type]
     )
 
     assert response.latest_run is not None

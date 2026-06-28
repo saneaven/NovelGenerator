@@ -47,7 +47,7 @@ async def apply_raw_output(
         translation_payload = as_dict(input_payload.get("translation"))
         source_thread_id = UUID(str(translation_payload.get("sourceThreadId") or ""))
         source_message_id = UUID(str(translation_payload.get("sourceMessageId") or ""))
-        target_language = str(translation_payload.get("targetLanguage") or run.language).strip()
+        target_language = str(translation_payload.get("targetLanguage") or "").strip()
         if not target_language:
             raise RuntimeError("messageTranslation raw output requires translation.targetLanguage")
 

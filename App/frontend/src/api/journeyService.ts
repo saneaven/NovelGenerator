@@ -20,7 +20,6 @@ export interface CreateJourneyRequest {
   surface?: string;
   context_object_ids?: string[];
   journey_target_ids?: string[];
-  language?: string;
   mcp_selections?: McpSelection[];
 }
 

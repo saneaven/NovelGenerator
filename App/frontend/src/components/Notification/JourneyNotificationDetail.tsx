@@ -115,7 +115,6 @@ const JourneyNotificationDetail: React.FC<JourneyNotificationDetailProps> = ({
         input_payload: latestRunContext.inputPayload,
         context_object_ids: latestRunContext.contextObjectIds,
         journey_target_ids: latestRunContext.journeyTargetIds,
-        language: latestRunContext.language || undefined,
         run_mode: latestRunContext.runMode || undefined,
         surface: latestRunContext.surface || undefined,
       },

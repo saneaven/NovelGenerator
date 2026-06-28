@@ -194,7 +194,6 @@ async def _parse_start_run_input(request: Request) -> ParsedStartRunInput:
             "surface": str(form.get("surface") or "").strip() or None,
             "context_object_ids": context_object_ids if isinstance(context_object_ids, list) else [],
             "journey_target_ids": journey_target_ids if isinstance(journey_target_ids, list) else [],
-            "language": str(form.get("language") or "").strip() or None,
             "mcp_selections": mcp_selections if isinstance(mcp_selections, list) else [],
         }
     )
@@ -565,7 +564,6 @@ async def _start_applied_tool_call_followups(
                 surface=None,
                 context_object_ids=[],
                 journey_target_ids=[],
-                language=None,
             )
         except Exception as exc:  # noqa: BLE001
             if not isinstance(tool_call_id, UUID):
@@ -631,7 +629,6 @@ async def start_thread_run(
         surface=payload.surface,
         context_object_ids=payload.context_object_ids,
         journey_target_ids=payload.journey_target_ids,
-        language=payload.language,
         attachments=parsed.attachments,
         mcp_selections=payload.mcp_selections,
     )
@@ -653,7 +650,6 @@ async def resume_thread_run(
         surface=payload.surface,
         context_object_ids=payload.context_object_ids,
         journey_target_ids=payload.journey_target_ids,
-        language=payload.language,
     )
     return _serialize_thread_run_response(thread_id=thread_id, run=run)
 

@@ -220,7 +220,6 @@ class JourneyService:
         surface: str | None,
         context_object_ids: list[UUID],
         journey_target_ids: list[UUID],
-        language: str | None,
         attachments: list[IncomingMessageAttachment] | None = None,
         mcp_selections: list[Any] | None = None,
     ) -> tuple[Journey, Thread, RunModel]:
@@ -233,7 +232,7 @@ class JourneyService:
         db = self._db_factory()
         try:
             settings = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
-            resolved_language = language or settings.main_language
+            resolved_language = settings.main_language
             preset_id = settings_service.get_active_preset_id(db, user_id)
 
             journey = Journey(

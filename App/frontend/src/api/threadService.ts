@@ -16,7 +16,6 @@ export interface StartRunCommand {
   surface?: string;
   context_object_ids?: string[];
   journey_target_ids?: string[];
-  language?: string;
   attachments?: PendingAttachment[];
   mcp_selections?: McpSelection[];
 }
@@ -28,7 +27,6 @@ export interface StartRunJsonPayload {
   surface?: string;
   context_object_ids?: string[];
   journey_target_ids?: string[];
-  language?: string;
   mcp_selections?: McpSelection[];
 }
 
@@ -41,7 +39,6 @@ export interface ResumeRunRequest {
   surface?: string;
   context_object_ids?: string[];
   journey_target_ids?: string[];
-  language?: string;
 }
 
 export interface ThreadRunResponse {
@@ -214,7 +211,6 @@ function buildStartRunJsonPayload(command: StartRunCommand): StartRunJsonPayload
     surface: command.surface,
     context_object_ids: command.context_object_ids,
     journey_target_ids: command.journey_target_ids,
-    language: command.language,
     mcp_selections: command.mcp_selections,
   };
 }
@@ -246,9 +242,6 @@ export function buildStartRunTransport(command: StartRunCommand): StartRunTransp
   }
   if (payload.journey_target_ids) {
     formData.append('journey_target_ids_json', JSON.stringify(payload.journey_target_ids));
-  }
-  if (payload.language) {
-    formData.append('language', payload.language);
   }
   if (payload.mcp_selections) {
     formData.append('mcp_selections_json', JSON.stringify(payload.mcp_selections));

@@ -137,7 +137,6 @@ function toResumeRunRequest(request?: Omit<StartRunCommand, 'input_text'>): Resu
     surface: request.surface,
     context_object_ids: request.context_object_ids,
     journey_target_ids: request.journey_target_ids,
-    language: request.language,
   };
 }
 
@@ -149,7 +148,7 @@ function toLatestRunContextFromRequest(
     inputPayload: request.input_payload ?? {},
     contextObjectIds: request.context_object_ids ?? [],
     journeyTargetIds: request.journey_target_ids ?? [],
-    language: request.language ?? fallbackLanguage,
+    language: fallbackLanguage,
     runMode: request.run_mode ?? null,
     surface: request.surface ?? null,
   };
@@ -171,8 +170,7 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
   }
 
   const store = useThreadStreamStore.getState();
-  const lang = params.request?.language
-    || requireSettingsFromCache().mainLanguage;
+  const lang = requireSettingsFromCache().mainLanguage;
   const existingMessages = getMergedThreadMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
   store.appendOptimisticMessage({

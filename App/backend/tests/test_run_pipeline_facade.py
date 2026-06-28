@@ -26,7 +26,6 @@ def test_start_run_rejects_empty_request_before_db() -> None:
                 surface=None,
                 context_object_ids=[],
                 journey_target_ids=[],
-                language=None,
                 attachments=[],
                 mcp_selections=[],
             )

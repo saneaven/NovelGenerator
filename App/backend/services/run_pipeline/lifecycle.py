@@ -148,7 +148,7 @@ class RunPipelineLifecycle:
                     raise HTTPException(status_code=409, detail="Pending tool call exists in thread")
 
                 settings = settings_service._get_settings(db, command.user_id)  # pylint: disable=protected-access
-                resolved_language = command.language or settings.main_language
+                resolved_language = settings.main_language
                 preset_id = settings_service.get_active_preset_id(db, command.user_id)
 
                 latest = self._latest_run_for_thread(db, thread_id=thread.id)
@@ -338,8 +338,6 @@ class RunPipelineLifecycle:
                     run.context_object_ids = [str(x) for x in command.context_object_ids]
                 if command.journey_target_ids:
                     run.journey_target_ids = [str(x) for x in command.journey_target_ids]
-                if command.language is not None:
-                    run.language = command.language
 
                 await self._status_transitions.apply_status_transition(
                     db,

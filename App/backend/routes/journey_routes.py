@@ -64,7 +64,6 @@ async def create_journey(
         surface=payload.surface,
         context_object_ids=payload.context_object_ids,
         journey_target_ids=payload.journey_target_ids,
-        language=payload.language,
         mcp_selections=payload.mcp_selections,
     )
     return CreateJourneyResponse(
@@ -139,7 +138,6 @@ async def resume_journey(
         surface=None,
         context_object_ids=[],
         journey_target_ids=[],
-        language=None,
     )
     return ThreadRunResponse(
         thread_id=thread.id,

@@ -66,7 +66,6 @@ export async function runMessageTranslation(
       input_text: input.sourceContent,
       input_payload: payload,
       surface: 'story-entity',
-      language: input.targetLanguage,
     });
     useJourneyStore.getState().updateJourney(journeyId, {
       threadId: created.thread_id,

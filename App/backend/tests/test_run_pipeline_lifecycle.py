@@ -43,7 +43,6 @@ def test_resume_run_rejects_when_pending_tool_call_exists() -> None:
                     surface=None,
                     context_object_ids=[],
                     journey_target_ids=[],
-                    language=None,
                 )
             )
         )
@@ -77,7 +76,6 @@ def test_resume_run_rejects_error_latest_run_when_pending_tool_call_exists() -> 
                     surface=None,
                     context_object_ids=[],
                     journey_target_ids=[],
-                    language=None,
                 )
             )
         )
@@ -101,7 +99,6 @@ def test_resume_run_rejects_when_no_latest_run_exists() -> None:
                     surface=None,
                     context_object_ids=[],
                     journey_target_ids=[],
-                    language=None,
                 )
             )
         )
@@ -135,7 +132,6 @@ def test_resume_run_rejects_when_processing_tool_call_exists_in_latest_run() -> 
                     surface=None,
                     context_object_ids=[],
                     journey_target_ids=[],
-                    language=None,
                 )
             )
         )
@@ -169,7 +165,6 @@ def test_resume_run_rejects_running_latest_run() -> None:
                     surface=None,
                     context_object_ids=[],
                     journey_target_ids=[],
-                    language=None,
                 )
             )
         )
@@ -209,7 +204,6 @@ def test_resume_run_allows_error_latest_run() -> None:
                 surface=None,
                 context_object_ids=[],
                 journey_target_ids=[],
-                language=None,
             )
         )
     )
@@ -254,7 +248,6 @@ def test_resume_run_allows_ready_done_and_canceled_latest_run(run_status: str) -
                 surface=None,
                 context_object_ids=[],
                 journey_target_ids=[],
-                language=None,
             )
         )
     )

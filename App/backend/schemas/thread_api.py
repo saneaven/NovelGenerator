@@ -18,7 +18,6 @@ class StartRunRequest(BaseModel):
     surface: str | None = None
     context_object_ids: list[UUID] = Field(default_factory=list)
     journey_target_ids: list[UUID] = Field(default_factory=list)
-    language: str | None = None
     mcp_selections: list[McpSelection] = Field(default_factory=list)
 
 
@@ -29,7 +28,6 @@ class ResumeRunRequest(BaseModel):
     surface: str | None = None
     context_object_ids: list[UUID] = Field(default_factory=list)
     journey_target_ids: list[UUID] = Field(default_factory=list)
-    language: str | None = None
 
 
 class ThreadRunResponse(BaseModel):
@@ -73,7 +71,6 @@ class CreateJourneyRequest(BaseModel):
     surface: str | None = None
     context_object_ids: list[UUID] = Field(default_factory=list)
     journey_target_ids: list[UUID] = Field(default_factory=list)
-    language: str | None = None
     mcp_selections: list[McpSelection] = Field(default_factory=list)
 
 

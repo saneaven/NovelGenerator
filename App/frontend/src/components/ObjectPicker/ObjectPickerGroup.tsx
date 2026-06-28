@@ -38,6 +38,7 @@ type MergedChild =
 function mergedChildren(items: PickerItem[], childGroups?: PickerGroup[]): MergedChild[] {
   const merged: MergedChild[] = [];
   for (const item of items) {
+    if (item.isStructural) continue; // structural items are not rendered as rows
     merged.push({ kind: 'item', data: item, order: item.order ?? 0, label: item.name });
   }
   if (childGroups) {

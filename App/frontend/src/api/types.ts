@@ -271,7 +271,6 @@ export interface AgentStartRunRequest {
   run_mode: RunMode;
   surface: RunSurface;
   input_text: string;
-  language: string;
   context_object_ids?: string[];
 }
 
@@ -279,7 +278,6 @@ export interface JourneyStartRunRequest {
   run_type: 'journey';
   journey_kind: JourneyKind;
   input_text: string;
-  language: string;
   input_payload: Record<string, any>;
   journey_target_ids?: string[];
 }

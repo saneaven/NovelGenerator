@@ -605,7 +605,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         surface: 'story-entity',
         journey_target_ids: selectedObjectIds,
         context_object_ids: selectedContext,
-        language: targetLanguage,
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {

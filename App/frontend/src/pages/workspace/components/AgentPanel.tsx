@@ -415,7 +415,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const { t } = useTranslation();
   const settings = useSettings();
   const sidebarStore = useUiStore();
-  const sourceLanguage = displayLanguage || settings.mainLanguage;
+  const contextDisplayLanguage = displayLanguage || settings.mainLanguage;
 
   const selectedAgentId = useSelectionStore((state) => state.selectedAgentByProject[projectId]);
   const selectedAgent = useSelectedAgent(projectId);
@@ -432,7 +432,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const runMode = useUiStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
   const setRunMode = useUiStore((state) => state.setRunMode);
   const setInput = useUiStore((state) => state.setInput);
-  const unifiedObjects = useProjectObjectsMap(projectId, sourceLanguage);
+  const unifiedObjects = useProjectObjectsMap(projectId, contextDisplayLanguage);
   const timelineConfig = useTimelineConfig(projectId).data ?? null;
   const selectedChapterId = useEditorStore((state) => state.selectedChapterByProject[projectId]);
 
@@ -680,7 +680,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     let cancelled = false;
     setIsContextPickerLoading(true);
 
-    void ensureTimelineLoaded(projectId, sourceLanguage)
+    void ensureTimelineLoaded(projectId, contextDisplayLanguage)
       .catch((loadError) => {
         console.error('Failed to preload agent timeline context:', loadError);
       })
@@ -693,7 +693,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     return () => {
       cancelled = true;
     };
-  }, [isContextDropdownOpen, projectId, sourceLanguage]);
+  }, [isContextDropdownOpen, projectId, contextDisplayLanguage]);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 768);
@@ -753,7 +753,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       threadType: 'agent',
       inputText,
       request: {
-        language: sourceLanguage,
         run_mode: runMode,
         surface,
         context_object_ids: computeParentClosure(selectedContextIds, unifiedObjects),
@@ -772,7 +771,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   }, [
     threadId,
     projectId,
-    sourceLanguage,
     runMode,
     surface,
     selectedContextIds,

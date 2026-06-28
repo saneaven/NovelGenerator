@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import declarative_base
 
 
@@ -105,6 +106,14 @@ def _set_object_translation_parent(monkeypatch) -> None:
         raw_output_module,
         "resolve_parent",
         lambda *_args, **_kwargs: SimpleNamespace(journey_kind="objectTranslation"),
+    )
+
+
+def _set_message_translation_parent(monkeypatch) -> None:
+    monkeypatch.setattr(
+        raw_output_module,
+        "resolve_parent",
+        lambda *_args, **_kwargs: SimpleNamespace(journey_kind="messageTranslation"),
     )
 
 
@@ -364,3 +373,47 @@ def test_raw_object_translation_basic_info_uses_projection(monkeypatch) -> None:
     assert "rich_text_format" not in captured
     assert captured["data"]["title"] == "Novel"
     assert captured["data"]["logline"] == "New logline"
+
+
+def test_raw_object_translation_requires_target_language(monkeypatch) -> None:
+    object_id = uuid4()
+    _set_object_translation_parent(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="objectTranslation raw output requires targetLanguage"):
+        asyncio.run(
+            raw_output_module.apply_raw_output(
+                FakeSession("manuscript"),
+                thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
+                run=SimpleNamespace(id=uuid4(), project_id=uuid4(), user_id=uuid4(), language="English"),
+                input_payload={
+                    "translation": {
+                        "objectIds": [str(object_id)],
+                        "sourceLanguage": "English",
+                    }
+                },
+                content_parts=[{"type": "content", "text": "# Translated manuscript"}],
+                emit_fn=_noop_emit,
+            )
+        )
+
+
+def test_raw_message_translation_requires_target_language(monkeypatch) -> None:
+    _set_message_translation_parent(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="messageTranslation raw output requires translation.targetLanguage"):
+        asyncio.run(
+            raw_output_module.apply_raw_output(
+                FakeSession("manuscript"),
+                thread=SimpleNamespace(parent_id=uuid4(), thread_type="journey"),
+                run=SimpleNamespace(id=uuid4(), project_id=uuid4(), user_id=uuid4(), language="English"),
+                input_payload={
+                    "translation": {
+                        "sourceThreadId": str(uuid4()),
+                        "sourceMessageId": str(uuid4()),
+                        "sourceLanguage": "English",
+                    }
+                },
+                content_parts=[{"type": "content", "text": "translated message"}],
+                emit_fn=_noop_emit,
+            )
+        )

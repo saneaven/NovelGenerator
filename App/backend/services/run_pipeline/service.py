@@ -153,7 +153,6 @@ class RunPipeline:
         surface: str | None,
         context_object_ids: list[UUID],
         journey_target_ids: list[UUID],
-        language: str | None,
         attachments: list[IncomingMessageAttachment] | None = None,
         mcp_selections: list[Any] | None = None,
     ) -> RunModel:
@@ -167,7 +166,6 @@ class RunPipeline:
                 surface=surface,
                 context_object_ids=context_object_ids,
                 journey_target_ids=journey_target_ids,
-                language=language,
                 attachments=attachments,
                 mcp_selections=mcp_selections,
             )
@@ -182,7 +180,6 @@ class RunPipeline:
         surface: str | None,
         context_object_ids: list[UUID],
         journey_target_ids: list[UUID],
-        language: str | None,
     ) -> RunModel:
         return await self._lifecycle.resume_run(
             ResumeRunCommand(
@@ -192,7 +189,6 @@ class RunPipeline:
                 surface=surface,
                 context_object_ids=context_object_ids,
                 journey_target_ids=journey_target_ids,
-                language=language,
             )
         )
 
