@@ -188,6 +188,80 @@ def test_validate_unknown_tool_name_fails() -> None:
     assert result.validator == "validate_tool_is_in_offer"
 
 
+def test_validate_translation_tool_uses_target_language_for_context() -> None:
+    service = ToolEngineService(ToolRegistry())
+    captured: dict[str, str] = {}
+
+    async def _validate(_args, ctx):
+        captured["language"] = ctx.language
+        return valid_result()
+
+    thread = Thread(
+        id=uuid4(),
+        project_id=uuid4(),
+        user_id=uuid4(),
+        thread_type="agent",
+        status="done",
+    )
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="running",
+        language="English",
+    )
+    spec = ToolSpec(
+        name="translate_test",
+        description="Translate test.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"targetLanguage": {"type": "string", "enum": ["English", "Korean"]}},
+            "required": ["targetLanguage"],
+        },
+    )
+    binding = ToolBinding(
+        spec=spec,
+        meta=ToolBindingMeta(feature_key="outline", category="translate", op="translate", target_kind="outline"),
+        validate=_validate,
+        execute=lambda _args, _ctx: None,
+        build_persisted_meta=lambda _ctx, _args: PersistedToolMeta(
+            feature_key="outline",
+            category="translate",
+            op="translate",
+            target_kind="outline",
+            target_id=None,
+            merge_key=None,
+        ),
+    )
+    offer = ToolOffer(
+        specs_by_name={"translate_test": spec},
+        bindings_by_name={"translate_test": binding},
+    )
+
+    result = asyncio.run(
+        service.validate_tool_call(
+            db=object(),
+            thread=thread,
+            run=run,
+            settings=SimpleNamespace(main_language="English", sub_languages=["Korean"]),
+            tool_name="translate_test",
+            args={"targetLanguage": "Korean"},
+            offer=offer,
+            user_id=thread.user_id,
+            project_id=thread.project_id,
+            language=run.language,
+            preset_id=None,
+            input_payload={},
+            vector_storage_enabled=False,
+        )
+    )
+
+    assert result.valid is True
+    assert captured["language"] == "Korean"
+
+
 def test_validate_schema_rejects_additional_properties() -> None:
     schema = {
         "type": "object",

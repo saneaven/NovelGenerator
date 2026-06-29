@@ -27,6 +27,7 @@ from .contracts import (
     ValidationResult,
 )
 from .grant_catalog import TOOL_GRANT_CATALOG
+from .language import tool_language_for_args
 from .registry import ToolRegistry
 from .result_utils import invalid_result, valid_result
 from .schema_validation import validate_args_is_object, validate_schema_required_enum_additional_properties
@@ -395,6 +396,36 @@ class ToolEngineService:
         row.result = {"success": False, "message": reason, "error": reason}
         row.updated_at = datetime.utcnow()
 
+    @staticmethod
+    def _run_language(run: RunModel) -> str:
+        return str(getattr(run, "language", "") or "")
+
+    @classmethod
+    def _language_for_decision_item(
+        cls,
+        item: ToolDecisionItem,
+        *,
+        run: RunModel,
+        settings: UserSettings,
+    ) -> str:
+        return tool_language_for_args(item.binding, item.args, cls._run_language(run), settings)
+
+    @classmethod
+    def _language_for_decision_group(
+        cls,
+        group: ToolDecisionGroup,
+        *,
+        run: RunModel,
+        settings: UserSettings,
+    ) -> str:
+        languages = {
+            cls._language_for_decision_item(item, run=run, settings=settings)
+            for item in group.items
+        }
+        if len(languages) > 1:
+            raise ValueError("Grouped tool calls must use the same targetLanguage")
+        return next(iter(languages), cls._run_language(run))
+
     async def validate_tool_call(
         self,
         *,
@@ -426,6 +457,11 @@ class ToolEngineService:
         if not schema_result.valid:
             return schema_result
 
+        try:
+            effective_language = tool_language_for_args(binding, arg_map, language, settings)
+        except ValueError as exc:
+            return invalid_result("validate_tool_language", str(exc))
+
         validation_ctx = self._build_validation_context(
             db=db,
             thread=thread,
@@ -433,7 +469,7 @@ class ToolEngineService:
             settings=settings,
             user_id=user_id,
             project_id=project_id,
-            language=language,
+            language=effective_language,
             preset_id=preset_id,
             input_payload=input_payload,
             vector_storage_enabled=vector_storage_enabled,
@@ -771,10 +807,28 @@ class ToolEngineService:
                     args = row.arguments if isinstance(row.arguments, dict) else {}
                     extra_content = row.extra_content if isinstance(row.extra_content, dict) else {}
                     persisted = self._parse_persisted_meta(extra_content.get("__tool_meta"))
-                    if persisted is None:
-                        persisted = binding.build_persisted_meta(module_ctx, args)
-                        row.extra_content = {**extra_content, "__tool_meta": persisted.__dict__}
-                        db.flush()
+                    try:
+                        if persisted is None:
+                            persisted = binding.build_persisted_meta(module_ctx, args)
+                            row.extra_content = {**extra_content, "__tool_meta": persisted.__dict__}
+                            db.flush()
+                    except ValueError as exc:
+                        before_bytes = measure_tool_call_row(row)
+                        self._mark_failed(row, str(exc))
+                        apply_project_usage_delta(
+                            db,
+                            user_id=user_id,
+                            project_id=effective_project_id,
+                            delta=build_usage_delta_for_amount(
+                                category="chat",
+                                before_amount=before_bytes,
+                                after_amount=measure_tool_call_row(row),
+                            ),
+                            enforce_quota=False,
+                        )
+                        db.commit()
+                        results_by_id[row.id] = AppliedToolCallResult(tool_call_id=row.id, status=row.status)
+                        continue
 
                     item = ToolDecisionItem(
                         tool_call_id=row.id,
@@ -789,6 +843,25 @@ class ToolEngineService:
                         immediate_items.append((row, item))
 
                 for row, item in immediate_items:
+                    try:
+                        item_language = self._language_for_decision_item(item, run=run, settings=settings)
+                    except ValueError as exc:
+                        before_bytes = measure_tool_call_row(row)
+                        self._mark_failed(row, str(exc))
+                        apply_project_usage_delta(
+                            db,
+                            user_id=user_id,
+                            project_id=effective_project_id,
+                            delta=build_usage_delta_for_amount(
+                                category="chat",
+                                before_amount=before_bytes,
+                                after_amount=measure_tool_call_row(row),
+                            ),
+                            enforce_quota=False,
+                        )
+                        db.commit()
+                        results_by_id[row.id] = AppliedToolCallResult(tool_call_id=row.id, status=row.status)
+                        continue
                     results_by_id[row.id] = await self._execute_immediate_item(
                         db,
                         thread=thread,
@@ -798,7 +871,7 @@ class ToolEngineService:
                         item=item,
                         user_id=user_id,
                         project_id=effective_project_id,
-                        language=run.language,
+                        language=item_language,
                         preset_id=preset_id,
                         input_payload=input_payload,
                         vector_storage_enabled=vector_storage_enabled,
@@ -810,6 +883,34 @@ class ToolEngineService:
                         merge_key=merge_key,
                         items=tuple(sorted(items, key=lambda item: item.call_seq)),
                     )
+                    try:
+                        group_language = self._language_for_decision_group(group, run=run, settings=settings)
+                    except ValueError as exc:
+                        deltas = []
+                        for item in group.items:
+                            row = run_row_by_id.get(item.tool_call_id)
+                            if row is None:
+                                continue
+                            before_bytes = measure_tool_call_row(row)
+                            self._mark_failed(row, str(exc))
+                            deltas.append(
+                                build_usage_delta_for_amount(
+                                    category="chat",
+                                    before_amount=before_bytes,
+                                    after_amount=measure_tool_call_row(row),
+                                )
+                            )
+                            results_by_id[row.id] = AppliedToolCallResult(tool_call_id=row.id, status=row.status)
+                        if deltas:
+                            apply_project_usage_deltas(
+                                db,
+                                user_id=user_id,
+                                project_id=effective_project_id,
+                                deltas=deltas,
+                                enforce_quota=False,
+                            )
+                        db.commit()
+                        continue
                     group_results = await self._execute_group(
                         db,
                         thread=thread,
@@ -819,7 +920,7 @@ class ToolEngineService:
                         group=group,
                         user_id=user_id,
                         project_id=effective_project_id,
-                        language=run.language,
+                        language=group_language,
                         preset_id=preset_id,
                         input_payload=input_payload,
                         vector_storage_enabled=vector_storage_enabled,

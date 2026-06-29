@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..contracts import PersistedToolMeta, ToolBinding, ToolBindingMeta, ToolDecisionGroup, ToolExecutionResult, ToolFeatureModule, ToolSpec
+from ..language import target_language_schema, tool_language_for_args
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
@@ -12,6 +13,7 @@ from .shared import filter_allowed_specs, is_agent_write_context, is_object_jour
 
 def _project_data_specs(ctx) -> list[ToolSpec]:
     specs: list[ToolSpec] = []
+    target_language = target_language_schema(ctx.settings)
 
     if is_agent_write_context(ctx) or is_object_journey(ctx):
         specs.extend(
@@ -73,12 +75,13 @@ def _project_data_specs(ctx) -> list[ToolSpec]:
                     description="Translate project basic info.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "title": {"type": "string"},
                             "logline": {"type": "string"},
                             "genres": {"type": "array", "items": {"type": "string"}},
                             "tags": {"type": "array", "items": {"type": "string"}},
                         },
-                        ["title", "logline", "genres", "tags"],
+                        ["targetLanguage", "title", "logline", "genres", "tags"],
                     ),
                     auto_approve_category="translate",
                 ),
@@ -87,18 +90,22 @@ def _project_data_specs(ctx) -> list[ToolSpec]:
                     description="Patch basic info translation by single replacement.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "field": {"type": "string", "enum": ["title", "logline"]},
                             "old": {"type": "string"},
                             "new": {"type": "string"},
                         },
-                        ["field", "old", "new"],
+                        ["targetLanguage", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
                 ),
                 ToolSpec(
                     name="translate_guidelines",
                     description="Translate guidelines.",
-                    parameters=obj_schema({"authorNote": {"type": "string"}}, ["authorNote"]),
+                    parameters=obj_schema(
+                        {"targetLanguage": target_language, "authorNote": {"type": "string"}},
+                        ["targetLanguage", "authorNote"],
+                    ),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
@@ -106,11 +113,12 @@ def _project_data_specs(ctx) -> list[ToolSpec]:
                     description="Patch guidelines translation by single replacement.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "field": {"type": "string", "enum": ["authorNote"]},
                             "old": {"type": "string"},
                             "new": {"type": "string"},
                         },
-                        ["field", "old", "new"],
+                        ["targetLanguage", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
                 ),
@@ -128,9 +136,14 @@ def _safe_primary_object_id(ctx, object_type: str) -> str | None:
 
 
 def _persisted_meta(*, target_kind: str, category: str, op: str):
-    def _builder(ctx, _args: dict[str, Any]) -> PersistedToolMeta:
+    def _builder(ctx, args: dict[str, Any]) -> PersistedToolMeta:
         target_id = _safe_primary_object_id(ctx, target_kind)
-        language = str(getattr(ctx.run, "language", "") or "English")
+        language = tool_language_for_args(
+            {"category": category, "op": op},
+            args,
+            str(getattr(ctx.run, "language", "") or ""),
+            ctx.settings,
+        )
         return PersistedToolMeta(
             feature_key="project_data",
             category=category,

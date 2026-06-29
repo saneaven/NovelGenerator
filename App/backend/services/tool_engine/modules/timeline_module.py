@@ -13,6 +13,7 @@ from ..contracts import (
     ToolFeatureModule,
     ToolSpec,
 )
+from ..language import target_language_schema, tool_language_for_args
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
@@ -198,7 +199,12 @@ def _persisted_meta(
 ):
     def _builder(ctx, args: dict[str, Any]) -> PersistedToolMeta:
         target_id = _safe_target_id(args, target_key)
-        language = str(getattr(ctx.run, "language", "") or "English")
+        language = tool_language_for_args(
+            {"category": category, "op": op},
+            args,
+            str(getattr(ctx.run, "language", "") or ""),
+            ctx.settings,
+        )
         return PersistedToolMeta(
             feature_key="timeline",
             category=category,
@@ -608,6 +614,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
 def _translation_specs(ctx) -> list[ToolSpec]:
     if not is_translation_journey(ctx):
         return []
+    target_language = target_language_schema(ctx.settings)
     return filter_allowed_specs(
         ctx,
         [
@@ -616,12 +623,13 @@ def _translation_specs(ctx) -> list[ToolSpec]:
                 description="Translate timeline track fields.",
                 parameters=obj_schema(
                     {
+                        "targetLanguage": target_language,
                         "id": _ID,
                         "name": {"type": "string"},
                         "description": {"type": "string"},
                         "content": {"type": "string", "description": "Translated rich text content (markdown)"},
                     },
-                    ["id", "name", "description", "content"],
+                    ["targetLanguage", "id", "name", "description", "content"],
                 ),
                 auto_approve_category="translate",
             ),
@@ -630,12 +638,13 @@ def _translation_specs(ctx) -> list[ToolSpec]:
                 description="Translate timeline event fields.",
                 parameters=obj_schema(
                     {
+                        "targetLanguage": target_language,
                         "id": _ID,
                         "name": {"type": "string"},
                         "description": {"type": "string"},
                         "content": {"type": "string", "description": "Translated rich text content (markdown)"},
                     },
-                    ["id", "name", "description", "content"],
+                    ["targetLanguage", "id", "name", "description", "content"],
                 ),
                 auto_approve_category="translate",
             ),
@@ -643,8 +652,14 @@ def _translation_specs(ctx) -> list[ToolSpec]:
                 name="patch_translation_timeline_track",
                 description="Patch a timeline track translation by single replacement.",
                 parameters=obj_schema(
-                    {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "old": {"type": "string"}, "new": {"type": "string"}},
-                    ["id", "field", "old", "new"],
+                    {
+                        "targetLanguage": target_language,
+                        "id": _ID,
+                        "field": {"type": "string", "enum": ["name", "description", "content"]},
+                        "old": {"type": "string"},
+                        "new": {"type": "string"},
+                    },
+                    ["targetLanguage", "id", "field", "old", "new"],
                 ),
                 auto_approve_category="patch_translation",
             ),
@@ -652,8 +667,14 @@ def _translation_specs(ctx) -> list[ToolSpec]:
                 name="patch_translation_timeline_event",
                 description="Patch a timeline event translation by single replacement.",
                 parameters=obj_schema(
-                    {"id": _ID, "field": {"type": "string", "enum": ["name", "description", "content"]}, "old": {"type": "string"}, "new": {"type": "string"}},
-                    ["id", "field", "old", "new"],
+                    {
+                        "targetLanguage": target_language,
+                        "id": _ID,
+                        "field": {"type": "string", "enum": ["name", "description", "content"]},
+                        "old": {"type": "string"},
+                        "new": {"type": "string"},
+                    },
+                    ["targetLanguage", "id", "field", "old", "new"],
                 ),
                 auto_approve_category="patch_translation",
             ),

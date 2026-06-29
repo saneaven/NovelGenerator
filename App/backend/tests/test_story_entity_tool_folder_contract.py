@@ -23,6 +23,7 @@ sys.modules.setdefault("App.backend.database", fake_database)
 sys.modules.setdefault("database", fake_database)
 
 fake_pil = types.ModuleType("PIL")
+fake_pil.__version__ = "0.0"
 fake_pil.Image = object
 fake_pil.ImageOps = object
 sys.modules.setdefault("PIL", fake_pil)
@@ -82,10 +83,18 @@ fake_manuscript_access.ensure_manuscript_exists = lambda *_args, **_kwargs: None
 sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_access", fake_manuscript_access)
 
 from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
-from App.backend.services.tool_engine.contracts import ToolDecisionGroup, ToolDecisionItem, ToolExecutionOutcome, ToolExecutionResult
-from App.backend.services.tool_engine.modules import object_access
+from App.backend.services.tool_engine.contracts import (
+    ToolDecisionGroup,
+    ToolDecisionItem,
+    ToolExecutionOutcome,
+    ToolExecutionResult,
+)
+from App.backend.services.tool_engine.language import tool_language_for_args
+from App.backend.services.tool_engine.modules import manuscript_module, object_access, project_data_module
 from App.backend.services.tool_engine.modules import outline_module, story_entity_module, timeline_module
+from App.backend.services.tool_engine.modules.manuscript_module import ManuscriptFeatureModule
 from App.backend.services.tool_engine.modules.outline_module import OutlineFeatureModule
+from App.backend.services.tool_engine.modules.project_data_module import ProjectDataFeatureModule
 from App.backend.services.tool_engine.modules.story_entity_module import StoryEntityFeatureModule
 from App.backend.services.tool_engine.modules.timeline_module import TimelineFeatureModule
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
@@ -96,7 +105,7 @@ def _module_context() -> ToolModuleContext:
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
         run=SimpleNamespace(language="English"),
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(main_language="English", sub_languages=["Korean", "Japanese"]),
         preset_id=uuid4(),
         user_id=uuid4(),
         project_id=uuid4(),
@@ -111,7 +120,7 @@ def _execution_context() -> ToolExecutionContext:
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
         run=SimpleNamespace(language="English"),
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(main_language="English", sub_languages=["Korean", "Japanese"]),
         tool_call_row=SimpleNamespace(id=uuid4(), call_seq=0),
         user_id=uuid4(),
         project_id=uuid4(),
@@ -124,7 +133,7 @@ def _validation_context() -> ToolValidationContext:
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
         run=SimpleNamespace(language="English"),
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(main_language="English", sub_languages=["Korean", "Japanese"]),
         user_id=uuid4(),
         project_id=uuid4(),
         language="English",
@@ -136,7 +145,7 @@ def _group_context() -> ToolGroupExecutionContext:
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
         run=SimpleNamespace(language="English"),
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(main_language="English", sub_languages=["Korean", "Japanese"]),
         user_id=uuid4(),
         project_id=uuid4(),
         language="English",
@@ -223,8 +232,107 @@ def test_story_entity_folder_tool_schemas_are_registered(monkeypatch) -> None:
     assert specs["replace_story_entity_folder"].parameters["properties"]["position"]["type"] == "integer"
     assert specs["patch_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
     assert specs["delete_story_entity_folder"].parameters["required"] == ["id"]
-    assert specs["translate_story_entity_folder"].parameters["required"] == ["id"]
+    assert specs["translate_story_entity_folder"].parameters["required"] == ["targetLanguage", "id"]
+    assert specs["translate_story_entity_folder"].parameters["properties"]["targetLanguage"]["enum"] == [
+        "English",
+        "Korean",
+        "Japanese",
+    ]
     assert specs["patch_translation_story_entity_folder"].parameters["properties"]["field"]["enum"] == ["name", "description"]
+
+
+def test_all_translation_tool_schemas_require_target_language(monkeypatch) -> None:
+    ctx = _module_context()
+    monkeypatch.setattr(project_data_module, "is_translation_journey", lambda _ctx: True)
+    monkeypatch.setattr(manuscript_module, "is_translation_journey", lambda _ctx: True)
+    monkeypatch.setattr(outline_module, "is_translation_journey", lambda _ctx: True)
+    monkeypatch.setattr(story_entity_module, "is_translation_journey", lambda _ctx: True)
+    monkeypatch.setattr(timeline_module, "is_translation_journey", lambda _ctx: True)
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+
+    modules = [
+        ProjectDataFeatureModule(),
+        ManuscriptFeatureModule(),
+        OutlineFeatureModule(),
+        StoryEntityFeatureModule(),
+        TimelineFeatureModule(),
+    ]
+    specs = {
+        binding.spec.name: binding.spec
+        for module in modules
+        for binding in module.list_bindings(ctx)
+        if binding.meta.category == "translate"
+    }
+
+    expected_names = {
+        "translate_basic_info",
+        "patch_translation_basic_info",
+        "translate_guidelines",
+        "patch_translation_guidelines",
+        "translate_manuscript",
+        "patch_translation_manuscript",
+        "translate_outline",
+        "patch_translation_outline",
+        "translate_story_entity",
+        "translate_story_entity_folder",
+        "patch_translation_story_entity",
+        "patch_translation_story_entity_folder",
+        "translate_timeline_track",
+        "translate_timeline_event",
+        "patch_translation_timeline_track",
+        "patch_translation_timeline_event",
+    }
+
+    assert set(specs) == expected_names
+    for spec in specs.values():
+        assert "targetLanguage" in spec.parameters["required"]
+        assert spec.parameters["properties"]["targetLanguage"]["enum"] == ["English", "Korean", "Japanese"]
+
+
+def test_translation_tool_missing_target_language_fails_schema(monkeypatch) -> None:
+    monkeypatch.setattr(outline_module, "is_translation_journey", lambda _ctx: True)
+    binding = _binding_by_name(OutlineFeatureModule(), _module_context(), "translate_outline")
+
+    result = validate_schema_required_enum_additional_properties(
+        {
+            "id": str(uuid4()),
+            "name": "Translated name",
+            "description": "Translated desc",
+            "content": "Translated content",
+        },
+        binding.spec.parameters,
+    )
+
+    assert result.valid is False
+    assert result.reason == "Missing required parameter: targetLanguage"
+
+
+def test_translation_persisted_merge_key_uses_target_language(monkeypatch) -> None:
+    monkeypatch.setattr(outline_module, "is_translation_journey", lambda _ctx: True)
+    ctx = _module_context()
+    binding = _binding_by_name(OutlineFeatureModule(), ctx, "translate_outline")
+    args = {
+        "targetLanguage": "Korean",
+        "id": "outline-1",
+        "name": "Translated name",
+        "description": "Translated desc",
+        "content": "Translated content",
+    }
+
+    meta = binding.build_persisted_meta(ctx, args)
+
+    assert meta.merge_key == "outline:outline-1:Korean:translation"
+    assert tool_language_for_args(binding, args, ctx.run.language, ctx.settings) == "Korean"
+
+
+def test_non_translation_persisted_merge_key_uses_run_language() -> None:
+    ctx = _module_context()
+    binding = _binding_by_name(OutlineFeatureModule(), ctx, "patch_outline")
+    args = {"id": "outline-1", "field": "content", "old": "Old", "new": "New"}
+
+    meta = binding.build_persisted_meta(ctx, args)
+
+    assert meta.merge_key == "outline:outline-1:English:draft"
 
 
 def test_runtime_rich_text_kwargs_only_marks_rich_objects() -> None:
@@ -370,6 +478,7 @@ def test_translate_story_entity_folder_group_uses_content_fields_only(monkeypatc
         feature=feature,
         binding=binding,
         args={
+            "targetLanguage": "Korean",
             "id": str(uuid4()),
             "name": "Main Cast KR",
         },
@@ -490,18 +599,25 @@ def test_timeline_translate_schemas_require_content(monkeypatch) -> None:
 
     for tool_name in ("translate_timeline_track", "translate_timeline_event"):
         params = specs[tool_name].parameters
-        assert params["required"] == ["id", "name", "description", "content"]
+        assert params["required"] == ["targetLanguage", "id", "name", "description", "content"]
+        assert params["properties"]["targetLanguage"]["enum"] == ["English", "Korean", "Japanese"]
         assert params["properties"]["content"]["type"] == "string"
 
         missing_content = validate_schema_required_enum_additional_properties(
-            {"id": "target-1", "name": "Translated name", "description": "Translated desc"},
+            {"targetLanguage": "Korean", "id": "target-1", "name": "Translated name", "description": "Translated desc"},
             params,
         )
         assert missing_content.valid is False
         assert "Missing required parameter: content" in str(missing_content.reason)
 
         explicit_empty_content = validate_schema_required_enum_additional_properties(
-            {"id": "target-1", "name": "Translated name", "description": "Translated desc", "content": ""},
+            {
+                "targetLanguage": "Korean",
+                "id": "target-1",
+                "name": "Translated name",
+                "description": "Translated desc",
+                "content": "",
+            },
             params,
         )
         assert explicit_empty_content.valid is True
@@ -995,6 +1111,7 @@ def test_translate_timeline_tools_pass_markdown_content(monkeypatch) -> None:
     asyncio.run(
         track_binding.execute(
             {
+                "targetLanguage": "Korean",
                 "id": str(track_id),
                 "name": "Translated track",
                 "description": "Translated track desc",
@@ -1006,6 +1123,7 @@ def test_translate_timeline_tools_pass_markdown_content(monkeypatch) -> None:
     asyncio.run(
         event_binding.execute(
             {
+                "targetLanguage": "Korean",
                 "id": str(event_id),
                 "name": "Translated event",
                 "description": "Translated event desc",
@@ -1042,6 +1160,7 @@ def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> Non
         feature=feature,
         binding=binding,
         args={
+            "targetLanguage": "Korean",
             "id": str(uuid4()),
             "name": "Chapter 1",
             "description": "Translated desc",

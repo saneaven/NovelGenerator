@@ -14,6 +14,7 @@ from ..contracts import (
     ToolFeatureModule,
     ToolSpec,
 )
+from ..language import target_language_schema, tool_language_for_args
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
@@ -43,6 +44,7 @@ _POSITION = {"type": "integer", "description": "0-based sibling position."}
 
 def _story_entity_specs(ctx) -> list[ToolSpec]:
     specs: list[ToolSpec] = []
+    target_language = target_language_schema(ctx.settings)
 
     if is_non_journey(ctx):
         specs.extend(
@@ -166,20 +168,24 @@ def _story_entity_specs(ctx) -> list[ToolSpec]:
                     description="Translate story entity fields.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "id": _ID,
                             "kind": _ENTITY_KIND,
                             "name": {"type": "string"},
                             "description": {"type": "string"},
                             "content": {"type": "string"},
                         },
-                        ["id", "kind", "name", "description", "content"],
+                        ["targetLanguage", "id", "kind", "name", "description", "content"],
                     ),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
                     name="translate_story_entity_folder",
                     description="Translate story entity folder fields.",
-                    parameters=obj_schema({"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}}, ["id"]),
+                    parameters=obj_schema(
+                        {"targetLanguage": target_language, "id": _ID, "name": {"type": "string"}, "description": {"type": "string"}},
+                        ["targetLanguage", "id"],
+                    ),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
@@ -187,13 +193,14 @@ def _story_entity_specs(ctx) -> list[ToolSpec]:
                     description="Patch story entity translation by single replacement.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "id": _ID,
                             "kind": _ENTITY_KIND,
                             "field": {"type": "string", "enum": ["name", "description", "content"]},
                             "old": {"type": "string"},
                             "new": {"type": "string"},
                         },
-                        ["id", "kind", "field", "old", "new"],
+                        ["targetLanguage", "id", "kind", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
                 ),
@@ -202,12 +209,13 @@ def _story_entity_specs(ctx) -> list[ToolSpec]:
                     description="Patch story entity folder translation by single replacement.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "id": _ID,
                             "field": {"type": "string", "enum": ["name", "description"]},
                             "old": {"type": "string"},
                             "new": {"type": "string"},
                         },
-                        ["id", "field", "old", "new"],
+                        ["targetLanguage", "id", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
                 ),
@@ -225,7 +233,12 @@ def _safe_target_id(args: dict[str, Any]) -> str | None:
 def _persisted_meta(*, target_kind: str, category: str, op: str, grouped: bool):
     def _builder(ctx, args: dict[str, Any]) -> PersistedToolMeta:
         target_id = _safe_target_id(args)
-        language = str(getattr(ctx.run, "language", "") or "English")
+        language = tool_language_for_args(
+            {"category": category, "op": op},
+            args,
+            str(getattr(ctx.run, "language", "") or ""),
+            ctx.settings,
+        )
         return PersistedToolMeta(
             feature_key="story_entity",
             category=category,

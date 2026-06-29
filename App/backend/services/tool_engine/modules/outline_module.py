@@ -14,6 +14,7 @@ from ..contracts import (
     ToolFeatureModule,
     ToolSpec,
 )
+from ..language import target_language_schema, tool_language_for_args
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
@@ -39,6 +40,7 @@ _POSITION = {"type": "integer", "description": "0-based sibling position."}
 
 def _outline_specs(ctx) -> list[ToolSpec]:
     specs: list[ToolSpec] = []
+    target_language = target_language_schema(ctx.settings)
 
     if is_non_journey(ctx):
         specs.append(
@@ -117,8 +119,14 @@ def _outline_specs(ctx) -> list[ToolSpec]:
                     name="translate_outline",
                     description="Translate outline item fields.",
                     parameters=obj_schema(
-                        {"id": _ID, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}},
-                        ["id", "name", "description", "content"],
+                        {
+                            "targetLanguage": target_language,
+                            "id": _ID,
+                            "name": {"type": "string"},
+                            "description": {"type": "string"},
+                            "content": {"type": "string"},
+                        },
+                        ["targetLanguage", "id", "name", "description", "content"],
                     ),
                     auto_approve_category="translate",
                 ),
@@ -127,12 +135,13 @@ def _outline_specs(ctx) -> list[ToolSpec]:
                     description="Patch outline item translation by single replacement.",
                     parameters=obj_schema(
                         {
+                            "targetLanguage": target_language,
                             "id": _ID,
                             "field": {"type": "string", "enum": ["name", "description", "content"]},
                             "old": {"type": "string"},
                             "new": {"type": "string"},
                         },
-                        ["id", "field", "old", "new"],
+                        ["targetLanguage", "id", "field", "old", "new"],
                     ),
                     auto_approve_category="patch_translation",
                 ),
@@ -150,7 +159,12 @@ def _safe_target_id(args: dict[str, Any]) -> str | None:
 def _persisted_meta(*, category: str, op: str, grouped: bool):
     def _builder(ctx, args: dict[str, Any]) -> PersistedToolMeta:
         target_id = _safe_target_id(args)
-        language = str(getattr(ctx.run, "language", "") or "English")
+        language = tool_language_for_args(
+            {"category": category, "op": op},
+            args,
+            str(getattr(ctx.run, "language", "") or ""),
+            ctx.settings,
+        )
         return PersistedToolMeta(
             feature_key="outline",
             category=category,

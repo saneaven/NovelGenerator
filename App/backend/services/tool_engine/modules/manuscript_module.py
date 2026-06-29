@@ -12,6 +12,7 @@ from ..contracts import (
     ToolFeatureModule,
     ToolSpec,
 )
+from ..language import target_language_schema, tool_language_for_args
 from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_manuscript_batch_group, filter_allowed_bindings, merge_key_for
@@ -26,6 +27,7 @@ _ID = {"type": "string", "description": "Object ID"}
 
 def _manuscript_specs(ctx) -> list[ToolSpec]:
     specs: list[ToolSpec] = []
+    target_language = target_language_schema(ctx.settings)
 
     if is_non_journey(ctx):
         specs.append(
@@ -76,13 +78,19 @@ def _manuscript_specs(ctx) -> list[ToolSpec]:
                 ToolSpec(
                     name="translate_manuscript",
                     description="Translate full manuscript content.",
-                    parameters=obj_schema({"id": _ID, "content": {"type": "string"}}, ["id", "content"]),
+                    parameters=obj_schema(
+                        {"targetLanguage": target_language, "id": _ID, "content": {"type": "string"}},
+                        ["targetLanguage", "id", "content"],
+                    ),
                     auto_approve_category="translate",
                 ),
                 ToolSpec(
                     name="patch_translation_manuscript",
                     description="Patch manuscript translation by single replacement.",
-                    parameters=obj_schema({"id": _ID, "old": {"type": "string"}, "new": {"type": "string"}}, ["id", "old", "new"]),
+                    parameters=obj_schema(
+                        {"targetLanguage": target_language, "id": _ID, "old": {"type": "string"}, "new": {"type": "string"}},
+                        ["targetLanguage", "id", "old", "new"],
+                    ),
                     auto_approve_category="patch_translation",
                 ),
             ]
@@ -99,7 +107,12 @@ def _safe_target_id(args: dict[str, Any]) -> str | None:
 def _persisted_meta(*, category: str, op: str, grouped: bool):
     def _builder(ctx, args: dict[str, Any]) -> PersistedToolMeta:
         target_id = _safe_target_id(args)
-        language = str(getattr(ctx.run, "language", "") or "English")
+        language = tool_language_for_args(
+            {"category": category, "op": op},
+            args,
+            str(getattr(ctx.run, "language", "") or ""),
+            ctx.settings,
+        )
         return PersistedToolMeta(
             feature_key="manuscript",
             category=category,

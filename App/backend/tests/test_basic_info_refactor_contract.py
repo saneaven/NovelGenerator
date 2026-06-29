@@ -292,4 +292,4 @@ def test_default_prompt_and_transfer_version_match_new_contract() -> None:
     assert "<tags>" in prompt_source
     assert "<tag>{{ this|e }}</tag>" in prompt_source
     assert "patch_basic_info` - Patch `title` or `logline`" in prompt_source
-    assert "patch_translation_basic_info` | Fix basic info via search-replace | Requires `field` (title/logline)" in prompt_source
+    assert "patch_translation_basic_info` | Fix basic info via search-replace | Requires `targetLanguage`, `field` (title/logline)" in prompt_source
