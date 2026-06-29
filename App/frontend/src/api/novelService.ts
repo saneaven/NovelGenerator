@@ -13,7 +13,7 @@ import type {
   ManuscriptData,
   VersionHistoryEntry,
 } from '../types/unifiedObject';
-import { docWordCount, normalizeDoc } from '../editor/manuscript/doc';
+import { docWordCount, normalizeDoc } from '../editor/richtext/doc';
 
 // Response type for manuscript operations
 export interface ManuscriptWithVersions {

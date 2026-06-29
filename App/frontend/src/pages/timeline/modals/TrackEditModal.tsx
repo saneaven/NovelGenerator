@@ -4,7 +4,8 @@ import BaseModal from '../../../components/BaseModal/BaseModal';
 import TextButton from '../../../components/TextButton/TextButton';
 import { Close } from '../../../components/icons';
 import { RichTextEditor } from '../../../components/RichTextEditor';
-import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
+import { useContentReloadKey } from '../../../components/RichTextEditor/useContentReloadKey';
+import { emptyDoc, normalizeDoc } from '../../../editor/richtext/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
 import { createTrack, updateTrack } from '../../../data/timeline';
 import { useObjectQuery } from '../../../data/objects/useObjectQuery';
@@ -45,6 +46,10 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
   // Body is markdown in the collection; load the editable tiptap separately.
   const detail = useObjectQuery('timeline_track', track?.id, displayLanguage, { staleTime: Infinity });
   const contentReady = isCreating || !detail.isLoading;
+  const { reloadKey } = useContentReloadKey(
+    `timeline_track:${track?.id ?? 'new'}:${displayLanguage}`,
+    detail.data?.version?.number ?? null,
+  );
 
   const initial = useMemo(() => {
     if (!track) {
@@ -267,7 +272,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
         <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
           <label className="tl-form__label">{t('timeline.trackModal.content')}</label>
           {contentReady
-            ? <RichTextEditor initialContent={content} onChange={setContent} />
+            ? <RichTextEditor key={reloadKey} initialContent={content} onChange={setContent} />
             : <div className="tl-form__content-loading">{t('common.loading')}</div>}
         </div>
       </div>

@@ -41,11 +41,12 @@ import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu'
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject, UnifiedObject } from '../../../types/unifiedObject';
 import type { TipTapDoc } from '../../../types/tiptap';
-import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
+import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/richtext/doc';
 import type { ImageGenerationRecipe } from '../../../imageRun';
 import { recipeFromAsset } from '../../../imageRun';
 import ChapterSidebar from './ChapterSidebar';
-import ManuscriptEditor, { type ManuscriptEditorRef } from './ManuscriptEditor';
+import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
+import { useContentReloadKey } from '../../../components/RichTextEditor/useContentReloadKey';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
@@ -137,14 +138,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setIsSavingAction(projectId, saving);
   }, [projectId, setIsSavingAction]);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const editorRef = useRef<ManuscriptEditorRef>(null);
+  const editorRef = useRef<RichTextEditorRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const selfSavedVersionRef = useRef<number | null>(null);
-  const editorBaselineRef = useRef<{ id: string | null; lang: string; version: number | null }>({ id: null, lang: '', version: null });
   const docRef = useRef<TipTapDoc>(doc);
   docRef.current = doc;
 
@@ -243,15 +241,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return getManuscriptData(effectiveLanguage).doc;
   }, [manuscript?.data, effectiveLanguage, getManuscriptData]);
 
-  const editorKey = useMemo(() => {
-    if (!manuscript || !manuscriptId) return 'loading';
-    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${reloadNonce}`;
-  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, reloadNonce]);
-
-  const initialDoc = useMemo(() => {
-    if (editorKey === 'loading') return emptyDoc();
-    return serverDoc;
-  }, [editorKey, serverDoc]);
+  const { reloadKey, markSaved } = useContentReloadKey(
+    `manuscript:${manuscriptId ?? ''}:${globalDisplayLanguage}:${effectiveLanguage}`,
+    manuscript?.version?.number ?? null,
+  );
 
   // ============================================================================
   // EFFECTS
@@ -360,26 +353,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     };
   }, []);
 
-  // Remount only on external version changes; self-saves are recorded and skipped.
-  useEffect(() => {
-    const id = manuscriptId;
-    const lang = effectiveLanguage;
-    const version = manuscript?.version?.number ?? null;
-    const base = editorBaselineRef.current;
-
-    if (base.id !== id || base.lang !== lang) {
-      editorBaselineRef.current = { id, lang, version };
-      return;
-    }
-    if (version === null || version === base.version) return;
-    editorBaselineRef.current = { id, lang, version };
-    if (version === selfSavedVersionRef.current) {
-      selfSavedVersionRef.current = null;
-      return;
-    }
-    setReloadNonce((n) => n + 1);
-  }, [manuscriptId, effectiveLanguage, manuscript?.version?.number]);
-
   // ============================================================================
   // SAVE HANDLERS
   // ============================================================================
@@ -437,9 +410,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             create_new_version: languageState.createNewVersion,
           },
         }, {
-          // record our version so the watcher skips this save's echo
           onSuccess: (updated) => {
-            selfSavedVersionRef.current = (updated as ManuscriptObject)?.version?.number ?? null;
+            markSaved((updated as ManuscriptObject)?.version?.number ?? null);
           },
         });
 
@@ -457,7 +429,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, setIsSaving, updateObjectMutation]
+    [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, markSaved, setIsSaving, updateObjectMutation]
   );
 
   // ============================================================================
@@ -758,10 +730,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
           {/* Editor */}
           <div className={`editor-content ${isMissingTranslation ? 'disabled' : ''}`}>
-            <ManuscriptEditor
-              key={editorKey}
+            <RichTextEditor
+              key={reloadKey}
               ref={editorRef}
-              initialDoc={isMissingTranslation ? emptyDoc() : initialDoc}
+              initialContent={isMissingTranslation ? emptyDoc() : serverDoc}
               onChange={handleDocChange}
               placeholder="Start writing your chapter..."
               disabled={isSaving || isMissingTranslation}

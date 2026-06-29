@@ -41,7 +41,7 @@ import { confirm, alert as showAlert } from '../../../store/dialogStore';
 import { requestedLanguageStateFromProjection, resolveTranslationSourceLanguage } from '../../../utils/requestedLanguage';
 import { sortOutlineObjects } from '../../../domain/outlineHierarchy';
 import type { TipTapDoc } from '../../../types/tiptap';
-import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
+import { emptyDoc, normalizeDoc } from '../../../editor/richtext/doc';
 import './OutlinePanel.css';
 
 type OutlineLevel = 'outline' | 'act' | 'chapter';

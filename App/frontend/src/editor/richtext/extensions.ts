@@ -6,12 +6,12 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 
 import ImageWithOverlay from '../../components/RichTextEditor/extensions/ImageWithOverlay';
 
-export type ManuscriptExtensionsOptions = {
+export type RichTextExtensionsOptions = {
   placeholder?: string;
 };
 
-export function buildManuscriptExtensions(
-  options: ManuscriptExtensionsOptions = {}
+export function buildRichTextExtensions(
+  options: RichTextExtensionsOptions = {}
 ) {
   const { placeholder = 'Start writing...' } = options;
 

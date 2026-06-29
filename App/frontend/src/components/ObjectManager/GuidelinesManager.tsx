@@ -5,7 +5,7 @@
  * Uses global display language from parent (StoryEntityPanel).
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import './GuidelinesManager.css';
 import { useObjectCollectionQuery } from '../../data/objects/useObjectCollectionQuery';
@@ -18,12 +18,12 @@ import TranslationModal from '../Modal/TranslationModal';
 import { DropdownMenu, DropdownItem } from '../ui/DropdownMenu';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
-import { RichTextEditor } from '../RichTextEditor';
+import { RichTextEditor, type RichTextEditorRef } from '../RichTextEditor';
+import { useContentReloadKey } from '../RichTextEditor/useContentReloadKey';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from '../icons';
 import { Skeleton, SkeletonText } from '../common/Skeleton';
-import type { TipTapDoc } from '../../types/tiptap';
-import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
+import { emptyDoc, normalizeDoc } from '../../editor/richtext/doc';
 import type { GuidelinesObject, GuidelinesData } from '../../types/unifiedObject';
 import {
   requestedLanguageStateFromProjection,
@@ -57,9 +57,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<GuidelinesData>({
-    authorNote: emptyDoc(),
-  });
+  const editorRef = useRef<RichTextEditorRef>(null);
 
   // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
@@ -94,11 +92,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const canRetranslate = languageState.isTranslationView && languageState.hasRequestedLanguage;
   const showAIEdit = languageState.isMainLanguage;
 
-  useEffect(() => {
-    if (currentData && !isEditing) {
-      setEditFormData(currentData);
-    }
-  }, [currentData, isEditing]);
+  const { reloadKey } = useContentReloadKey(
+    `guidelines:${guidelinesId ?? ''}:${languageState.viewLanguage}`,
+    guidelines?.version?.number ?? null,
+  );
 
   useEffect(() => {
     if (isEditing && !languageState.canEdit) {
@@ -115,7 +112,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
         type: 'guidelines',
         id: guidelinesId,
         request: {
-          data: editFormData,
+          data: { authorNote: normalizeDoc(editorRef.current?.getDoc() ?? currentData.authorNote) },
           language: languageState.requestedLanguage,
           user_request: 'User Edit',
           create_new_version: languageState.createNewVersion,
@@ -132,12 +129,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   };
 
   const handleCancel = () => {
-    setEditFormData(currentData);
     setIsEditing(false);
-  };
-
-  const handleChange = (value: TipTapDoc) => {
-    setEditFormData({ authorNote: value });
   };
 
   const handleEdit = () => {
@@ -145,7 +137,6 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
       setShowTranslationModal(true);
       return;
     }
-    setEditFormData(currentData);
     setIsEditing(true);
   };
 
@@ -305,8 +296,9 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
             <div className="content-body">
               {isEditing ? (
                 <RichTextEditor
-                  initialContent={normalizeDoc(editFormData.authorNote)}
-                  onChange={handleChange}
+                  ref={editorRef}
+                  key={reloadKey}
+                  initialContent={normalizeDoc(currentData.authorNote)}
                   placeholder="Enter author notes, writing style preferences, world-building rules, or any instructions for the AI..."
                 />
               ) : (

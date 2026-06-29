@@ -10,7 +10,7 @@ import { RichTextEditor, type RichTextEditorRef } from '../../RichTextEditor';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import type { Asset } from '../../../api/assetService';
 import type { TipTapDoc } from '../../../types/tiptap';
-import { normalizeDoc } from '../../../editor/manuscript/doc';
+import { normalizeDoc } from '../../../editor/richtext/doc';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { confirm } from '../../../store/dialogStore';
 import './ObjectCardExpanded.css';
@@ -24,6 +24,7 @@ interface ObjectCardExpandedProps {
     itemData: { name: string; description: string; content: TipTapDoc };
     effectiveLanguage: string;
     versionNumber: number;
+    reloadKey?: string;
     objectType: 'character' | 'organization' | 'location' | 'lorebook' | 'story_entity' | 'outline' | 'act' | 'chapter';
     mainAsset: Asset | null;
     loading?: boolean;
@@ -50,6 +51,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
     itemData,
     effectiveLanguage,
     versionNumber,
+    reloadKey,
     objectType,
     mainAsset,
     loading = false,
@@ -141,7 +143,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
         if (readOnly) {
             return;
         }
-        onSave(name.trim(), description, normalizeDoc(content));
+        onSave(name.trim(), description, normalizeDoc(editorRef.current?.getDoc() ?? content));
     };
 
     const handleCancel = async () => {
@@ -289,7 +291,7 @@ const ObjectCardExpanded: React.FC<ObjectCardExpandedProps> = ({
                                 <label>Content</label>
                                 <RichTextEditor
                                     ref={editorRef}
-                                    key={itemId}
+                                    key={reloadKey ?? itemId}
                                     initialContent={normalizeDoc(itemData.content)}
                                     onChange={setContent}
                                     placeholder="Enter content..."

@@ -508,12 +508,12 @@
         "remove": "Remove"
       },
       "commonErrorCodes": {
-        "title": "Common Error Codes",
         "429": "Rate Limit - Too many requests",
         "500": "Internal Server Error",
         "502": "Bad Gateway",
         "503": "Service Unavailable",
-        "504": "Gateway Timeout"
+        "504": "Gateway Timeout",
+        "title": "Common Error Codes"
       },
       "nativeOutput": {
         "title": "Native Output Mode",
@@ -1217,19 +1217,30 @@
   },
   "richTextEditor": {
     "loading": "Loading editor...",
-    "paragraph": "Paragraph",
-    "heading": "Heading",
-    "headingLevel": "Heading {{level}}",
-    "bold": "Bold (Ctrl+B)",
-    "italic": "Italic (Ctrl+I)",
-    "strikethrough": "Strikethrough",
-    "quote": "Quote",
-    "horizontalRule": "Horizontal rule",
-    "insertTable": "Insert table",
-    "rows": "Rows",
-    "cols": "Cols",
-    "insertTableBtn": "Insert Table",
-    "insertImage": "Insert image"
+    "toolbar": {
+      "heading": "Heading",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "bulletList": "Bullet List",
+      "numberedList": "Numbered List",
+      "quote": "Quote",
+      "codeBlock": "Code Block",
+      "table": "Table",
+      "insertImage": "Insert Image"
+    },
+    "headingDropdown": {
+      "paragraph": "Paragraph",
+      "heading": "Heading {{level}}"
+    },
+    "tableDropdown": {
+      "rows": "Rows",
+      "cols": "Cols",
+      "insertTable": "Insert Table",
+      "addRow": "Add Row",
+      "addColumn": "Add Column",
+      "deleteTable": "Delete Table"
+    }
   },
   "customSelect": {
     "placeholder": "Select..."
@@ -1538,8 +1549,7 @@
     },
     "loading": {
       "chapterContent": "Loading chapter content...",
-      "manuscript": "Loading manuscript...",
-      "editor": "Loading editor..."
+      "manuscript": "Loading manuscript..."
     },
     "error": {
       "chapterContentError": "Chapter Content Error",
@@ -1604,32 +1614,6 @@
     "parentAgent": "Parent Agent",
     "pause": "Pause",
     "interruptedAfterRefresh": "Interrupted by browser refresh. Retry is required."
-  },
-  "manuscriptEditor": {
-    "toolbar": {
-      "heading": "Heading",
-      "bold": "Bold",
-      "italic": "Italic",
-      "strikethrough": "Strikethrough",
-      "bulletList": "Bullet List",
-      "numberedList": "Numbered List",
-      "quote": "Quote",
-      "codeBlock": "Code Block",
-      "table": "Table",
-      "insertImage": "Insert Image"
-    },
-    "headingDropdown": {
-      "paragraph": "Paragraph",
-      "heading": "Heading {{level}}"
-    },
-    "tableDropdown": {
-      "rows": "Rows",
-      "cols": "Cols",
-      "insertTable": "Insert Table",
-      "addRow": "Add Row",
-      "addColumn": "Add Column",
-      "deleteTable": "Delete Table"
-    }
   },
   "timeline": {
     "loading": "Loading timeline...",

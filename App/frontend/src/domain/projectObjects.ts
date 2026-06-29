@@ -17,7 +17,7 @@ import type {
 } from '../types/unifiedObject';
 import type { TipTapDoc } from '../types/tiptap';
 import { normalizeBasicInfoData } from '../utils/basicInfo';
-import { normalizeDoc } from '../editor/manuscript/doc';
+import { normalizeDoc } from '../editor/richtext/doc';
 import { sortOutlineObjects } from './outlineHierarchy';
 
 export interface SimplifiedProjectObjects {

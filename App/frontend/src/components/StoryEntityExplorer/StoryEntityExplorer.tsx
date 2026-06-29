@@ -18,6 +18,7 @@ import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useParams } from 'react-router-dom';
 import { useStoryEntityTreeQuery } from '../../data/objects/useStoryEntityTreeQuery';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
+import { useContentReloadKey } from '../RichTextEditor/useContentReloadKey';
 import { useCreateObjectMutation } from '../../data/objects/mutations/useCreateObjectMutation';
 import { useUpdateObjectMutation } from '../../data/objects/mutations/useUpdateObjectMutation';
 import { useDeleteObjectMutation } from '../../data/objects/mutations/useDeleteObjectMutation';
@@ -60,7 +61,7 @@ import {
 import type { TipTapDoc } from '../../types/tiptap';
 import type { StoryEntityData, StoryEntityKind, StoryEntityObject, UnifiedObject } from '../../types/unifiedObject';
 import type { Asset } from '../../api/assetService';
-import { emptyDoc, normalizeDoc } from '../../editor/manuscript/doc';
+import { emptyDoc, normalizeDoc } from '../../editor/richtext/doc';
 import {
   requestedLanguageStateFromProjection,
   resolveTranslationSourceLanguage,
@@ -743,6 +744,10 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
     'story_entity',
     currentExpandedEntity?.id,
   );
+  const { reloadKey: expandedEntityReloadKey } = useContentReloadKey(
+    `story_entity:${expandedEntityId ?? ''}:${currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage}`,
+    expandedDetail.data?.version?.number ?? null,
+  );
 
   // Get the selected folder name for the header
   const selectedFolderName = useMemo(() => {
@@ -979,6 +984,7 @@ const StoryEntityExplorer: React.FC<StoryEntityExplorerProps> = ({
               }}
               effectiveLanguage={currentExpandedEntityLanguageState?.viewLanguage ?? settings.mainLanguage}
               versionNumber={currentExpandedEntity.version.number}
+              reloadKey={expandedEntityReloadKey}
               objectType="story_entity"
               mainAsset={expandedEntityMainAsset}
               loading={updateObjectMutation.isPending}

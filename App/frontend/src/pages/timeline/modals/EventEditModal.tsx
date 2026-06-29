@@ -8,8 +8,9 @@ import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import type { ObjectPickerGroup, ObjectPickerItem } from '../../../components/ObjectPicker/types';
 import { RichTextEditor } from '../../../components/RichTextEditor';
+import { useContentReloadKey } from '../../../components/RichTextEditor/useContentReloadKey';
 import { Close, Plus, Trash } from '../../../components/icons';
-import { emptyDoc, normalizeDoc } from '../../../editor/manuscript/doc';
+import { emptyDoc, normalizeDoc } from '../../../editor/richtext/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
 import { useSettings } from '../../../data/settings';
 import { createEvent, updateEvent, deleteEvent, createEventLink, deleteEventLink } from '../../../data/timeline';
@@ -114,6 +115,10 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   // Body is markdown in the collection; load the editable tiptap separately.
   const detail = useObjectQuery('timeline_event', event?.id, displayLanguage, { staleTime: Infinity });
   const contentReady = isCreating || !detail.isLoading;
+  const { reloadKey } = useContentReloadKey(
+    `timeline_event:${event?.id ?? 'new'}:${displayLanguage}`,
+    detail.data?.version?.number ?? null,
+  );
 
   const initial = useMemo(() => {
     if (event) {
@@ -540,7 +545,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
         <div className={`tl-form__field tl-form__field--grow ${isMobile && activeTab !== 'content' ? 'tl-form__section-hidden' : ''}`}>
           <label className="tl-form__label">{t('timeline.eventModal.content')}</label>
           {contentReady
-            ? <RichTextEditor initialContent={content} onChange={setContent} />
+            ? <RichTextEditor key={reloadKey} initialContent={content} onChange={setContent} />
             : <div className="tl-form__content-loading">{t('common.loading')}</div>}
         </div>
       </div>
