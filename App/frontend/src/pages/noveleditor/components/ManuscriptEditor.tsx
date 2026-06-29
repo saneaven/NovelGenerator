@@ -140,18 +140,6 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
   });
 
   useEffect(() => {
-    if (!editor) return;
-
-    const nextDoc = normalizeDoc(initialDoc);
-    const nextJson = JSON.stringify(nextDoc);
-    const currentJson = JSON.stringify(editor.getJSON());
-    if (nextJson === currentJson) return;
-
-    editor.commands.setContent(nextDoc, { emitUpdate: false });
-    baselineRef.current = JSON.stringify(editor.getJSON());
-  }, [editor, initialDoc]);
-
-  useEffect(() => {
     if (editor) {
       editor.setEditable(!disabled);
     }

@@ -24,7 +24,7 @@
  * - Version restoration
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useObjectCollectionQuery } from '../../../data/objects/useObjectCollectionQuery';
 import { useObjectQuery } from '../../../data/objects/useObjectQuery';
@@ -76,18 +76,6 @@ const CACHE_KEY_PREFIX = 'novel_editor_cache_';
 // Helper to get localStorage cache key for manuscript content
 const getCacheKey = (manuscriptId: string, language: string) =>
   `${CACHE_KEY_PREFIX}${manuscriptId}_${language}`;
-
-const getDocHash = (doc: TipTapDoc): string => {
-  const raw = JSON.stringify(normalizeDoc(doc));
-  let hash = 2166136261;
-
-  for (let i = 0; i < raw.length; i += 1) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return (hash >>> 0).toString(16);
-};
 
 const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   projectId,
@@ -149,14 +137,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setIsSavingAction(projectId, saving);
   }, [projectId, setIsSavingAction]);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<ManuscriptEditorRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const pendingScrollRestoreRef = useRef<number | null>(null);
-  const lastSavedDocHashRef = useRef<string | null>(null);
-  const stableServerDocHashRef = useRef<string | null>(null);
+  const selfSavedVersionRef = useRef<number | null>(null);
+  const editorBaselineRef = useRef<{ id: string | null; lang: string; version: number | null }>({ id: null, lang: '', version: null });
   const docRef = useRef<TipTapDoc>(doc);
   docRef.current = doc;
 
@@ -255,27 +243,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return getManuscriptData(effectiveLanguage).doc;
   }, [manuscript?.data, effectiveLanguage, getManuscriptData]);
 
-  const serverDocHash = useMemo(() => getDocHash(serverDoc), [serverDoc]);
-
-  const stableServerDocHash = useMemo(() => {
-    // Save round-trip echo: server confirmed the hash we wrote — return the cached stable value so editorKey does NOT change.
-    if (
-      lastSavedDocHashRef.current !== null &&
-      lastSavedDocHashRef.current === serverDocHash &&
-      stableServerDocHashRef.current !== null
-    ) {
-      return stableServerDocHashRef.current;
-    }
-    // External change (initial load, version restore, manuscript switch): adopt new hash.
-    stableServerDocHashRef.current = serverDocHash;
-    lastSavedDocHashRef.current = null;
-    return serverDocHash;
-  }, [serverDocHash]);
-
   const editorKey = useMemo(() => {
     if (!manuscript || !manuscriptId) return 'loading';
-    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${stableServerDocHash}`;
-  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, stableServerDocHash]);
+    return `${manuscriptId}-${globalDisplayLanguage}-${effectiveLanguage}-${reloadNonce}`;
+  }, [manuscriptId, manuscript, globalDisplayLanguage, effectiveLanguage, reloadNonce]);
 
   const initialDoc = useMemo(() => {
     if (editorKey === 'loading') return emptyDoc();
@@ -389,25 +360,25 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const nextScrollTop = pendingScrollRestoreRef.current;
-    if (nextScrollTop === null) return;
+  // Remount only on external version changes; self-saves are recorded and skipped.
+  useEffect(() => {
+    const id = manuscriptId;
+    const lang = effectiveLanguage;
+    const version = manuscript?.version?.number ?? null;
+    const base = editorBaselineRef.current;
 
-    let frameOne = 0;
-    let frameTwo = 0;
-
-    frameOne = requestAnimationFrame(() => {
-      frameTwo = requestAnimationFrame(() => {
-        editorRef.current?.setScrollPosition(nextScrollTop);
-        pendingScrollRestoreRef.current = null;
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(frameOne);
-      cancelAnimationFrame(frameTwo);
-    };
-  }, [editorKey, manuscript?.version?.number]);
+    if (base.id !== id || base.lang !== lang) {
+      editorBaselineRef.current = { id, lang, version };
+      return;
+    }
+    if (version === null || version === base.version) return;
+    editorBaselineRef.current = { id, lang, version };
+    if (version === selfSavedVersionRef.current) {
+      selfSavedVersionRef.current = null;
+      return;
+    }
+    setReloadNonce((n) => n + 1);
+  }, [manuscriptId, effectiveLanguage, manuscript?.version?.number]);
 
   // ============================================================================
   // SAVE HANDLERS
@@ -447,13 +418,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       docRef.current = latestDoc;
       setDoc(latestDoc);
-      pendingScrollRestoreRef.current = editorRef.current?.getScrollPosition() ?? null;
 
       setIsSaving(true);
       setSavingType('manual');
-
-      // Mark this hash as "ours" before the store update re-renders, so stableServerDocHash recognizes the save echo and keeps editorKey stable.
-      lastSavedDocHashRef.current = getDocHash(latestDoc);
 
       try {
         await updateObjectMutation.mutateAsync({
@@ -469,6 +436,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             user_request: reason,
             create_new_version: languageState.createNewVersion,
           },
+        }, {
+          // record our version so the watcher skips this save's echo
+          onSuccess: (updated) => {
+            selfSavedVersionRef.current = (updated as ManuscriptObject)?.version?.number ?? null;
+          },
         });
 
         setDoc(latestDoc);
@@ -478,9 +450,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
         localStorage.removeItem(cacheKey);
       } catch (err) {
-        // Save failed — clear the pending hash so the next render resyncs against real server state.
-        lastSavedDocHashRef.current = null;
-        pendingScrollRestoreRef.current = null;
         console.error('Manual save failed:', err);
         showAlert({ title: 'Save Error', message: 'Failed to save. Please try again.' });
       } finally {

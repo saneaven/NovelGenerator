@@ -20,8 +20,13 @@ export async function invalidateObjectFromSSE(params: {
   projectId: string;
   action: ObjectChangeAction;
 }): Promise<void> {
-  const { type, id, projectId } = params;
-  queryClient.removeQueries({ queryKey: objectKeys.detailOf(type, id) });
+  const { type, id, projectId, action } = params;
+  // invalidate (keep data) on update so an open editor/modal refetches instead of remounting
+  if (action === 'deleted') {
+    queryClient.removeQueries({ queryKey: objectKeys.detailOf(type, id) });
+  } else {
+    void queryClient.invalidateQueries({ queryKey: objectKeys.detailOf(type, id) });
+  }
   const collectionPromise = queryClient.invalidateQueries({
     queryKey: isStoryEntityTreeType(type)
       ? objectKeys.storyTreesOf(projectId)
