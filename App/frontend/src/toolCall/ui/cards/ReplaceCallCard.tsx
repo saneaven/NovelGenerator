@@ -115,6 +115,7 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
         operation,
         mode: 'replace',
         lookup: timelineLookup,
+        objects,
         language,
         values: changedValues,
         changedFields,

@@ -29,7 +29,7 @@ _ID = {"type": "string", "description": "Object ID"}
 _TRACK_ID = {"type": "string", "description": "Timeline track ID"}
 _POSITION = {"type": "integer", "description": "Zero-based sibling position"}
 _PARENT_ID = {"type": ["string", "null"], "description": "Parent track ID or null"}
-_COLOR = {"type": ["string", "null"], "description": "Optional track color as an oklch() string or #hex; omit for an automatic color"}
+_COLOR = {"type": ["string", "null"], "description": "Track color as an oklch() string or #hex. Omit this so a color is assigned automatically; only set it when the user explicitly requests a specific color."}
 _TAGS = {"type": "array", "items": {"type": "string"}}
 _EVENT_LINKS = {
     "type": "array",

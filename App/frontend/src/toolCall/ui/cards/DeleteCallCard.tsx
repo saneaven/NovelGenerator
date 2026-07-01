@@ -54,7 +54,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (isTimelineObjectType(operation.objectType)) {
-      return renderTimelineBody({ operation, mode: 'delete', lookup: timelineLookup, language });
+      return renderTimelineBody({ operation, mode: 'delete', lookup: timelineLookup, objects, language });
     }
 
     if (operation.objectType === 'outline') {

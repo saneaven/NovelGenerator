@@ -65,7 +65,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (isTimelineObjectType(operation.objectType)) {
-      return renderTimelineBody({ operation, mode: 'read', lookup: timelineLookup, language });
+      return renderTimelineBody({ operation, mode: 'read', lookup: timelineLookup, objects, language });
     }
 
     if (operation.objectType === 'outline') {

@@ -62,6 +62,7 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
         operation,
         mode: 'create',
         lookup: timelineLookup,
+        objects,
         language,
         values: fields,
         fallbackName: name || undefined,

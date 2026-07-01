@@ -126,6 +126,16 @@ function resolveDisplayName(
   return undefined;
 }
 
+export function resolveObjectName(
+  objects: Record<string, UnifiedObject>,
+  id: string | undefined,
+  language: string,
+): string | undefined {
+  const object = id ? objects[id] : undefined;
+  if (!object) return undefined;
+  return resolveDisplayName(object, dataForLanguage(object, language), objects, language);
+}
+
 function fallbackOperationData(operation: ObjectOperationVM): Record<string, unknown> {
   const resultData = operation.result?.data;
   if (resultData && typeof resultData === 'object') {

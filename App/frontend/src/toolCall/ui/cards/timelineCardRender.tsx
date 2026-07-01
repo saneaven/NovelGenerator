@@ -1,7 +1,9 @@
 import React from 'react';
 import type { ObjectOperationVM } from '../vmTypes';
+import type { UnifiedObject } from '../../../types/unifiedObject';
 import { TimelineTrackDisplay, type TimelineDisplayMode } from '../displays/TimelineTrackDisplay';
 import { TimelineEventDisplay, type TimelineLinkReference } from '../displays/TimelineEventDisplay';
+import { resolveObjectName } from './helpers';
 import {
   asTagList,
   dataForLanguage,
@@ -27,20 +29,26 @@ function asStringList(value: unknown): string[] {
   return value.map((item) => String(item ?? '').trim()).filter(Boolean);
 }
 
-function asLinkRefs(value: unknown): TimelineLinkReference[] {
+function linkLabel(
+  objectId: string | undefined,
+  objects: Record<string, UnifiedObject>,
+  language: string,
+): string {
+  return resolveObjectName(objects, objectId, language) ?? 'Unknown';
+}
+
+function asLinkRefs(
+  value: unknown,
+  objects: Record<string, UnifiedObject>,
+  language: string,
+): TimelineLinkReference[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
-    const objectType = asString(record.objectType);
     const objectId = asString(record.objectId);
-    const linkId = asString(record.linkId) ?? asString(record.id) ?? (objectType && objectId ? `${objectType}:${objectId}` : undefined);
-    if (!linkId) return [];
-    return [{
-      linkId,
-      objectType,
-      objectId,
-    }];
+    if (!objectId) return [];
+    return [{ label: linkLabel(objectId, objects, language) }];
   });
 }
 
@@ -57,6 +65,7 @@ interface RenderParams {
   operation: ObjectOperationVM;
   mode: TimelineDisplayMode;
   lookup: TimelineLookup;
+  objects: Record<string, UnifiedObject>;
   language: string;
   /** Field values for create/replace (from args / changed values). */
   values?: Record<string, unknown>;
@@ -103,7 +112,7 @@ function renderTrack(params: RenderParams): React.ReactElement {
 }
 
 function renderEvent(params: RenderParams): React.ReactElement {
-  const { operation, mode, lookup, language, values, changedFields, fallbackName } = params;
+  const { operation, mode, lookup, objects, language, values, changedFields, fallbackName } = params;
   const fromArgs = values ?? (mode === 'read' ? resultObject(operation) : {});
   const stored = mode === 'read' || mode === 'delete' ? lookup.findEvent(operation.targetId) : undefined;
   const storedData = dataForLanguage(stored?.data, language);
@@ -124,11 +133,9 @@ function renderEvent(params: RenderParams): React.ReactElement {
   const endLabel = safeFormatDate(endValue, lookup.calendar);
   const tags = 'tags' in fromArgs ? asTagList(fromArgs.tags) : stored?.tags ?? [];
   const links = Array.isArray(fromArgs.links)
-    ? asLinkRefs(fromArgs.links)
+    ? asLinkRefs(fromArgs.links, objects, language)
     : (stored?.links ?? []).map((link) => ({
-        linkId: link.id,
-        objectType: link.objectType,
-        objectId: link.objectId,
+        label: linkLabel(link.objectId, objects, language),
       }));
   const description = asString(fromArgs.description) ?? asString(storedData.description);
   const contentMarkdown = asMarkdown(fromArgs.content) ?? asMarkdown(storedData.content);

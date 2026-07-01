@@ -5,9 +5,8 @@ import type { TimelineDisplayMode } from './TimelineTrackDisplay';
 import './TimelineDisplays.css';
 
 export interface TimelineLinkReference {
-  linkId: string;
-  objectType?: string;
-  objectId?: string;
+  /** Resolved display name of the linked object; 'Unknown' when unresolvable. */
+  label: string;
 }
 
 export interface TimelineEventDisplayProps {
@@ -43,7 +42,7 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
   const show = (field: string) => mode !== 'replace' || !changedFields || changedFields.includes(field);
 
   const tagList = (tags ?? []).map((tag) => tag.trim()).filter(Boolean);
-  const linkRefs = (links ?? []).filter((link) => link.linkId.trim());
+  const linkRefs = (links ?? []).filter((link) => link.label.trim());
   const hasContent = Boolean(contentMarkdown && contentMarkdown.trim());
   const hasDescription = Boolean(description && description.trim());
   const showDates = show('startDate') || show('endDate');
@@ -105,14 +104,9 @@ export const TimelineEventDisplay: React.FC<TimelineEventDisplayProps> = ({
         <div className="tl-card__refs">
           <div className="tl-card__ref-group">
             <span className="tl-card__refs-label">links</span>
-            {linkRefs.map((link) => {
-              const target = link.objectType && link.objectId ? ` -> ${link.objectType}:${link.objectId}` : '';
-              return (
-                <span key={`${link.linkId}:${link.objectType ?? ''}:${link.objectId ?? ''}`} className="tl-card__ref-id">
-                  {link.linkId}{target}
-                </span>
-              );
-            })}
+            {linkRefs.map((link, i) => (
+              <span key={i} className="tl-card__ref-id">{link.label}</span>
+            ))}
           </div>
         </div>
       )}
