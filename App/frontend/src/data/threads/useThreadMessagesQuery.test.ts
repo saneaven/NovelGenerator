@@ -27,7 +27,11 @@ vi.mock('../../api/threadService', () => ({
 import { threadService } from '../../api/threadService';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { queryClient } from '../queryClient';
-import { refetchThreadSnapshot } from './useThreadMessagesQuery';
+import {
+  refetchThreadSnapshot,
+  ensureStreamingMessageInCache,
+  readThreadSnapshotFromCache,
+} from './useThreadMessagesQuery';
 
 const threadId = 'thread-1';
 const projectId = 'project-1';
@@ -141,24 +145,20 @@ describe('thread message snapshot side effects', () => {
     });
   });
 
-  it('does not clear streaming overlay during a message snapshot fetch', async () => {
-    const store = useThreadStreamStore.getState();
-    store.upsertThread(makeThread({ status: 'running', latestRunStatus: 'running' }));
-    store.ensureStreamingAssistantMessage({
-      threadId,
-      messageId: 'assistant-1',
-      runId,
-      seq: 1,
-      seqInThread: 1,
-    });
+  it('refetch replaces the in-cache streaming row with server truth (heal)', async () => {
+    useThreadStreamStore.getState().upsertThread(makeThread({ status: 'running', latestRunStatus: 'running' }));
+    // The streaming row lives in the cache — the single source of truth.
+    ensureStreamingMessageInCache(threadId, 'assistant-1', runId);
+    expect(readThreadSnapshotFromCache(threadId).messages.find((m) => m.id === 'assistant-1')?.isStreaming).toBe(true);
+
     listMessagesMock.mockResolvedValueOnce(makeResponse({
-      messages: [makeMessage({ id: 'assistant-1' })],
+      messages: [makeMessage({ id: 'assistant-1', isStreaming: false })],
     }));
 
     await refetchThreadSnapshot(threadId);
 
-    const overlay = useThreadStreamStore.getState().overlayMessagesByThread[threadId] ?? [];
-    expect(overlay.map((message) => message.id)).toContain('assistant-1');
+    const healed = readThreadSnapshotFromCache(threadId).messages.find((m) => m.id === 'assistant-1');
+    expect(healed?.isStreaming).toBe(false);
   });
 
   it('does not clear stream-active state during a message snapshot fetch', async () => {

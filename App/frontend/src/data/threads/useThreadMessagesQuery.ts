@@ -21,8 +21,15 @@ import { toLatestRunContext, toThreadSnapshot, type ThreadSnapshot } from './thr
 
 const EMPTY_SNAPSHOT: ThreadSnapshot = { messages: [], toolCalls: [] };
 
+/** Stable order: seqInThread, then createdAt, then id — no ties left to chance. */
+export function bySeq(a: ThreadMessage, b: ThreadMessage): number {
+  if (a.seqInThread !== b.seqInThread) return a.seqInThread - b.seqInThread;
+  if (a.createdAt !== b.createdAt) return a.createdAt.localeCompare(b.createdAt);
+  return a.id.localeCompare(b.id);
+}
+
 function sortMessages(messages: ThreadMessage[]): ThreadMessage[] {
-  return [...messages].sort((a, b) => a.seqInThread - b.seqInThread);
+  return [...messages].sort(bySeq);
 }
 
 /**
@@ -53,9 +60,10 @@ export function threadMessagesQueryOptions(threadId: string) {
       applyThreadSnapshotSideEffects(threadId, response);
       return toThreadSnapshot(response);
     },
-    // Freshness is driven by SSE-driven invalidation, not staleness polling, so a
-    // remount never refetches mid-stream and clobbers the live overlay.
+    // SSE-driven invalidation is the freshness source; never staleness-refetch.
     staleTime: Infinity,
+    // Never GC a background thread streaming with no mounted observer.
+    gcTime: Infinity,
   };
 }
 
@@ -180,4 +188,36 @@ export function replaceSnapshotToolCallsForAssistant(
     const kept = prev.toolCalls.filter((tc) => tc.assistantMessageId !== assistantMessageId);
     return { ...prev, toolCalls: [...kept, ...newToolCalls] };
   });
+}
+
+/** Resolve the streaming assistant row for delta application; null if already finalized. */
+export function ensureStreamingMessageInCache(threadId: string, messageId: string, runId: string): ThreadMessage | null {
+  const messages = readThreadSnapshotFromCache(threadId).messages;
+  const existing = messages.find((m) => m.id === messageId);
+  if (existing) return existing.isStreaming ? existing : null;
+  const maxSeq = messages.reduce((max, m) => Math.max(max, m.seqInThread), 0);
+  const created: ThreadMessage = {
+    id: messageId,
+    threadId,
+    runId,
+    role: 'assistant',
+    seq: 0,
+    seqInThread: maxSeq + 1,
+    data: {},
+    attachments: [],
+    streamingData: { contentParts: [] },
+    isStreaming: true,
+    createdAt: new Date().toISOString(),
+  };
+  upsertSnapshotMessage(created);
+  return created;
+}
+
+/** Drop leftover streaming rows + temp tool calls for a thread (cancel/suppress). */
+export function clearThreadStreamingCache(threadId: string): void {
+  writeSnapshot(threadId, (prev) => ({
+    ...prev,
+    messages: prev.messages.filter((m) => !m.isStreaming),
+    toolCalls: prev.toolCalls.filter((tc) => tc.status !== 'streaming' && !tc.id.startsWith('streaming:')),
+  }));
 }

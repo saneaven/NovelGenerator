@@ -17,6 +17,8 @@ export {
   patchSnapshotToolCall,
   removeSnapshotToolCall,
   replaceSnapshotToolCallsForAssistant,
+  ensureStreamingMessageInCache,
+  clearThreadStreamingCache,
 } from './useThreadMessagesQuery';
 
 export type { MergedThreadView, MergedThreadMaps } from './useThreadView';
@@ -25,6 +27,5 @@ export {
   getMergedThreadView,
   getMergedThreadMessages,
   useMergedThreadMaps,
-  mergeThreadMessages,
-  mergeThreadToolCallsById,
+  sortThreadMessages,
 } from './useThreadView';

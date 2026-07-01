@@ -19,6 +19,8 @@ vi.mock('../api/threadService', () => ({
 
 import { refreshUnresolvedCount } from './threadCommands';
 import { useThreadStreamStore } from '../store/threadStreamStore';
+import { upsertSnapshotToolCall, removeSnapshotToolCall } from '../data/threads';
+import { queryClient } from '../data/queryClient';
 
 const threadId = 'thread-unresolved-1';
 const runId = 'run-1';
@@ -52,20 +54,21 @@ function makeStreamingToolCall(): ThreadToolCall {
 }
 
 afterEach(() => {
+  queryClient.clear();
   useThreadStreamStore.getState().clearAll();
 });
 
 describe('deleting a message mid-stream', () => {
   it('clears the orphaned streaming tool call so the unresolved count returns to zero', () => {
-    const store = useThreadStreamStore.getState();
-    store.upsertThread(makeThread());
-    store.upsertStreamingToolCall(makeStreamingToolCall());
+    useThreadStreamStore.getState().upsertThread(makeThread());
+    // Streaming tool calls live in the snapshot cache (the single source of truth).
+    upsertSnapshotToolCall(makeStreamingToolCall());
 
     refreshUnresolvedCount(threadId);
     expect(useThreadStreamStore.getState().threadsById[threadId]?.unresolvedToolCallCount).toBe(1);
 
-    // The two steps deleteMessage() runs for the deleted assistant message.
-    useThreadStreamStore.getState().clearStreamingToolCallsForAssistant(threadId, assistantMessageId);
+    // deleteMessage() removes the linked streaming tool call from the cache.
+    removeSnapshotToolCall(threadId, makeStreamingToolCall().id);
     refreshUnresolvedCount(threadId);
     expect(useThreadStreamStore.getState().threadsById[threadId]?.unresolvedToolCallCount).toBe(0);
   });

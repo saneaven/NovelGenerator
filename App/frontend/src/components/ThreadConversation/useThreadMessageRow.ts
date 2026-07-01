@@ -502,10 +502,8 @@ export function useThreadMessageRows({
       if (toolCall.messageId) removeSnapshotMessage(threadId, toolCall.messageId);
       removeSnapshotToolCall(threadId, toolCall.id);
     }
+    // Cache is the single source; the linked tool-call loop above already dropped its streaming temps.
     removeSnapshotMessage(threadId, message.id);
-    useThreadStreamStore.getState().removeOverlayMessage(threadId, message.id);
-    // Drop the orphaned streaming tool call so it can't keep the composer blocked.
-    useThreadStreamStore.getState().clearStreamingToolCallsForAssistant(threadId, message.id);
     applyOptimisticDeletePause(threadId, deletePauseContext);
     refreshUnresolvedCount(threadId);
 

@@ -23,24 +23,20 @@ vi.mock('../../api/threadService', () => ({
   },
 }));
 
-import { mergeThreadMessages } from './useThreadView';
+import { sortThreadMessages } from './useThreadView';
 
 const threadId = 'thread-1';
 const runId = 'run-1';
 
 function makeMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
   return {
-    id: 'assistant-1',
+    id: 'm-1',
     threadId,
     runId,
     role: 'assistant',
     seq: 1,
     seqInThread: 1,
-    data: {
-      English: {
-        contentParts: [],
-      },
-    },
+    data: { English: { contentParts: [] } },
     attachments: [],
     isStreaming: false,
     createdAt: '2026-06-24T00:00:00.000Z',
@@ -48,51 +44,29 @@ function makeMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
   };
 }
 
-describe('mergeThreadMessages', () => {
-  it('keeps a streaming overlay over a snapshot placeholder with the same id', () => {
-    const placeholder = makeMessage({
-      data: {
-        English: {
-          contentParts: [],
-        },
-      },
-      isStreaming: false,
-    });
-    const streaming = makeMessage({
-      isStreaming: true,
-      streamingData: {
-        contentParts: [{ type: 'content', text: 'streaming text' }],
-      },
-    });
-
-    const [merged] = mergeThreadMessages([placeholder], [streaming]);
-
-    expect(merged).toBe(streaming);
-    expect(merged.isStreaming).toBe(true);
-    expect(merged.streamingData?.contentParts[0]?.text).toBe('streaming text');
+describe('sortThreadMessages', () => {
+  it('orders by seqInThread ascending', () => {
+    const a = makeMessage({ id: 'a', seqInThread: 2 });
+    const b = makeMessage({ id: 'b', seqInThread: 1 });
+    const c = makeMessage({ id: 'c', seqInThread: 3 });
+    expect(sortThreadMessages([a, b, c]).map((m) => m.id)).toEqual(['b', 'a', 'c']);
   });
 
-  it('keeps finalized snapshot truth over a non-streaming overlay with the same id', () => {
-    const finalized = makeMessage({
-      data: {
-        English: {
-          contentParts: [{ type: 'content', text: 'final text' }],
-        },
-      },
-      isStreaming: false,
-    });
-    const nonStreamingOverlay = makeMessage({
-      data: {
-        English: {
-          contentParts: [{ type: 'content', text: 'overlay text' }],
-        },
-      },
-      isStreaming: false,
-    });
+  it('breaks equal seqInThread by createdAt ascending', () => {
+    const older = makeMessage({ id: 'z', seqInThread: 1, createdAt: '2026-06-24T00:00:00.000Z' });
+    const newer = makeMessage({ id: 'a', seqInThread: 1, createdAt: '2026-06-24T00:00:01.000Z' });
+    expect(sortThreadMessages([newer, older]).map((m) => m.id)).toEqual(['z', 'a']);
+  });
 
-    const [merged] = mergeThreadMessages([finalized], [nonStreamingOverlay]);
+  it('breaks fully-equal seq+createdAt by id (deterministic, no render-order flip)', () => {
+    const m1 = makeMessage({ id: 'b', seqInThread: 1, createdAt: '2026-06-24T00:00:00.000Z' });
+    const m2 = makeMessage({ id: 'a', seqInThread: 1, createdAt: '2026-06-24T00:00:00.000Z' });
+    expect(sortThreadMessages([m1, m2]).map((m) => m.id)).toEqual(['a', 'b']);
+  });
 
-    expect(merged).toBe(finalized);
-    expect(merged.data.English.contentParts[0]?.text).toBe('final text');
+  it('does not mutate the input array', () => {
+    const input = [makeMessage({ id: 'a', seqInThread: 2 }), makeMessage({ id: 'b', seqInThread: 1 })];
+    sortThreadMessages(input);
+    expect(input.map((m) => m.id)).toEqual(['a', 'b']);
   });
 });

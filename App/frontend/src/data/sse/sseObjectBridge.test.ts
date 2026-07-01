@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe('invalidateObjectFromSSE', () => {
-  it('removes every detail projection and invalidates every collection projection for updated objects', async () => {
+  it('invalidates every detail projection and collection projection for updated objects', async () => {
     const projectId = 'project-1';
     const id = 'manuscript-1';
     const koreanDetail = objectKeys.detail('manuscript', id, 'Korean', 'tiptap');
@@ -47,8 +47,9 @@ describe('invalidateObjectFromSSE', () => {
       action: 'updated',
     });
 
-    expect(queryClient.getQueryData(koreanDetail)).toBeUndefined();
-    expect(queryClient.getQueryData(englishDetail)).toBeUndefined();
+    // updated keeps detail data (invalidate, not remove) so an open editor refetches in place
+    expect(queryClient.getQueryState(koreanDetail)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(englishDetail)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(koreanCollection)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(englishSummary)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(versions)?.isInvalidated).toBe(true);
@@ -72,7 +73,7 @@ describe('invalidateObjectFromSSE', () => {
       action: 'updated',
     });
 
-    expect(queryClient.getQueryData(detail)).toBeUndefined();
+    expect(queryClient.getQueryState(detail)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(markdownCollection)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(tiptapCollection)?.isInvalidated).toBe(true);
   });
@@ -95,7 +96,7 @@ describe('invalidateObjectFromSSE', () => {
       action: 'updated',
     });
 
-    expect(queryClient.getQueryData(detail)).toBeUndefined();
+    expect(queryClient.getQueryState(detail)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(koreanTree)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(englishTree)?.isInvalidated).toBe(true);
   });

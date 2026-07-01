@@ -6,7 +6,15 @@ import {
 } from '../api/threadService';
 import { requireSettingsFromCache } from '../data/settings';
 import { useThreadStreamStore } from '../store/threadStreamStore';
-import { getMergedThreadView, getMergedThreadMessages, upsertSnapshotToolCall } from '../data/threads';
+import {
+  getMergedThreadView,
+  getMergedThreadMessages,
+  upsertSnapshotToolCall,
+  upsertSnapshotMessage,
+  removeSnapshotMessage,
+  readThreadSnapshotFromCache,
+  clearThreadStreamingCache,
+} from '../data/threads';
 import { nowIso, toThreadType, type LatestRunContext, type ThreadInfo, type ThreadStatus } from '../types/thread';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
 import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
@@ -169,11 +177,10 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     });
   }
 
-  const store = useThreadStreamStore.getState();
   const lang = requireSettingsFromCache().mainLanguage;
   const existingMessages = getMergedThreadMessages(params.threadId);
   const maxSeq = existingMessages.reduce((max, message) => Math.max(max, message.seqInThread), 0);
-  store.appendOptimisticMessage({
+  upsertSnapshotMessage({
     id: `optimistic:user:${Date.now()}`,
     threadId: params.threadId,
     runId: '',
@@ -221,11 +228,10 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
     }
     return true;
   } catch (error) {
-    const store2 = useThreadStreamStore.getState();
-    for (const message of [...store2.getOverlayMessages(params.threadId)]) {
+    for (const message of readThreadSnapshotFromCache(params.threadId).messages) {
       if (message.id.startsWith('optimistic:user:')) {
         revokeMessageAttachmentObjectUrls(message);
-        store2.removeOverlayMessage(params.threadId, message.id);
+        removeSnapshotMessage(params.threadId, message.id);
       }
     }
     throw error;
@@ -270,6 +276,7 @@ export async function cancelThread(params: CancelThreadParams): Promise<void> {
   });
   store.setThreadStreamActive(params.threadId, false);
   store.clearThreadStreamingState(params.threadId);
+  clearThreadStreamingCache(params.threadId);
 }
 
 export async function decideToolCall(params: DecideToolCallParams): Promise<void> {
