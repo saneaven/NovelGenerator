@@ -28,8 +28,9 @@ function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['obje
     case 'manuscript':
       return ['content'];
     case 'timeline_track':
+      return ['name', 'description', 'content', 'parentId', 'position', 'color'];
     case 'timeline_event':
-      return ['name', 'description', 'content'];
+      return ['trackId', 'name', 'description', 'content', 'startDate', 'endDate', 'tags', 'links'];
     default:
       return [];
   }

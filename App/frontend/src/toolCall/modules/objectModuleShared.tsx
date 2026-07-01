@@ -40,6 +40,8 @@ const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
   replace_guidelines: { category: 'replace', objectType: 'guidelines' },
   replace_outline: { category: 'replace', objectType: 'outline' },
   replace_manuscript: { category: 'replace', objectType: 'manuscript' },
+  replace_timeline_track: { category: 'replace', objectType: 'timeline_track' },
+  replace_timeline_event: { category: 'replace', objectType: 'timeline_event' },
   patch_story_entity: { category: 'patch', objectType: 'story_entity', storyEntityKindFromArgs: true },
   patch_story_entity_folder: { category: 'patch', objectType: 'story_entity_folder' },
   patch_basic_info: { category: 'patch', objectType: 'basic_info' },
