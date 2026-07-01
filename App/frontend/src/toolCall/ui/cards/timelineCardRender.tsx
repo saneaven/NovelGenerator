@@ -2,7 +2,6 @@ import React from 'react';
 import type { ObjectOperationVM } from '../vmTypes';
 import { TimelineTrackDisplay, type TimelineDisplayMode } from '../displays/TimelineTrackDisplay';
 import { TimelineEventDisplay, type TimelineLinkReference } from '../displays/TimelineEventDisplay';
-import { TimelineLinkDisplay } from '../displays/TimelineLinkDisplay';
 import {
   asTagList,
   dataForLanguage,
@@ -11,14 +10,8 @@ import {
   type TimelineLookup,
 } from './timelineCardData';
 
-const EVENT_LINK_TOOLS = new Set(['delete_timeline_event_link']);
-
 export function isTimelineObjectType(objectType: string): boolean {
   return objectType === 'timeline_track' || objectType === 'timeline_event';
-}
-
-export function isTimelineEventLink(toolName: string): boolean {
-  return EVENT_LINK_TOOLS.has(toolName);
 }
 
 function asMarkdown(value: unknown): string | undefined {
@@ -160,35 +153,4 @@ function renderEvent(params: RenderParams): React.ReactElement {
 /** Render the timeline-native body for a track/event tool call. */
 export function renderTimelineBody(params: RenderParams): React.ReactElement {
   return params.operation.objectType === 'timeline_track' ? renderTrack(params) : renderEvent(params);
-}
-
-/** Render the compact body for create/delete event-link tool calls. */
-export function renderTimelineLink(params: {
-  operation: ObjectOperationVM;
-  mode: 'create' | 'delete';
-  lookup: TimelineLookup;
-  language: string;
-}): React.ReactElement {
-  const { operation, mode, lookup, language } = params;
-  const args = operation.args;
-  const eventId = asString(args.id) ?? operation.targetId;
-  const event = lookup.findEvent(eventId);
-  const eventLabel = timelineName(event?.data, language) ?? eventId ?? 'Event';
-
-  let objectType = asString(args.objectType);
-  let objectId = asString(args.objectId);
-
-  // delete_timeline_event_link carries linkId; resolve via the stored event link.
-  if (mode === 'delete' && !objectType) {
-    const linkId = asString(args.linkId);
-    const link = event?.links?.find((entry) => entry.id === linkId);
-    if (link) {
-      objectType = link.objectType;
-      objectId = link.objectId;
-    }
-  }
-
-  return (
-    <TimelineLinkDisplay eventLabel={eventLabel} objectType={objectType} objectLabel={objectId} mode={mode} />
-  );
 }

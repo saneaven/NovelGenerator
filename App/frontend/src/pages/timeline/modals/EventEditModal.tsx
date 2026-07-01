@@ -13,7 +13,7 @@ import { Close, Plus, Trash } from '../../../components/icons';
 import { emptyDoc, normalizeDoc } from '../../../editor/richtext/doc';
 import { confirm as confirmDialog } from '../../../store/dialogStore';
 import { useSettings } from '../../../data/settings';
-import { createEvent, updateEvent, deleteEvent, createEventLink, deleteEventLink } from '../../../data/timeline';
+import { createEvent, updateEvent, deleteEvent } from '../../../data/timeline';
 import { useObjectQuery } from '../../../data/objects/useObjectQuery';
 import type { TipTapDoc } from '../../../types/tiptap';
 import type {
@@ -89,6 +89,15 @@ const defaultDate = (calendar: CalendarConfig): TimelineDate => {
   return date;
 };
 
+function linkRequestKey(link: TimelineEventLinkRequest): string {
+  return `${link.objectType}:${link.objectId}`;
+}
+
+function linkRequestsEqual(a: TimelineEventLinkRequest[], b: TimelineEventLinkRequest[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.map(linkRequestKey).sort().join('\n') === b.map(linkRequestKey).sort().join('\n');
+}
+
 const EventEditModal: React.FC<EventEditModalProps> = ({
   projectId,
   calendar,
@@ -131,6 +140,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
         endDate: event.endDate ? clampTimelineDate({ ...event.endDate }, calendar) : null,
         tags: [...event.tags],
         trackId: event.trackId,
+        links: event.links.map((link) => ({ objectType: link.objectType, objectId: link.objectId })),
       };
     }
     return {
@@ -141,6 +151,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
       endDate: null,
       tags: [] as string[],
       trackId: defaults?.trackId ?? (leafTracks.length === 1 ? leafTracks[0].id : ''),
+      links: [] as TimelineEventLinkRequest[],
     };
   }, [event, defaults, calendar, leafTracks, detail.data]);
 
@@ -156,14 +167,15 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
   const [endDate, setEndDate] = useState<TimelineDate | null>(initial.endDate);
   const [tags, setTags] = useState<string[]>(initial.tags);
   const [trackId, setTrackId] = useState(initial.trackId);
-  const [draftLinks, setDraftLinks] = useState<TimelineEventLinkRequest[]>([]);
+  const [draftLinks, setDraftLinks] = useState<TimelineEventLinkRequest[]>(initial.links);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
-  const [pendingLinkIds, setPendingLinkIds] = useState<Set<string>>(() => new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const nameRef = useRef<HTMLInputElement | null>(null);
+
+  const linksDirty = !linkRequestsEqual(draftLinks, initial.links);
 
   const isDirty = name !== initial.name
     || description !== initial.description
@@ -171,7 +183,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     || JSON.stringify(startDate) !== JSON.stringify(initial.startDate)
     || JSON.stringify(endDate) !== JSON.stringify(initial.endDate)
     || JSON.stringify(tags) !== JSON.stringify(initial.tags)
-    || draftLinks.length > 0
+    || linksDirty
     || JSON.stringify(content) !== JSON.stringify(initial.content);
 
   const handleClose = useCallback(async () => {
@@ -241,6 +253,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
           startDate,
           endDate,
           tags,
+          links: linksDirty ? draftLinks : undefined,
         }, displayLanguage);
         onClose();
       }
@@ -249,7 +262,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [canEditProjection, validate, isCreating, event, contentReady, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, onClose, onCreated]);
+  }, [canEditProjection, validate, isCreating, event, contentReady, createEvent, updateEvent, projectId, trackId, displayLanguage, name, description, content, startDate, endDate, tags, draftLinks, linksDirty, onClose, onCreated]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -280,40 +293,16 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
     if (!target || !LINKABLE_TYPES.has(target.type)) return;
     setShowLinkPicker(false);
 
-    if (isCreating) {
-      setDraftLinks((prev) => (
-        prev.some((link) => link.objectType === target.type && link.objectId === objectId)
-          ? prev
-          : [...prev, { objectType: target.type, objectId }]
-      ));
-      return;
-    }
-    if (!event) return;
-    setPendingLinkIds((prev) => new Set(prev).add(objectId));
-    try {
-      await createEventLink(projectId, event.id, { objectType: target.type, objectId }, displayLanguage);
-    } finally {
-      setPendingLinkIds((prev) => {
-        const next = new Set(prev);
-        next.delete(objectId);
-        return next;
-      });
-    }
-  }, [linkItems, isCreating, event, createEventLink, projectId, displayLanguage]);
+    setDraftLinks((prev) => (
+      prev.some((link) => link.objectType === target.type && link.objectId === objectId)
+        ? prev
+        : [...prev, { objectType: target.type, objectId }]
+    ));
+  }, [linkItems]);
 
-  const handleRemoveLink = useCallback(async (linkId: string, objectId: string) => {
-    if (!event) return;
-    setPendingLinkIds((prev) => new Set(prev).add(objectId));
-    try {
-      await deleteEventLink(projectId, event.id, linkId, displayLanguage);
-    } finally {
-      setPendingLinkIds((prev) => {
-        const next = new Set(prev);
-        next.delete(objectId);
-        return next;
-      });
-    }
-  }, [event, deleteEventLink, projectId, displayLanguage]);
+  const handleRemoveLink = useCallback((objectType: string, objectId: string) => {
+    setDraftLinks((prev) => prev.filter((entry) => entry.objectId !== objectId || entry.objectType !== objectType));
+  }, []);
 
   const trackOptions = useMemo(() => leafTracks.map((track) => ({
     value: track.id,
@@ -492,20 +481,12 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
         <div className="tl-form__field">
           <span className="tl-form__label">{t('timeline.eventModal.links')}</span>
           <div className="tl-form__links">
-            {(isCreating
-              ? draftLinks.map((link) => ({
-                  key: `${link.objectType}:${link.objectId}`,
-                  objectType: link.objectType,
-                  objectId: link.objectId,
-                  onRemove: () => setDraftLinks((prev) => prev.filter((entry) => entry.objectId !== link.objectId || entry.objectType !== link.objectType)),
-                }))
-              : (event?.links ?? []).map((link) => ({
-                  key: link.id,
-                  objectType: link.objectType,
-                  objectId: link.objectId,
-                  onRemove: () => { void handleRemoveLink(link.id, link.objectId); },
-                }))
-            ).map((chip) => (
+            {draftLinks.map((link) => ({
+              key: `${link.objectType}:${link.objectId}`,
+              objectType: link.objectType,
+              objectId: link.objectId,
+              onRemove: () => handleRemoveLink(link.objectType, link.objectId),
+            })).map((chip) => (
               <span key={chip.key} className="tl-form__link-chip">
                 <span className="tl-form__link-type">{getAnyObjectTypeLabel(chip.objectType as AnyObjectType)}</span>
                 <span className="tl-form__link-name">{linkItems.get(chip.objectId)?.name ?? chip.objectId}</span>
@@ -513,7 +494,6 @@ const EventEditModal: React.FC<EventEditModalProps> = ({
                   type="button"
                   className="tl-form__link-remove"
                   onClick={chip.onRemove}
-                  disabled={pendingLinkIds.has(chip.objectId)}
                   aria-label={t('common.delete')}
                 >
                   <Close size="xs" />

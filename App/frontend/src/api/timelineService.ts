@@ -3,7 +3,6 @@ import type {
   CalendarConfig,
   TimelineEventCreateRequest,
   TimelineEventLink,
-  TimelineEventLinkRequest,
   TimelineEventUpdateRequest,
   TimelineTrackCreateRequest,
   TimelineTrackMoveRequest,
@@ -132,6 +131,12 @@ function serializeEventUpdate(request: TimelineEventUpdateRequest) {
   if (request.startDate !== undefined) payload.start_date = request.startDate;
   if ('endDate' in request) payload.end_date = request.endDate ?? null;
   if (request.tags !== undefined) payload.tags = request.tags;
+  if (request.links !== undefined) {
+    payload.links = request.links.map((link) => ({
+      object_type: link.objectType,
+      object_id: link.objectId,
+    }));
+  }
   return payload;
 }
 
@@ -193,22 +198,6 @@ export const timelineService = {
 
   async deleteEvent(projectId: string, eventId: string): Promise<void> {
     await apiClient.delete(`/api/v1/projects/${projectId}/timeline/events/${eventId}`);
-  },
-
-  async createEventLink(projectId: string, eventId: string, request: TimelineEventLinkRequest, language?: string): Promise<UnifiedObject<TimelineObjectData>> {
-    const query = buildQueryString({ language });
-    return apiClient.post<UnifiedObject<TimelineObjectData>>(
-      `/api/v1/projects/${projectId}/timeline/events/${eventId}/links${query}`,
-      {
-        object_type: request.objectType,
-        object_id: request.objectId,
-      },
-    );
-  },
-
-  async deleteEventLink(projectId: string, eventId: string, linkId: string, language?: string): Promise<UnifiedObject<TimelineObjectData>> {
-    const query = buildQueryString({ language });
-    return apiClient.delete<UnifiedObject<TimelineObjectData>>(`/api/v1/projects/${projectId}/timeline/events/${eventId}/links/${linkId}${query}`);
   },
 
   async listLinksByObject(projectId: string, objectType: string, objectId: string): Promise<TimelineEventLink[]> {

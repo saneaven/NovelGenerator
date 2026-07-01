@@ -14,7 +14,7 @@ import type {
   CalendarConfig,
   TimelineEvent,
   TimelineEventCreateRequest,
-  TimelineEventLinkRequest,
+  TimelineEventLink,
   TimelineEventUpdateRequest,
   TimelineTrack,
   TimelineTrackCreateRequest,
@@ -72,6 +72,26 @@ function findEvent(tracks: TimelineTrack[], id: string): TimelineEvent | null {
     if (child) return child;
   }
   return null;
+}
+
+function linksFromMetadata(value: unknown): TimelineEventLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id : '';
+    const eventId = typeof record.event_id === 'string' ? record.event_id : '';
+    const objectType = typeof record.object_type === 'string' ? record.object_type : '';
+    const objectId = typeof record.object_id === 'string' ? record.object_id : '';
+    if (!id || !eventId || !objectType || !objectId) return [];
+    return [{
+      id,
+      eventId,
+      objectType,
+      objectId,
+      createdAt: typeof record.created_at === 'string' ? record.created_at : null,
+    }];
+  });
 }
 
 export async function updateCalendar(projectId: string, calendar: CalendarConfig, _language?: string): Promise<void> {
@@ -147,7 +167,7 @@ export async function createEvent(
       data: created.data as unknown as Record<string, unknown>,
       languageState: created.language_state,
       version: { id: created.version?.id ?? null, number: created.version?.number ?? 0, createdAt: created.version?.created_at ?? null },
-      links: [],
+      links: linksFromMetadata(created.metadata.links),
     };
 }
 
@@ -164,24 +184,4 @@ export async function updateEvent(
 export async function deleteEvent(projectId: string, eventId: string, _language?: string): Promise<void> {
   await timelineService.deleteEvent(projectId, eventId);
   invalidateTimelineCollections(projectId);
-}
-
-export async function createEventLink(
-  projectId: string,
-  eventId: string,
-  request: TimelineEventLinkRequest,
-  language?: string,
-): Promise<void> {
-  const updated = await timelineService.createEventLink(projectId, eventId, request, language);
-  applyTimelineObject(updated);
-}
-
-export async function deleteEventLink(
-  projectId: string,
-  eventId: string,
-  linkId: string,
-  language?: string,
-): Promise<void> {
-  const updated = await timelineService.deleteEventLink(projectId, eventId, linkId, language);
-  applyTimelineObject(updated);
 }

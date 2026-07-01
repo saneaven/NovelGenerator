@@ -33,7 +33,7 @@ _COLOR = {"type": ["string", "null"], "description": "Optional track color as an
 _TAGS = {"type": "array", "items": {"type": "string"}}
 _EVENT_LINKS = {
     "type": "array",
-    "description": "Optional links to attach while creating the event.",
+    "description": "Optional full list of linked objects for the event.",
     "items": {
         "type": "object",
         "additionalProperties": False,
@@ -267,7 +267,7 @@ def _has_any_track_replace_field(args: dict[str, Any]) -> bool:
 
 
 def _has_any_event_replace_field(args: dict[str, Any]) -> bool:
-    return any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags"))
+    return any(key in args for key in ("trackId", "name", "description", "content", "startDate", "endDate", "tags", "links"))
 
 
 def _normalize_event_link_args(args: dict[str, Any]) -> list[dict[str, Any]]:
@@ -310,6 +310,8 @@ def _metadata(item) -> dict[str, Any] | None:
             meta["end_date"] = args.get("endDate")
         if "tags" in args:
             meta["tags"] = args.get("tags")
+        if "links" in args:
+            meta["links"] = _normalize_event_link_args(args)
     return meta or None
 
 
@@ -371,6 +373,8 @@ def _validate_event_metadata_args(args: dict[str, Any], ctx, *, event_id: UUID |
         raise ValueError("endDate must be an object or null")
     if "tags" in args and not isinstance(args.get("tags"), list):
         raise ValueError("tags must be an array")
+    if "links" in args:
+        _normalize_event_link_args(args)
 
     if "startDate" in args or "endDate" in args:
         calendar = _calendar_for_event_update(
@@ -555,7 +559,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
             ),
             ToolSpec(
                 name="replace_timeline_event",
-                description="Replace timeline event fields and metadata.",
+                description="Replace timeline event fields and metadata, including the full links list when provided.",
                 parameters=obj_schema(
                     {
                         "id": _ID,
@@ -566,6 +570,7 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                         "startDate": date,
                         "endDate": {**date, "nullable": True},
                         "tags": _TAGS,
+                        "links": _EVENT_LINKS,
                     },
                     ["id"],
                 ),
@@ -599,12 +604,6 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 name="delete_timeline_event",
                 description="Delete a timeline event.",
                 parameters=obj_schema({"id": _ID}, ["id"]),
-                auto_approve_category="delete",
-            ),
-            ToolSpec(
-                name="delete_timeline_event_link",
-                description="Delete a link from a timeline event.",
-                parameters=obj_schema({"id": _ID, "linkId": _ID}, ["id", "linkId"]),
                 auto_approve_category="delete",
             ),
         ],
@@ -797,15 +796,6 @@ class TimelineFeatureModule(ToolFeatureModule):
                 execute=self._execute_delete_timeline_event,
                 build_persisted_meta=_persisted_meta(category="delete", op="delete", target_kind="timeline_event"),
             )
-            add_binding(
-                spec_map=normal_specs_by_name,
-                name="delete_timeline_event_link",
-                meta=ToolBindingMeta(feature_key="timeline", category="delete", op="delete", target_kind="timeline_event"),
-                validate=self._validate_delete_timeline_event_link,
-                execute=self._execute_delete_timeline_event_link,
-                build_persisted_meta=_persisted_meta(category="delete", op="delete", target_kind="timeline_event"),
-            )
-
         if is_translation_journey(ctx):
             for name, op, target_kind, validate, execute in (
                 ("translate_timeline_track", "translate", "timeline_track", self._validate_translate_timeline_track, self._execute_translate_timeline_track),
@@ -1098,7 +1088,7 @@ class TimelineFeatureModule(ToolFeatureModule):
         try:
             event_id = to_uuid(args.get("id"), "id")
             if not _has_any_event_replace_field(args):
-                raise ValueError("replace_timeline_event requires at least one of trackId, name, description, content, startDate, endDate, or tags")
+                raise ValueError("replace_timeline_event requires at least one of trackId, name, description, content, startDate, endDate, tags, or links")
             _validate_event_metadata_args(args, ctx, event_id=event_id)
             read_runtime_object(
                 ctx.db,
@@ -1181,45 +1171,6 @@ class TimelineFeatureModule(ToolFeatureModule):
         return ToolExecutionOutcome(
             lifecycle="applied",
             result=make_result("Deleted timeline event", object_id=str(event_id), object_type="timeline_event"),
-        )
-
-    async def _validate_delete_timeline_event_link(self, args, ctx):
-        try:
-            event_id = to_uuid(args.get("id"), "id")
-            link_id = to_uuid(args.get("linkId"), "linkId")
-            event = object_service.get_object(
-                ctx.db,
-                object_type="timeline_event",
-                object_id=event_id,
-                project_id=ctx.project_id,
-                language=ctx.language,
-            )
-            if event is None:
-                raise ValueError("timeline_event not found")
-            link = (
-                ctx.db.query(TimelineEventLink)
-                .filter(TimelineEventLink.id == link_id, TimelineEventLink.event_id == event_id)
-                .first()
-            )
-            if link is None:
-                raise ValueError("timeline event link not found")
-            return valid_result()
-        except ValueError as exc:
-            return invalid_result("validate_delete_timeline_event_link", str(exc))
-
-    async def _execute_delete_timeline_event_link(self, args, ctx):
-        event_id = to_uuid(args.get("id"), "id")
-        link_id = to_uuid(args.get("linkId"), "linkId")
-        timeline_service.unlink_event(
-            ctx.db,
-            project_id=ctx.project_id,
-            event_id=event_id,
-            link_id=link_id,
-            user_id=ctx.user_id,
-        )
-        return ToolExecutionOutcome(
-            lifecycle="applied",
-            result=make_result("Deleted timeline event link", object_id=str(event_id), object_type="timeline_event"),
         )
 
     async def _validate_translate_timeline_track(self, args, ctx):

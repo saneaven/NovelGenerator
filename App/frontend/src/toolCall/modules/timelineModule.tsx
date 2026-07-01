@@ -17,7 +17,6 @@ const TOOL_NAMES = [
   'patch_timeline_event',
   'delete_timeline_track',
   'delete_timeline_event',
-  'delete_timeline_event_link',
   'translate_timeline_track',
   'translate_timeline_event',
   'patch_translation_timeline_track',

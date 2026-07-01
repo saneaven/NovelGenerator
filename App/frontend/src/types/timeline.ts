@@ -140,6 +140,7 @@ export interface TimelineEventUpdateRequest {
   startDate?: TimelineDate;
   endDate?: TimelineDate | null;
   tags?: string[];
+  links?: TimelineEventLinkRequest[];
   userRequest?: string;
   createNewVersion?: boolean;
 }

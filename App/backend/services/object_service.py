@@ -603,7 +603,16 @@ def _create_or_update_version(
     return latest
 
 
-def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj: Any, metadata: dict[str, Any]) -> None:
+def _handle_metadata_update(
+    db: Session,
+    object_type: str,
+    object_id: UUID,
+    obj: Any,
+    metadata: dict[str, Any],
+    *,
+    project_id: UUID,
+    user_id: UUID,
+) -> None:
     if object_type == STORY_ENTITY_FOLDER_TYPE:
         requested_parent_id = obj.parent_id
         if "parent_id" in metadata:
@@ -733,6 +742,17 @@ def _handle_metadata_update(db: Session, object_type: str, object_id: UUID, obj:
             end_date=obj.end_date if isinstance(obj.end_date, dict) else None,
             calendar=timeline.calendar if isinstance(timeline.calendar, dict) else default_calendar(),
         )
+        if "links" in metadata:
+            links = metadata.get("links")
+            if links is not None and not isinstance(links, list):
+                raise HTTPException(status_code=400, detail="Invalid links value")
+            timeline_service.replace_event_links(
+                db,
+                project_id=project_id,
+                event=obj,
+                links=links or [],
+                user_id=user_id,
+            )
         db.flush()
         return
 
@@ -1070,7 +1090,15 @@ class ObjectService:
             raise ValueError("Outline kind is immutable")
 
         if metadata:
-            _handle_metadata_update(db, storage_type, object_id, obj, metadata)
+            _handle_metadata_update(
+                db,
+                storage_type,
+                object_id,
+                obj,
+                metadata,
+                project_id=project_id,
+                user_id=event_user_id,
+            )
 
         if storage_type != "manuscript" and not data:
             current = latest_payload_with_fallback(db, storage_type, object_id, language)
@@ -1229,7 +1257,15 @@ class ObjectService:
             raise ValueError(f"{t} not found")
         event_user_id = created_by or _resolve_project_user_id(db, project_id=project_id)
 
-        _handle_metadata_update(db, storage_type, object_id, obj, metadata)
+        _handle_metadata_update(
+            db,
+            storage_type,
+            object_id,
+            obj,
+            metadata,
+            project_id=project_id,
+            user_id=event_user_id,
+        )
 
         obj = _load_owned_object(db, project_id, t, object_id)
         if obj is None:

@@ -11,7 +11,7 @@ import type { ObjectCardProps } from './types';
 import { getObjectSnapshot, resolveObjectTitle } from './helpers';
 import { useTargetObjectData } from './useTargetObjectData';
 import { useTimelineLookup } from './timelineCardData';
-import { isTimelineEventLink, isTimelineObjectType, renderTimelineBody, renderTimelineLink } from './timelineCardRender';
+import { isTimelineObjectType, renderTimelineBody } from './timelineCardRender';
 
 export const DeleteCallCard: React.FC<ObjectCardProps> = ({
   scopeKey,
@@ -54,9 +54,6 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (isTimelineObjectType(operation.objectType)) {
-      if (isTimelineEventLink(operation.toolName)) {
-        return renderTimelineLink({ operation, mode: 'delete', lookup: timelineLookup, language });
-      }
       return renderTimelineBody({ operation, mode: 'delete', lookup: timelineLookup, language });
     }
 

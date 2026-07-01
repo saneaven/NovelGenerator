@@ -1367,6 +1367,7 @@ class TimelineService:
         start_date: Any = _UNSET,
         end_date: Any = _UNSET,
         tags: Any = _UNSET,
+        links: Any = _UNSET,
         user_request: str,
         create_new_version: bool,
         user_id: UUID,
@@ -1404,6 +1405,15 @@ class TimelineService:
             event.end_date = deepcopy(end_date) if isinstance(end_date, dict) else None
         if tags is not _UNSET:
             event.tags = _sanitize_tags(tags)
+        link_rows: list[TimelineEventLink] | None = None
+        if links is not _UNSET:
+            link_rows = self.replace_event_links(
+                db,
+                project_id=project_id,
+                event=event,
+                links=links,
+                user_id=user_id,
+            )
 
         _validate_event_dates(
             start_date=event.start_date if isinstance(event.start_date, dict) else {},
@@ -1488,7 +1498,7 @@ class TimelineService:
             event,
             language=language,
             version_map=latest_map,
-            links_by_event_id={event.id: list(event.links)},
+            links_by_event_id={event.id: link_rows if link_rows is not None else list(event.links)},
         )
 
     def delete_event(
@@ -1544,87 +1554,55 @@ class TimelineService:
             enforce_quota=False,
         )
 
-    def link_event(
+    def replace_event_links(
         self,
         db: Session,
         *,
         project_id: UUID,
-        event_id: UUID,
-        object_type: str,
-        object_id: UUID,
+        event: TimelineEvent,
+        links: Iterable[Any] | None,
         user_id: UUID,
-    ) -> dict[str, Any]:
-        event = _event_query(db, project_id).filter(TimelineEvent.id == event_id).first()
-        if event is None:
-            raise HTTPException(status_code=404, detail="Timeline event not found")
-
-        object_type, object_id = _validate_link_target(
+    ) -> list[TimelineEventLink]:
+        link_targets = _normalize_create_event_links(
             db,
             project_id=project_id,
-            object_type=object_type,
-            object_id=object_id,
+            links=links,
             user_id=user_id,
         )
-
-        existing = (
+        existing_links = (
             db.query(TimelineEventLink)
-            .filter(
-                TimelineEventLink.event_id == event.id,
-                TimelineEventLink.object_type == object_type,
-                TimelineEventLink.object_id == object_id,
+            .filter(TimelineEventLink.event_id == event.id)
+            .order_by(TimelineEventLink.created_at.asc(), TimelineEventLink.id.asc())
+            .all()
+        )
+        existing_by_target = {(str(link.object_type), link.object_id): link for link in existing_links}
+        target_set = set(link_targets)
+        changed = False
+
+        for link in existing_links:
+            if (str(link.object_type), link.object_id) not in target_set:
+                db.delete(link)
+                changed = True
+
+        next_links: list[TimelineEventLink] = []
+        for object_type, object_id in link_targets:
+            existing = existing_by_target.get((object_type, object_id))
+            if existing is not None:
+                next_links.append(existing)
+                continue
+            link = TimelineEventLink(
+                id=uuid4(),
+                event_id=event.id,
+                object_type=object_type,
+                object_id=object_id,
             )
-            .first()
-        )
-        if existing is not None:
-            return _serialize_link(existing)
+            db.add(link)
+            next_links.append(link)
+            changed = True
 
-        link = TimelineEventLink(
-            id=uuid4(),
-            event_id=event.id,
-            object_type=object_type,
-            object_id=object_id,
-        )
-        db.add(link)
-        db.flush()
-        queue_object_change(
-            db,
-            user_id=user_id,
-            project_id=project_id,
-            object_type=TIMELINE_EVENT_TYPE,
-            object_id=event.id,
-            action="updated",
-        )
-        return _serialize_link(link)
-
-    def unlink_event(
-        self,
-        db: Session,
-        *,
-        project_id: UUID,
-        event_id: UUID,
-        link_id: UUID,
-        user_id: UUID,
-    ) -> None:
-        event = _event_query(db, project_id).filter(TimelineEvent.id == event_id).first()
-        if event is None:
-            raise HTTPException(status_code=404, detail="Timeline event not found")
-        link = (
-            db.query(TimelineEventLink)
-            .filter(TimelineEventLink.id == link_id, TimelineEventLink.event_id == event.id)
-            .first()
-        )
-        if link is None:
-            raise HTTPException(status_code=404, detail="Timeline event link not found")
-        db.delete(link)
-        db.flush()
-        queue_object_change(
-            db,
-            user_id=user_id,
-            project_id=project_id,
-            object_type=TIMELINE_EVENT_TYPE,
-            object_id=event.id,
-            action="updated",
-        )
+        if changed:
+            db.flush()
+        return next_links
 
     def list_links_by_object(
         self,

@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import types
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import declarative_base
 
@@ -546,6 +546,7 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
 
     assert "read_timeline" not in specs
     assert "create_timeline_event_link" not in specs
+    assert "delete_timeline_event_link" not in specs
     assert specs["read_timeline_track"].description == "Read a single timeline track with fields plus child track and event IDs."
     assert specs["read_timeline_event"].description == "Read a single timeline event with fields, dates, tags, and link IDs."
 
@@ -565,8 +566,9 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     assert replace_track_props["color"]["type"] == ["string", "null"]
 
     replace_event_props = specs["replace_timeline_event"].parameters["properties"]
-    for key in ("trackId", "startDate", "endDate", "tags"):
+    for key in ("trackId", "startDate", "endDate", "tags", "links"):
         assert key in replace_event_props
+    assert replace_event_props["links"]["items"]["properties"]["objectType"]["enum"] == ["outline", "story_entity"]
     date_props = replace_event_props["startDate"]["properties"]
     assert date_props["year"]["minimum"] == 1
     assert "maximum" not in date_props["year"]
@@ -1023,6 +1025,7 @@ def test_timeline_replace_group_uses_object_patch_batch(monkeypatch) -> None:
         "id": str(uuid4()),
         "trackId": str(uuid4()),
         "tags": ["politics", "court"],
+        "links": [{"objectType": "outline", "objectId": str(uuid4())}],
     }
     event_binding = _binding_by_name(feature, _module_context(), "replace_timeline_event")
     captured = _capture_object_group(
@@ -1035,7 +1038,11 @@ def test_timeline_replace_group_uses_object_patch_batch(monkeypatch) -> None:
 
     assert captured["object_type"] == "timeline_event"
     assert captured["replace_fields"] == {}
-    assert captured["metadata"] == {"track_id": event_args["trackId"], "tags": ["politics", "court"]}
+    assert captured["metadata"] == {
+        "track_id": event_args["trackId"],
+        "tags": ["politics", "court"],
+        "links": [{"object_type": "outline", "object_id": UUID(event_args["links"][0]["objectId"])}],
+    }
 
 
 def test_validate_replace_timeline_track_allows_metadata_only(monkeypatch) -> None:
@@ -1075,8 +1082,7 @@ def test_validate_replace_timeline_event_allows_metadata_only(monkeypatch) -> No
         binding.validate(
             {
                 "id": str(uuid4()),
-                "trackId": str(uuid4()),
-                "tags": ["ritual"],
+                "links": [{"objectType": "story_entity", "objectId": str(uuid4())}],
             },
             _validation_context(),
         )

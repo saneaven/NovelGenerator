@@ -13,7 +13,6 @@ from ..schemas.timeline_schemas import (
     CalendarUpdateRequest,
     TimelineConfigResponse,
     TimelineEventCreate,
-    TimelineEventLinkRequest,
     TimelineEventLinkResponse,
     TimelineEventUpdate,
     TimelineTrackCreate,
@@ -329,6 +328,11 @@ async def update_event(
             start_date=request.start_date if "start_date" in request.model_fields_set else _UNSET,
             end_date=request.end_date if "end_date" in request.model_fields_set else _UNSET,
             tags=request.tags if "tags" in request.model_fields_set else _UNSET,
+            links=(
+                [link.model_dump() for link in request.links]
+                if request.links is not None
+                else []
+            ) if "links" in request.model_fields_set else _UNSET,
             user_request=request.user_request,
             create_new_version=request.create_new_version,
             user_id=current_user.id,
@@ -370,74 +374,6 @@ async def delete_event(
     )
     db.commit()
     return {"success": True}
-
-
-@router.post("/events/{event_id}/links", response_model=UnifiedObjectResponse)
-async def create_event_link(
-    project_id: UUID,
-    event_id: UUID,
-    request: TimelineEventLinkRequest,
-    language: str | None = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    try:
-        timeline_service.link_event(
-            db,
-            project_id=project_id,
-            event_id=event_id,
-            object_type=request.object_type,
-            object_id=UUID(request.object_id),
-            user_id=current_user.id,
-        )
-        main_language = _main_language(current_user)
-        response = _serialized_object(
-            db,
-            project_id=project_id,
-            object_type="timeline_event",
-            object_id=event_id,
-            language=language or main_language,
-            fallback_language=main_language,
-        )
-        db.commit()
-        return response
-    except HTTPException:
-        db.rollback()
-        raise
-    except ValueError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.delete("/events/{event_id}/links/{link_id}", response_model=UnifiedObjectResponse)
-async def delete_event_link(
-    project_id: UUID,
-    event_id: UUID,
-    link_id: UUID,
-    language: str | None = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_owned_project(db, user_id=current_user.id, project_id=project_id)
-    timeline_service.unlink_event(
-        db,
-        project_id=project_id,
-        event_id=event_id,
-        link_id=link_id,
-        user_id=current_user.id,
-    )
-    main_language = _main_language(current_user)
-    response = _serialized_object(
-        db,
-        project_id=project_id,
-        object_type="timeline_event",
-        object_id=event_id,
-        language=language or main_language,
-        fallback_language=main_language,
-    )
-    db.commit()
-    return response
 
 
 @router.get("/links", response_model=list[TimelineEventLinkResponse])

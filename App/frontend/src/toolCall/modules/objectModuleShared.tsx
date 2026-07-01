@@ -53,7 +53,6 @@ const OBJECT_TOOL_CONFIGS: Record<string, ObjectToolConfig> = {
   delete_outline: { category: 'delete', objectType: 'outline' },
   delete_timeline_track: { category: 'delete', objectType: 'timeline_track' },
   delete_timeline_event: { category: 'delete', objectType: 'timeline_event' },
-  delete_timeline_event_link: { category: 'delete', objectType: 'timeline_event' },
   translate_story_entity: { category: 'translate', objectType: 'story_entity', storyEntityKindFromArgs: true },
   translate_story_entity_folder: { category: 'translate', objectType: 'story_entity_folder' },
   translate_basic_info: { category: 'translate', objectType: 'basic_info' },

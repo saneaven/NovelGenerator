@@ -89,12 +89,9 @@ class TimelineEventUpdate(BaseModel):
     start_date: dict[str, int] | None = None
     end_date: dict[str, int] | None = None
     tags: list[str] | None = None
+    links: list[TimelineEventLinkCreate] | None = None
     user_request: str = "Timeline Event Update"
     create_new_version: bool = True
-
-
-class TimelineEventLinkRequest(TimelineEventLinkCreate):
-    pass
 
 
 class TimelineEventLinkResponse(BaseModel):

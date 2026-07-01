@@ -124,6 +124,23 @@ class FakeFirstQuery:
     def first(self) -> object | None:
         return self._row
 
+    def all(self) -> list[object]:
+        return []
+
+
+class FakeListQuery:
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def filter(self, *_args: object, **_kwargs: object) -> "FakeListQuery":
+        return self
+
+    def order_by(self, *_args: object, **_kwargs: object) -> "FakeListQuery":
+        return self
+
+    def all(self) -> list[object]:
+        return list(self._rows)
+
 
 class FakeCreateSession:
     def __init__(self, project: object) -> None:
@@ -156,6 +173,33 @@ class FakeTimelineSession:
 
     def flush(self) -> None:
         self.flush_calls += 1
+
+
+class FakeTimelineLinkSession(FakeTimelineSession):
+    def __init__(
+        self,
+        rows_by_model: dict[object, object | None] | None = None,
+        *,
+        links: list[object] | None = None,
+    ) -> None:
+        super().__init__(rows_by_model)
+        self.links = links or []
+        self.deleted: list[object] = []
+
+    def query(self, model: object) -> FakeFirstQuery | FakeListQuery:
+        if model is timeline_service_module.TimelineEventLink:
+            return FakeListQuery(self.links)
+        return super().query(model)
+
+    def add(self, obj: object) -> None:
+        super().add(obj)
+        if isinstance(obj, timeline_service_module.TimelineEventLink):
+            self.links.append(obj)
+
+    def delete(self, obj: object) -> None:
+        self.deleted.append(obj)
+        if obj in self.links:
+            self.links.remove(obj)
 
 
 def test_update_object_manuscript_path_uses_rich_text_image_refs(monkeypatch) -> None:
@@ -250,7 +294,7 @@ def test_update_object_structure_story_entity_folder_skips_versioning(monkeypatc
     monkeypatch.setattr(
         object_service_module,
         "_handle_metadata_update",
-        lambda _db, object_type, incoming_object_id, obj, metadata: metadata_calls.append(
+        lambda _db, object_type, incoming_object_id, obj, metadata, **_kwargs: metadata_calls.append(
             {
                 "object_type": object_type,
                 "object_id": incoming_object_id,
@@ -477,6 +521,8 @@ def test_update_outline_structure_queues_updated_events_for_affected_siblings(mo
 
 def test_timeline_track_metadata_update_moves_and_recolors(monkeypatch) -> None:
     db = FakeSession()
+    project_id = uuid4()
+    user_id = uuid4()
     track_id = uuid4()
     parent_id = uuid4()
     track = SimpleNamespace(
@@ -502,6 +548,8 @@ def test_timeline_track_metadata_update_moves_and_recolors(monkeypatch) -> None:
         track_id,
         track,
         {"parent_id": str(parent_id), "position": 3, "color": "#ffcc00"},
+        project_id=project_id,
+        user_id=user_id,
     )
 
     assert move_calls == [
@@ -511,7 +559,7 @@ def test_timeline_track_metadata_update_moves_and_recolors(monkeypatch) -> None:
             "new_position": 3,
         }
     ]
-    assert track.color == "#ffcc00"
+    assert track.color == timeline_service_module.normalize_track_color("#ffcc00")
     assert flush_calls == [True]
 
 
@@ -582,6 +630,8 @@ def test_timeline_event_metadata_update_changes_track_dates_and_tags(monkeypatch
             "end_date": {"year": 3},
             "tags": ["court", "court", ""],
         },
+        project_id=project_id,
+        user_id=uuid4(),
     )
 
     assert event.track_id == target_track_id
@@ -646,6 +696,8 @@ def test_timeline_event_metadata_update_rejects_invalid_gregorian_date() -> None
             event.id,
             event,
             {"start_date": {"year": 2025, "month": 2, "day": 29}},
+            project_id=project_id,
+            user_id=uuid4(),
         )
 
     assert exc.value.status_code == 400
@@ -777,7 +829,7 @@ def test_timeline_track_metadata_only_update_does_not_queue_semantic_index(monke
         user_id=user_id,
     )
 
-    assert track.color == "#112233"
+    assert track.color == timeline_service_module.normalize_track_color("#112233")
     assert queued == []
     assert invalidated == []
 
@@ -952,6 +1004,78 @@ def test_timeline_event_create_rejects_invalid_links_before_insert(monkeypatch, 
 
     assert db.added == []
     assert db.flush_calls == 0
+
+
+def test_timeline_event_update_replaces_links(monkeypatch) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    track = SimpleNamespace(id=uuid4(), timeline_id=uuid4())
+    timeline = SimpleNamespace(id=track.timeline_id, project_id=project_id, calendar={"units": [{"name": "year", "label": "Year"}]})
+    event = SimpleNamespace(id=uuid4(), track_id=track.id, start_date={"year": 1}, end_date=None, tags=[], links=[])
+    keep_outline_id = uuid4()
+    remove_entity_id = uuid4()
+    add_entity_id = uuid4()
+    keep_link = SimpleNamespace(
+        id=uuid4(),
+        event_id=event.id,
+        object_type="outline",
+        object_id=keep_outline_id,
+        created_at=None,
+    )
+    remove_link = SimpleNamespace(
+        id=uuid4(),
+        event_id=event.id,
+        object_type="story_entity",
+        object_id=remove_entity_id,
+        created_at=None,
+    )
+    captured_links: list[object] = []
+    service = timeline_service_module.TimelineService()
+
+    _patch_timeline_write_side_effects(monkeypatch, serialize_event=True)
+    monkeypatch.setattr(timeline_service_module, "_event_query", lambda *_args, **_kwargs: FakeFirstQuery(event))
+    monkeypatch.setattr(timeline_service_module, "resolve_project_id_for_object", lambda *_args, **_kwargs: project_id)
+
+    def _fake_serialize_event(_event, **kwargs):
+        captured_links.extend(kwargs["links_by_event_id"].get(_event.id, []))
+        return {"id": str(_event.id), "links": [timeline_service_module._serialize_link(link) for link in captured_links]}
+
+    monkeypatch.setattr(timeline_service_module, "_serialize_event", _fake_serialize_event)
+    db = FakeTimelineLinkSession(
+        {
+            timeline_service_module.TimelineTrack: track,
+            timeline_service_module.Timeline: timeline,
+        },
+        links=[keep_link, remove_link],
+    )
+
+    result = service.update_event(
+        db,
+        project_id=project_id,
+        event_id=event.id,
+        track_id=None,
+        language=None,
+        name=None,
+        description=None,
+        start_date={"year": 2},
+        end_date=None,
+        tags=[],
+        links=[
+            {"object_type": "outline", "object_id": str(keep_outline_id)},
+            {"object_type": "story_entity", "object_id": str(add_entity_id)},
+            {"object_type": "story_entity", "object_id": str(add_entity_id)},
+        ],
+        user_request="test",
+        create_new_version=True,
+        user_id=user_id,
+    )
+
+    assert db.deleted == [remove_link]
+    assert [(link.object_type, link.object_id) for link in captured_links] == [
+        ("outline", keep_outline_id),
+        ("story_entity", add_entity_id),
+    ]
+    assert [link["object_id"] for link in result["links"]] == [str(keep_outline_id), str(add_entity_id)]
 
 
 def test_timeline_event_metadata_only_update_does_not_queue_semantic_index(monkeypatch) -> None:

@@ -16,6 +16,4 @@ export {
   createEvent,
   updateEvent,
   deleteEvent,
-  createEventLink,
-  deleteEventLink,
 } from './timelineCommands';
