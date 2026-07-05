@@ -6,8 +6,8 @@ import type { AgentRunMode } from '../types/agentRuntime';
  * Consolidated client UI store. Merges the former sidebarStore (sidebar
  * visibility), agentUIStore (agent panel UI), and timelineUiStore (track
  * visibility / tag filter). All fields/methods keep their original names so
- * consumers only swap the hook. Only the timeline hidden-track set is persisted
- * (preserving the original 'timeline-ui' key).
+ * consumers only swap the hook. Only the timeline track-visibility and tag
+ * filters (both per-project) are persisted under the 'timeline-ui' key.
  */
 
 // ---- sidebar ----------------------------------------------------------------
@@ -93,14 +93,15 @@ interface UiStore {
   // ---- timeline UI (track visibility / tag filter) ----
   hiddenTrackIdsByProject: Record<string, string[]>;
   dismissedWarningsKey: string | null;
-  activeTagFilter: string[];
+  activeTagFilterByProject: Record<string, string[]>;
   isTrackHidden: (projectId: string, trackId: string) => boolean;
   toggleTrackHidden: (projectId: string, trackId: string) => void;
   showAllTracks: (projectId: string) => void;
+  hideAllTracks: (projectId: string, trackIds: string[]) => void;
   unhideAncestorChain: (projectId: string, trackPathIds: string[]) => void;
   pruneHiddenTracks: (projectId: string, existingTrackIds: ReadonlySet<string>) => void;
   setDismissedWarningsKey: (key: string | null) => void;
-  setTagFilter: (tags: string[]) => void;
+  setTagFilter: (projectId: string, tags: string[]) => void;
 
   // ---- unified reset (clears a project's sidebar + agent-panel UI) ----
   resetProjectState: (projectId: string) => void;
@@ -228,7 +229,7 @@ export const useUiStore = create<UiStore>()(
       // ---- timeline UI ----
       hiddenTrackIdsByProject: {},
       dismissedWarningsKey: null,
-      activeTagFilter: [],
+      activeTagFilterByProject: {},
 
       isTrackHidden: (projectId, trackId) => (get().hiddenTrackIdsByProject[projectId] ?? []).includes(trackId),
       toggleTrackHidden: (projectId, trackId) => {
@@ -240,6 +241,9 @@ export const useUiStore = create<UiStore>()(
       },
       showAllTracks: (projectId) => {
         set((state) => ({ hiddenTrackIdsByProject: { ...state.hiddenTrackIdsByProject, [projectId]: [] } }));
+      },
+      hideAllTracks: (projectId, trackIds) => {
+        set((state) => ({ hiddenTrackIdsByProject: { ...state.hiddenTrackIdsByProject, [projectId]: [...trackIds] } }));
       },
       unhideAncestorChain: (projectId, trackPathIds) => {
         set((state) => {
@@ -259,7 +263,13 @@ export const useUiStore = create<UiStore>()(
         });
       },
       setDismissedWarningsKey: (key) => set({ dismissedWarningsKey: key }),
-      setTagFilter: (tags) => set({ activeTagFilter: [...new Set(tags.filter(Boolean))] }),
+      setTagFilter: (projectId, tags) =>
+        set((state) => ({
+          activeTagFilterByProject: {
+            ...state.activeTagFilterByProject,
+            [projectId]: [...new Set(tags.filter(Boolean))],
+          },
+        })),
 
       // ---- unified reset ----
       resetProjectState: (projectId) => {
@@ -298,7 +308,10 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: 'timeline-ui',
-      partialize: (state) => ({ hiddenTrackIdsByProject: state.hiddenTrackIdsByProject }),
+      partialize: (state) => ({
+        hiddenTrackIdsByProject: state.hiddenTrackIdsByProject,
+        activeTagFilterByProject: state.activeTagFilterByProject,
+      }),
     },
   ),
 );

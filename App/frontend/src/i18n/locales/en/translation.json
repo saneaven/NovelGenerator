@@ -1692,6 +1692,8 @@
       "eventCount_one": "{{count}} event",
       "eventCount_other": "{{count}} events",
       "visibleSummary": "{{visible}} of {{total}} events shown",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
       "deleteConfirmTitle": "Delete track",
       "deleteConfirmBody": "Delete \"{{name}}\"? {{children}} sub-tracks and {{events}} events will be deleted.",
       "untitled": "Untitled track"
@@ -1700,6 +1702,7 @@
       "button": "Filter",
       "buttonCount": "Filter ({{count}})",
       "searchTags": "Search tags...",
+      "selectAll": "Select all",
       "clearAll": "Clear all",
       "noTags": "No tags yet — add tags to events to filter by them."
     },

@@ -14,6 +14,7 @@ interface TimelineToolbarProps {
   allTags: string[];
   activeTags: string[];
   onToggleTag: (tag: string) => void;
+  onSelectAllTags: () => void;
   onClearTags: () => void;
   hiddenTrackCount: number;
   onShowAllTracks: () => void;
@@ -30,6 +31,7 @@ const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
   allTags,
   activeTags,
   onToggleTag,
+  onSelectAllTags,
   onClearTags,
   hiddenTrackCount,
   onShowAllTracks,
@@ -111,11 +113,12 @@ const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 );
               })}
             </div>
+            {(activeTags.length < allTags.length || activeTags.length > 0) && <DropdownDivider />}
+            {activeTags.length < allTags.length && (
+              <DropdownItem label={t('timeline.filter.selectAll')} onClick={onSelectAllTags} />
+            )}
             {activeTags.length > 0 && (
-              <>
-                <DropdownDivider />
-                <DropdownItem label={t('timeline.filter.clearAll')} onClick={onClearTags} />
-              </>
+              <DropdownItem label={t('timeline.filter.clearAll')} onClick={onClearTags} />
             )}
           </>
         )}

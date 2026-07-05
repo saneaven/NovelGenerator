@@ -1680,6 +1680,8 @@
       "cannotNestUnderLeafWithEvents": "이벤트가 있는 트랙에는 하위 트랙을 만들 수 없습니다",
       "eventCount_other": "이벤트 {{count}}개",
       "visibleSummary": "{{total}}개 중 {{visible}}개 이벤트 표시 중",
+      "selectAll": "전체 선택",
+      "deselectAll": "전체 해제",
       "deleteConfirmTitle": "트랙 삭제",
       "deleteConfirmBody": "\"{{name}}\"을(를) 삭제할까요? 하위 트랙 {{children}}개와 이벤트 {{events}}개가 삭제됩니다.",
       "untitled": "제목 없는 트랙"
@@ -1688,6 +1690,7 @@
       "button": "필터",
       "buttonCount": "필터 ({{count}})",
       "searchTags": "태그 검색...",
+      "selectAll": "전체 선택",
       "clearAll": "모두 지우기",
       "noTags": "태그가 없습니다. 이벤트에 태그를 추가하면 필터링할 수 있습니다."
     },

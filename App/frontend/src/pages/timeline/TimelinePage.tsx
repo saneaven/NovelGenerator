@@ -33,6 +33,8 @@ import TimelineStream, { type TimelineStreamHandle } from './stream/TimelineStre
 import TimelineToolbar from './toolbar/TimelineToolbar';
 import './TimelinePage.css';
 
+const EMPTY_TAGS: string[] = [];
+
 interface TimelinePageProps {
   globalDisplayLanguage: string;
 }
@@ -86,7 +88,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const isMobile = useIsMobile();
   const settings = useSettings();
 
-  const activeTagFilter = useUiStore((s) => s.activeTagFilter);
+  const activeTagFilter = useUiStore((s) => s.activeTagFilterByProject[pid] ?? EMPTY_TAGS);
   const setTagFilter = useUiStore((s) => s.setTagFilter);
   const displayLanguage = useSelectionStore((s) => s.preferredDisplayLanguage) || globalDisplayLanguage;
 
@@ -124,8 +126,10 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   const calendar = timeline?.calendar ?? DEFAULT_CALENDAR;
   const tracks = useMemo(() => timeline?.tracks ?? [], [timeline]);
 
-  // drop persisted hidden ids whose tracks were deleted elsewhere
+  // prune stale hidden ids, but only after tracks load (empty set would wipe them)
+  const tracksLoaded = trackQuery.data !== undefined;
   useEffect(() => {
+    if (!tracksLoaded) return;
     const ids = new Set<string>();
     const walk = (list: TimelineTrack[]) => {
       for (const track of list) {
@@ -135,7 +139,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
     };
     walk(timeline.tracks);
     pruneHiddenTracks(pid, ids);
-  }, [timeline, pid, pruneHiddenTracks]);
+  }, [timeline, pid, pruneHiddenTracks, tracksLoaded]);
 
   const hiddenTrackIds = useMemo(() => new Set(hiddenIds ?? []), [hiddenIds]);
   const tagFilter = useMemo(() => new Set(activeTagFilter), [activeTagFilter]);
@@ -255,14 +259,14 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
   }, [navigate, pid]);
 
   const handleTagClick = useCallback((tag: string) => {
-    if (!activeTagFilter.includes(tag)) setTagFilter([...activeTagFilter, tag]);
-  }, [activeTagFilter, setTagFilter]);
+    if (!activeTagFilter.includes(tag)) setTagFilter(pid, [...activeTagFilter, tag]);
+  }, [activeTagFilter, setTagFilter, pid]);
 
   const handleToggleTag = useCallback((tag: string) => {
-    setTagFilter(activeTagFilter.includes(tag)
+    setTagFilter(pid, activeTagFilter.includes(tag)
       ? activeTagFilter.filter((value) => value !== tag)
       : [...activeTagFilter, tag]);
-  }, [activeTagFilter, setTagFilter]);
+  }, [activeTagFilter, setTagFilter, pid]);
 
   // ----- warnings banner
   const warningsKey = (timeline?.warnings ?? []).join('|');
@@ -328,7 +332,8 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
         allTags={layout.allTags}
         activeTags={activeTagFilter}
         onToggleTag={handleToggleTag}
-        onClearTags={() => setTagFilter([])}
+        onSelectAllTags={() => setTagFilter(pid, layout.allTags)}
+        onClearTags={() => setTagFilter(pid, [])}
         hiddenTrackCount={hiddenTrackIds.size}
         onShowAllTracks={() => showAllTracks(pid)}
       />
@@ -342,7 +347,7 @@ const TimelinePage: React.FC<TimelinePageProps> = ({ globalDisplayLanguage }) =>
             onCreateTrack={() => treeProps.onAddChild(null)}
             onCreateEvent={() => { void openCreateEvent(); }}
             onShowAllTracks={() => showAllTracks(pid)}
-            onClearFilters={() => setTagFilter([])}
+            onClearFilters={() => setTagFilter(pid, [])}
           />
         ) : (
           <TimelineStream

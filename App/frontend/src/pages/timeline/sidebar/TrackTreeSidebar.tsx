@@ -23,7 +23,10 @@ const TrackTreeSidebar: React.FC<TrackTreeContentProps> = (props) => {
       className="tl-tree-sidebar"
       header={
         <div className="tl-tree-sidebar__header">
-          <h3 className="header-title">{t('timeline.tree.title')}</h3>
+          <div className="header-title-group">
+            <h3 className="header-title">{t('timeline.tree.title')}</h3>
+            <span className="header-subtitle">{t('timeline.tree.subtitle')}</span>
+          </div>
           <IconButton
             icon={<Close size="sm" />}
             onClick={handleClose}

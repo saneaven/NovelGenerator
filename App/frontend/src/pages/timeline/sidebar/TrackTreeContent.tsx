@@ -220,6 +220,7 @@ const TrackTreeContent: React.FC<TrackTreeContentProps> = ({
   const hiddenIds = useUiStore((s) => s.hiddenTrackIdsByProject[projectId]);
   const toggleTrackHidden = useUiStore((s) => s.toggleTrackHidden);
   const showAllTracks = useUiStore((s) => s.showAllTracks);
+  const hideAllTracks = useUiStore((s) => s.hideAllTracks);
   const hiddenSet = useMemo(() => new Set(hiddenIds ?? []), [hiddenIds]);
 
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => new Set());
@@ -352,6 +353,25 @@ const TrackTreeContent: React.FC<TrackTreeContentProps> = ({
         </TextButton>
       </div>
 
+      <div className="tl-tree__controls">
+        <button
+          type="button"
+          className="tl-tree__control-btn"
+          onClick={() => showAllTracks(projectId)}
+          disabled={hiddenSet.size === 0}
+        >
+          {t('timeline.tree.selectAll')}
+        </button>
+        <button
+          type="button"
+          className="tl-tree__control-btn"
+          onClick={() => hideAllTracks(projectId, tracks.map((track) => track.id))}
+          disabled={visibleCount === 0}
+        >
+          {t('timeline.tree.deselectAll')}
+        </button>
+      </div>
+
       <div className="tl-tree__rows">
         {renderLevel(tracks, 0, false)}
       </div>
@@ -360,11 +380,6 @@ const TrackTreeContent: React.FC<TrackTreeContentProps> = ({
         <span className="tl-tree__summary">
           {t('timeline.tree.visibleSummary', { visible: visibleCount, total: totalCount })}
         </span>
-        {hiddenSet.size > 0 && (
-          <button type="button" className="tl-tree__show-all" onClick={() => showAllTracks(projectId)}>
-            {t('timeline.showAll')}
-          </button>
-        )}
       </div>
     </div>
   );

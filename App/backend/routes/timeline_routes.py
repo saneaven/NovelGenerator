@@ -22,13 +22,11 @@ from ..schemas.timeline_schemas import (
 from ..services.ownership import require_owned_project
 from ..services.object_service import object_service
 from ..services.storage_usage_service import StorageQuotaExceededError
-from ..services.timeline_service import timeline_service
+from ..services.timeline_service import _UNSET, timeline_service
 from .unified_object_routes import UnifiedObjectResponse
 
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/timeline", tags=["timeline"])
-
-_UNSET = object()
 
 
 def _optional_uuid(value: str | None, *, field_name: str) -> UUID | None:

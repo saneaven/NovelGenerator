@@ -33,6 +33,36 @@
   color: var(--color-text-muted);
 }
 
+.tl-tree__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tl-tree__control-btn {
+  flex: 1;
+  min-height: 30px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tl-tree__control-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.tl-tree__control-btn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
 .tl-tree__rows {
   flex: 1;
   min-height: 0;
@@ -205,20 +235,6 @@
   color: var(--color-text-muted);
 }
 
-.tl-tree__show-all {
-  border: none;
-  background: none;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-link);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-}
-
-.tl-tree__show-all:hover {
-  background: var(--color-surface-hover);
-}
-
 /* ----- desktop docked pane / mobile drawer hosts */
 
 .tl-tree-panel {
@@ -246,4 +262,44 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
+}
+
+/* drawer chrome header — match the other workspace sidebars */
+.tl-tree-sidebar .base-sidebar-header {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tl-tree-sidebar .header-title-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tl-tree-sidebar .header-title {
+  font-family: var(--font-family-heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tl-tree-sidebar .header-subtitle {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* the chrome header already names the panel — drop the duplicate title inside */
+.tl-tree-sidebar .tl-tree__header-text {
+  display: none;
+}
+
+.tl-tree-sidebar .tl-tree__header {
+  justify-content: flex-end;
+  border-bottom: none;
 }
