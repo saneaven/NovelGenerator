@@ -1,7 +1,15 @@
+import { unifiedObjectService } from '../../api/unifiedObjectService';
 import { useSelectionStore } from '../../store/selectionStore';
+import { readSettingsFromCache } from '../../data/settings';
 import type { ObjectChangedEvent } from '../../api/sseClient';
-import { invalidateObjectFromSSE, type ObjectChangeAction } from '../../data/sse/sseObjectBridge';
-import type { ObjectType } from '../../types/unifiedObject';
+import { defaultRichTextFormatForType, isRichPreviewType } from '../../domain/objectFormat';
+import {
+  markObjectStaleFromSSE,
+  removeObjectFromCacheFromSSE,
+  writeObjectToCacheFromSSE,
+  type ObjectChangeAction,
+} from '../../data/sse/sseObjectBridge';
+import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 
 const FLUSH_DEBOUNCE_MS = 50;
 
@@ -129,22 +137,68 @@ export class ObjectEventConsumer {
 
     if (!deletes.length && !upserts.length) return;
 
+    const settings = readSettingsFromCache();
+    const preferredDisplayLanguage = useSelectionStore.getState().preferredDisplayLanguage;
+    const language = preferredDisplayLanguage || settings?.mainLanguage || 'English';
+    const validUpserts = upserts.filter((item) => this.isCurrentUpsert(item, deleteKeys));
+
     await Promise.all(
       [
-        ...deletes,
-        ...upserts.filter((item) => {
-          const key = this.objectKey(item.objectType, item.objectId);
-          const latestRevision = this.revisionByKey.get(key) ?? 0;
-          return latestRevision === item.revision && !deleteKeys.has(key) && !this.pendingDeleteKeys.has(key);
-        }),
-      ].map((item) =>
-        invalidateObjectFromSSE({
-          type: item.objectType,
-          id: item.objectId,
-          projectId: item.projectId,
-          action: item.action,
-        }),
-      ),
+        ...deletes.map((item) =>
+          removeObjectFromCacheFromSSE({
+            type: item.objectType,
+            id: item.objectId,
+            projectId: item.projectId,
+          }),
+        ),
+        ...validUpserts.map((item) => this.fetchAndWriteUpsert(item, language, deleteKeys)),
+      ],
     );
+  }
+
+  private isCurrentUpsert(item: PendingUpsert, deleteKeys: ReadonlySet<string>): boolean {
+    const key = this.objectKey(item.objectType, item.objectId);
+    const latestRevision = this.revisionByKey.get(key) ?? 0;
+    return latestRevision === item.revision && !deleteKeys.has(key) && !this.pendingDeleteKeys.has(key);
+  }
+
+  private async fetchAndWriteUpsert(
+    item: PendingUpsert,
+    language: string,
+    deleteKeys: ReadonlySet<string>,
+  ): Promise<void> {
+    const format = defaultRichTextFormatForType(item.objectType);
+
+    try {
+      const [object, markdownObject] = await Promise.all([
+        unifiedObjectService.getObject(item.objectType, item.objectId, language, format),
+        isRichPreviewType(item.objectType)
+          ? unifiedObjectService.getObject(item.objectType, item.objectId, language, 'markdown')
+          : Promise.resolve(null),
+      ]);
+
+      if (!this.isCurrentUpsert(item, deleteKeys)) return;
+
+      await writeObjectToCacheFromSSE(
+        object as UnifiedObject,
+        markdownObject as UnifiedObject | null,
+        language,
+        item.action,
+        format,
+      );
+    } catch (error) {
+      if (!this.isCurrentUpsert(item, deleteKeys)) return;
+      console.warn('Failed to fetch changed object from SSE event', {
+        projectId: item.projectId,
+        objectType: item.objectType,
+        objectId: item.objectId,
+        error,
+      });
+      await markObjectStaleFromSSE({
+        type: item.objectType,
+        id: item.objectId,
+        projectId: item.projectId,
+      });
+    }
   }
 }
