@@ -8,6 +8,7 @@ import { BaseModal } from '../BaseModal';
 import { useSelectionStore } from '../../store/selectionStore';
 import { useSettings } from '../../data/settings';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
+import { useProjectObjectsMapState } from '../../data/objects/useProjectObjectsMap';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
@@ -16,7 +17,11 @@ import { journeyService } from '../../api/journeyService';
 import { isPausedLikeThreadStatus } from '../../types/thread';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
-import { ObjectPicker } from '../ObjectPicker';
+import {
+  ObjectPicker,
+  getAllModeSelectableIds,
+  useSharedObjectPickerSelection,
+} from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
@@ -54,7 +59,6 @@ interface UnifiedImagePromptModalProps {
 
   // Optional default values
   defaultUserRequest?: string;
-  defaultSelectedEntityIds?: string[];
 }
 
 const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
@@ -71,7 +75,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   manuscriptId,
   sceneContext,
   defaultUserRequest,
-  defaultSelectedEntityIds,
 }) => {
   const { currentProjectId } = useSelectionStore();
   const settings = useSettings();
@@ -82,10 +85,25 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   );
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
-  const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>(
-    defaultSelectedEntityIds ?? []
-  );
   const [activeJourneyId, setActiveJourneyId] = useState<string | null>(null);
+
+  const contextSelectionProjectId = contextType === 'scene' ? currentProjectId : null;
+  const {
+    objects: projectObjects,
+    isLoading: isContextObjectsLoading,
+  } = useProjectObjectsMapState(contextSelectionProjectId ?? undefined, settings.mainLanguage);
+  const availableContextIds = useMemo(
+    () => getAllModeSelectableIds(Object.values(projectObjects)),
+    [projectObjects],
+  );
+  const {
+    selectedIds: selectedContextIds,
+    setSelectedIds: setSelectedContextIds,
+  } = useSharedObjectPickerSelection({
+    projectId: contextSelectionProjectId,
+    bucket: 'all-context',
+    availableIds: availableContextIds,
+  });
 
   // Get threadId from journey metadata
   const journeyThreadId = useJourneyStore((state) =>
@@ -122,9 +140,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserRequest(defaultUserRequest || '');
-      setSelectedEntityIds(defaultSelectedEntityIds ?? []);
     }
-  }, [isOpen, defaultUserRequest, defaultSelectedEntityIds]);
+  }, [isOpen, defaultUserRequest]);
 
   useEffect(() => {
     if (!activeJourneyId) return;
@@ -218,6 +235,9 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       console.error('Project ID is required');
       return;
     }
+    if (contextType === 'scene' && isContextObjectsLoading) {
+      return;
+    }
 
     const spec = getJourneySpec('imagePrompt');
     const journeyId = crypto.randomUUID();
@@ -232,7 +252,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       objectId,
       manuscriptId,
       sceneContext,
-      selectedEntityIds,
+      selectedContextIds: contextType === 'scene' ? selectedContextIds : [],
       rawMode: true,
       outputMode: 'raw_output' as const,
     };
@@ -255,7 +275,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         input_text: userRequest.trim() || 'Generate an image prompt.',
         input_payload: inputPayload,
         surface: 'story-entity',
-        context_object_ids: selectedEntityIds,
+        context_object_ids: contextType === 'scene' ? selectedContextIds : [],
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
@@ -269,6 +289,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   }, [
     currentProjectId,
     contextType,
+    isContextObjectsLoading,
     promptMode,
     userRequest,
     objectType,
@@ -276,7 +297,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     objectId,
     manuscriptId,
     sceneContext,
-    selectedEntityIds,
+    selectedContextIds,
     onStreamingStart,
     onStreamingError,
     onClose,
@@ -296,7 +317,13 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       footer={
         <>
           <TextButton variant="secondary" onClick={onClose}>Cancel</TextButton>
-          <TextButton variant="primary" onClick={handleGenerate}>Generate Prompt</TextButton>
+          <TextButton
+            variant="primary"
+            onClick={handleGenerate}
+            disabled={contextType === 'scene' && isContextObjectsLoading}
+          >
+            Generate Prompt
+          </TextButton>
         </>
       }
     >
@@ -333,25 +360,24 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
           </div>
         )}
 
-        {/* Object picker for scene - uses mode="story-entities" to auto-fetch */}
+        {/* Object picker for scene */}
         {showObjectPicker && (
           <div className="form-group object-context-section">
-            <label>Include Story Entities</label>
+            <label>Include Context Objects</label>
             <span className="section-hint">
-              Uncheck objects you don&apos;t want to include
+              Select objects to include as context
             </span>
             <ObjectPicker
               mode="all"
               projectId={currentProjectId || ''}
               language={settings.mainLanguage}
-              selectedIds={selectedEntityIds}
-              onChange={(ids) => setSelectedEntityIds(Array.isArray(ids) ? ids : [ids])}
+              selectedIds={selectedContextIds}
+              onChange={(ids) => setSelectedContextIds(Array.isArray(ids) ? ids : [ids])}
               selectionMode="multi"
               maxHeight="200px"
-              selectAllOnLoad={!defaultSelectedEntityIds?.length}
             />
             <div className="selection-summary">
-              {selectedEntityIds.length} entities selected
+              {selectedContextIds.length} objects selected
             </div>
           </div>
         )}

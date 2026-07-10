@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
-import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
+import { useProjectObjectsMapState } from '../../data/objects/useProjectObjectsMap';
 import { readProjectObjectsFromCache } from '../../data/objects/objectCache';
 import { useSettings } from '../../data/settings';
 import type { ObjectType, OutlineObject, UnifiedObject } from '../../types/unifiedObject';
@@ -10,7 +10,11 @@ import type { JourneySpec } from '../../llmTaskJourney/types';
 import { useJourneyStore } from '../../store/journeyStore';
 import { journeyService } from '../../api/journeyService';
 import { Document } from '../icons';
-import { ObjectPicker } from '../ObjectPicker';
+import {
+  ObjectPicker,
+  getAllModeSelectableIds,
+  useSharedObjectPickerSelection,
+} from '../ObjectPicker';
 import { computeParentClosure } from '../../utils/parentClosure';
 import { TextButton } from '../TextButton';
 import ToggleSwitch from '../common/ToggleSwitch';
@@ -56,7 +60,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 }) => {
   // Form state
   const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [pickerLoading, setPickerLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rawMode, setRawMode] = useState(false);
@@ -66,7 +69,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const isManuscriptMode = category === 'manuscript';
   const editTypeText = 'Item';
   const mainLanguage = settings.mainLanguage;
-  const projectObjects = useProjectObjectsMap(projectId, mainLanguage);
+  const {
+    objects: projectObjects,
+    isLoading: isContextObjectsLoading,
+  } = useProjectObjectsMapState(projectId, mainLanguage);
   const targetOutline = (!isManuscriptMode && category === 'outline' && targetId)
     ? (projectObjects[targetId] as OutlineObject | undefined) ?? null
     : null;
@@ -101,17 +107,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserRequest(defaultUserRequest ?? '');
-      setSelectedContextIds([]);
       setPickerLoading(true);
       setError(null);
       setRawMode(false);
     }
   }, [isOpen, defaultUserRequest]);
-
-  // Simple handler for context selection
-  const handleContextChange = useCallback((ids: string[] | string) => {
-    setSelectedContextIds(Array.isArray(ids) ? ids : [ids]);
-  }, []);
 
   // Exclude target ID from selection
   const excludedIds = useMemo(() => {
@@ -128,9 +128,31 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     return [targetId];
   }, [targetId, isManuscriptMode, projectObjects]);
 
+  const availableContextIds = useMemo(
+    () => getAllModeSelectableIds(Object.values(projectObjects)),
+    [projectObjects],
+  );
+  const {
+    selectedIds: selectedContextIds,
+    setSelectedIds: setSelectedContextIds,
+  } = useSharedObjectPickerSelection({
+    projectId,
+    bucket: 'all-context',
+    availableIds: availableContextIds,
+    excludedIds,
+  });
+
+  const handleContextChange = useCallback((ids: string[] | string) => {
+    setSelectedContextIds(Array.isArray(ids) ? ids : [ids]);
+  }, [setSelectedContextIds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (isContextObjectsLoading) {
+      setError('Context objects are still loading.');
+      return;
+    }
     const trimmedRequest = userRequest.trim();
     if (!trimmedRequest) {
       setError('Please enter an edit request.');
@@ -173,6 +195,9 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     for (const obj of readProjectObjectsFromCache(projectId)) {
       objectsById[obj.id] = obj;
     }
+    const excludedIdSet = new Set(excludedIds);
+    const contextObjectIds = computeParentClosure(selectedContextIds, objectsById)
+      .filter((id) => !excludedIdSet.has(id));
 
     try {
       const created = await journeyService.create(projectId, {
@@ -182,7 +207,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         input_payload: inputPayload,
         surface: 'story-entity',
         journey_target_ids: [targetId],
-        context_object_ids: computeParentClosure(selectedContextIds, objectsById),
+        context_object_ids: contextObjectIds,
       });
       useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
     } catch (error: any) {
@@ -243,7 +268,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               showSearch={true}
               maxHeight="300px"
               emptyMessage="No context objects available"
-              selectAllOnLoad={true}
             />
           </div>
           <p className="context-help">
@@ -265,7 +289,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           variant="primary"
           type="submit"
           form="ai-edit-form"
-          disabled={!userRequest.trim() || pickerLoading}
+          disabled={!userRequest.trim() || pickerLoading || isContextObjectsLoading}
         >
           Request AI Edit
         </TextButton>

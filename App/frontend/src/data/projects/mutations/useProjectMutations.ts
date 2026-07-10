@@ -9,6 +9,8 @@ import { projectService } from '../../../api';
 import { queryClient } from '../../queryClient';
 import { projectKeys } from '../../keys/projectKeys';
 import { useSelectionStore, type Project } from '../../../store/selectionStore';
+import { useAuthStore } from '../../../store/authStore';
+import { useObjectPickerSelectionStore } from '../../../store/objectPickerSelectionStore';
 
 function appendProjectToCache(created: Project): void {
   queryClient.setQueryData<Project[]>(projectKeys.list(), (prev) =>
@@ -60,6 +62,10 @@ export function useDeleteProjectMutation() {
       queryClient.setQueryData<Project[]>(projectKeys.list(), (prev) =>
         prev?.filter((p) => p.id !== id),
       );
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) {
+        useObjectPickerSelectionStore.getState().clearProject(userId, id);
+      }
       if (useSelectionStore.getState().currentProjectId === id) {
         useSelectionStore.getState().setCurrentProject(null);
       }

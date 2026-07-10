@@ -85,6 +85,7 @@ def build_memory_summary_template_data(
             },
             "scenePreContext": "",
             "scenePostContext": "",
+            "selectedContextIds": [],
             "selectedEntityIds": [],
         },
         "memory": {

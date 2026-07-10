@@ -13,19 +13,21 @@ import {
 } from '../../../data/presets';
 import { useEditorStore } from '../../../store/editorStore';
 import { useThreadView } from '../../../data/threads';
-import { useTimelineConfig, ensureTimelineLoaded } from '../../../data/timeline';
+import { ensureTimelineLoaded } from '../../../data/timeline';
 import { computeParentClosure } from '../../../utils/parentClosure';
-import { buildTimelineFromObjects } from '../../../utils/timelineView';
-import { useProjectObjectsMap } from '../../../data/objects/useProjectObjectsMap';
+import { useProjectObjectsMapState } from '../../../data/objects/useProjectObjectsMap';
 import {
   cancelThread,
   sendThreadMessage,
 } from '../../../runtime/threadCommands';
-import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
+import {
+  ObjectPicker,
+  getAllModeSelectableIds,
+  useSharedObjectPickerSelection,
+} from '../../../components/ObjectPicker';
 import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import type { AgentRunMode } from '../../../types/agentRuntime';
 import type { ThreadToolCall } from '../../../types/thread';
-import type { TimelineTrack } from '../../../types/timeline';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AuthenticatedImage from '../../../components/common/AuthenticatedImage';
@@ -74,7 +76,7 @@ interface ToolCallBlockingSummary {
   firstMessageId?: string;
 }
 
-type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | null;
+type SendBlockReason = 'missing_agent' | 'running' | 'pending_tool_calls' | 'context_loading' | null;
 
 interface SendBlockingState {
   blocked: boolean;
@@ -117,17 +119,6 @@ interface AgentInputFormProps {
 }
 
 const BLOCKING_TOOL_CALL_STATUSES = new Set(['pending', 'streaming', 'validating', 'processing', 'working']);
-
-function collectTimelineEventIds(tracks: TimelineTrack[]): string[] {
-  const ids: string[] = [];
-
-  for (const track of tracks) {
-    ids.push(...track.events.map((event) => event.id));
-    ids.push(...collectTimelineEventIds(track.children));
-  }
-
-  return ids;
-}
 
 function isBlockingToolCallStatus(status: string | undefined): boolean {
   if (!status) return false;
@@ -432,8 +423,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const runMode = useUiStore((state) => state.runModeByProject[projectId] ?? 'agentMode');
   const setRunMode = useUiStore((state) => state.setRunMode);
   const setInput = useUiStore((state) => state.setInput);
-  const unifiedObjects = useProjectObjectsMap(projectId, contextDisplayLanguage);
-  const timelineConfig = useTimelineConfig(projectId).data ?? null;
+  const {
+    objects: unifiedObjects,
+    isLoading: isContextObjectsLoading,
+  } = useProjectObjectsMapState(projectId, contextDisplayLanguage);
   const selectedChapterId = useEditorStore((state) => state.selectedChapterByProject[projectId]);
 
   const [isDesktop, setIsDesktop] = useState(() => (
@@ -442,7 +435,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
   const [isOverlayClosing, setIsOverlayClosing] = useState(false);
   const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
   const [isContextPickerLoading, setIsContextPickerLoading] = useState(false);
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [selectedMcpSelections, setSelectedMcpSelections] = useState<McpSelection[]>([]);
   const [pendingPromptSelection, setPendingPromptSelection] = useState<PendingPromptSelection | null>(null);
@@ -463,10 +455,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     toolCallsByMessageId,
   } = useThreadView(threadId);
   const liveView = useThreadLiveViewState(threadId);
-  const timeline = useMemo(
-    () => buildTimelineFromObjects(projectId, unifiedObjects, timelineConfig),
-    [projectId, timelineConfig, unifiedObjects],
-  );
 
   const availableMcpServers = useMemo(() => (
     mcpServers.filter((server) => (
@@ -474,34 +462,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     ))
   ), [mcpServers, runMode]);
 
-  const timelineEventIds = useMemo(
-    () => collectTimelineEventIds(timeline?.tracks ?? []),
-    [timeline],
+  const availableContextIds = useMemo(
+    () => getAllModeSelectableIds(Object.values(unifiedObjects)),
+    [unifiedObjects],
   );
-
-  const totalObjectCount = useMemo(() => (
-    Object.values(unifiedObjects).filter((obj) => (
-      obj.metadata?.project_id === projectId
-      && obj.type !== 'basic_info'
-      && obj.type !== 'guidelines'
-      && !(obj.type === 'outline' && obj.kind !== 'chapter')
-    )).length + timelineEventIds.length
-  ), [unifiedObjects, projectId, timelineEventIds.length]);
-
-  const contextIdSet = useMemo(() => (
-    new Set(
-      [
-        ...Object.values(unifiedObjects)
-        .filter((obj) => (
-          obj.metadata?.project_id === projectId
-          && obj.type !== 'basic_info'
-          && obj.type !== 'guidelines'
-        ))
-        .map((obj) => obj.id),
-        ...timelineEventIds,
-      ],
-    )
-  ), [unifiedObjects, projectId, timelineEventIds]);
+  const {
+    selectedIds: selectedContextIds,
+    setSelectedIds: setSelectedContextIds,
+  } = useSharedObjectPickerSelection({
+    projectId,
+    bucket: 'all-context',
+    availableIds: availableContextIds,
+  });
+  const totalObjectCount = availableContextIds.length;
 
   const focusedManuscriptId = useMemo(() => {
     if (surface !== 'novel-editor') return null;
@@ -550,10 +523,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       reason = 'pending_tool_calls';
     } else if (running) {
       reason = 'running';
+    } else if (isContextObjectsLoading) {
+      reason = 'context_loading';
     }
 
     return {
-      blocked: missingAgent || running || unresolvedToolCalls.count > 0,
+      blocked: missingAgent || running || unresolvedToolCalls.count > 0 || isContextObjectsLoading,
       reason,
       unresolvedToolCalls,
     };
@@ -562,6 +537,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     orderedMessages,
     toolCallsByMessageId,
     isMessageRunActive,
+    isContextObjectsLoading,
     thread?.latestRunId,
     runtimeUnresolvedToolCallCount,
   ]);
@@ -576,6 +552,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     }
     if (sendBlockingState.reason === 'running') {
       return 'The agent is still generating a response.';
+    }
+    if (sendBlockingState.reason === 'context_loading') {
+      return 'Project context is still loading.';
     }
     return 'Resolve pending operations before sending.';
   }, [sendBlockingState]);
@@ -665,11 +644,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
       resource_uri: resource.uri,
     });
   }, [appendMcpSelection]);
-
-  useEffect(() => {
-    if (selectedContextIds.length === 0) return;
-    setSelectedContextIds((prev) => prev.filter((id) => contextIdSet.has(id)));
-  }, [contextIdSet, selectedContextIds.length]);
 
   useEffect(() => {
     if (!isContextDropdownOpen || !projectId) {
@@ -996,7 +970,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
                   mode="all"
                   selectionMode="multi"
                   selectedIds={selectedContextIds}
-                  onChange={(ids) => setSelectedContextIds(ids as string[])}
+                  onChange={(ids) => setSelectedContextIds(Array.isArray(ids) ? ids : [ids])}
                   projectId={projectId}
                   language={settings.mainLanguage}
                   loading={isContextPickerLoading}

@@ -50,6 +50,8 @@ export interface ImagePromptInput {
   objectId?: string;
   manuscriptId?: string;
   sceneContext?: { preContext: string; postContext: string };
+  selectedContextIds?: string[];
+  /** @deprecated Legacy alias retained for persisted journeys. */
   selectedEntityIds?: string[];
 }
 
@@ -190,8 +192,9 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
 
   label: () => 'Image Prompt',
 
-  buildEditingTargets: (input) =>
-    ({
+  buildEditingTargets: (input) => {
+    const selectedContextIds = input.selectedContextIds ?? input.selectedEntityIds ?? [];
+    return ({
       kind: input.contextType === 'scene' ? 'sceneImagePrompt' : 'imagePrompt',
       projectId: input.projectId,
       contextType: input.contextType as any,
@@ -201,8 +204,10 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
       objectId: input.objectId,
       manuscriptId: input.manuscriptId,
       sceneContext: input.sceneContext,
-      selectedEntityIds: input.selectedEntityIds,
-    }) as EditingTargets,
+      selectedContextIds,
+      selectedEntityIds: selectedContextIds,
+    }) as EditingTargets;
+  },
 };
 
 // =====================================================================

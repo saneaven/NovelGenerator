@@ -24,6 +24,8 @@ export type EditingTargets =
       objectId?: string;
       manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
+      selectedContextIds?: string[];
+      /** @deprecated Legacy alias retained for persisted journeys. */
       selectedEntityIds?: string[];
     }
   | {
@@ -33,6 +35,8 @@ export type EditingTargets =
       promptMode: string;
       manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
+      selectedContextIds?: string[];
+      /** @deprecated Legacy alias retained for persisted journeys. */
       selectedEntityIds?: string[];
     }
   | {

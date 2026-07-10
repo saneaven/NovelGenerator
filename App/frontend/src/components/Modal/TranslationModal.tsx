@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useProjectObjectsMap } from '../../data/objects/useProjectObjectsMap';
@@ -10,7 +10,7 @@ import { useJourneyStore } from '../../store/journeyStore';
 import { journeyService } from '../../api/journeyService';
 import { translationService } from '../../api/unifiedObjectService';
 import { Globe, Swap, Document } from '../icons';
-import { ObjectPicker } from '../ObjectPicker';
+import { ObjectPicker, useSharedObjectPickerSelection } from '../ObjectPicker';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -48,6 +48,7 @@ interface ProjectObjectToTranslate {
 }
 
 const EMPTY_OBJECT_CACHE: Record<string, UnifiedObject<any>> = {};
+const EMPTY_STRING_IDS: string[] = [];
 
 function objectDisplayLabel(objectType: AnyObjectType, objectKind?: UnifiedObject['kind']): string {
   if (objectType === 'story_entity_folder') {
@@ -117,12 +118,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
   const [userInput, setUserInput] = useState(defaultUserInput || '');
 
-  // Selection state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isObjectsCollapsed, setIsObjectsCollapsed] = useState(false);
-
-  // Context selection for target language reference
-  const [selectedContextIds, setSelectedContextIds] = useState<Set<string>>(() => new Set());
   const [isContextCollapsed, setIsContextCollapsed] = useState(true);
 
   // Raw output mode
@@ -131,8 +127,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const [translationStatuses, setTranslationStatuses] = useState<TranslationStatus[]>([]);
   const [translationStatusReady, setTranslationStatusReady] = useState(false);
 
-  const hasInitializedSelectionRef = useRef(false);
-  const hasInitializedContextRef = useRef(false);
+  const hasPreselectedTargets = (preSelectedObjectIds?.length ?? 0) > 0;
   const settings = useSettings();
   const sourceProjectionLanguage = sourceLanguage || defaultSourceLanguage || settings.mainLanguage || 'English';
   const targetProjectionLanguage = targetLanguage || defaultTargetLanguage || '';
@@ -308,7 +303,9 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
     // When preSelectedObjectIds is provided, use those objects regardless of translation status
-    const preSelectedSet = preSelectedObjectIds ? new Set(preSelectedObjectIds) : null;
+    const preSelectedSet = hasPreselectedTargets
+      ? new Set(preSelectedObjectIds ?? EMPTY_STRING_IDS)
+      : null;
 
     allObjects.forEach(obj => {
       if (obj.metadata?.project_id !== projectId) return;
@@ -475,57 +472,38 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds, projectFolders, sourceTimeline, translationStatusByObjectId]);
+  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds, hasPreselectedTargets, projectFolders, sourceTimeline, translationStatusByObjectId]);
 
   // Get IDs of objects that need translation
   const availableObjectIds = useMemo(() => {
     return availableObjects.map(obj => obj.objectId);
   }, [availableObjects]);
 
-  // Manage selectedIds: initialize on open, sync when objects change
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (preSelectedObjectIds && preSelectedObjectIds.length > 0) {
-      setSelectedIds(new Set(preSelectedObjectIds));
-      hasInitializedSelectionRef.current = true;
-      return;
-    }
-
-    if (!hasInitializedSelectionRef.current && availableObjectIds.length > 0) {
-      // First time: select all
-      setSelectedIds(new Set(availableObjectIds));
-      hasInitializedSelectionRef.current = true;
-    } else if (hasInitializedSelectionRef.current) {
-      // Already initialized: just filter out stale IDs
-      const availableSet = new Set(availableObjectIds);
-      setSelectedIds(prev => {
-        const filtered = new Set([...prev].filter(id => availableSet.has(id)));
-        return filtered.size === prev.size ? prev : filtered;
-      });
-    }
-  }, [isOpen, availableObjectIds, preSelectedObjectIds]);
-
-  // Manage selectedContextIds: initialize on open, sync when context objects change
-  useEffect(() => {
-    if (!isOpen || pickerLoading) return;
-
-    if (!hasInitializedContextRef.current && contextObjectIds.length > 0) {
-      setSelectedContextIds(new Set(contextObjectIds));
-      hasInitializedContextRef.current = true;
-    } else if (hasInitializedContextRef.current) {
-      const contextSet = new Set(contextObjectIds);
-      setSelectedContextIds(prev => {
-        const filtered = new Set([...prev].filter(id => contextSet.has(id)));
-        return filtered.size === prev.size ? prev : filtered;
-      });
-    }
-  }, [isOpen, contextObjectIds, pickerLoading]);
+  const {
+    selectedIds: persistedTargetIds,
+    setSelectedIds: setPersistedTargetIds,
+  } = useSharedObjectPickerSelection({
+    projectId,
+    bucket: 'translation-target',
+    availableIds: hasPreselectedTargets ? EMPTY_STRING_IDS : availableObjectIds,
+  });
+  const {
+    selectedIds: selectedContextIds,
+    setSelectedIds: setSelectedContextIds,
+  } = useSharedObjectPickerSelection({
+    projectId,
+    bucket: 'translation-context',
+    availableIds: contextObjectIds,
+  });
+  const selectedIds = hasPreselectedTargets
+    ? (preSelectedObjectIds ?? EMPTY_STRING_IDS)
+    : persistedTargetIds;
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   // Get objects to translate based on selection
   const objectsToTranslate = useMemo((): ProjectObjectToTranslate[] => {
-    return availableObjects.filter(obj => selectedIds.has(obj.objectId));
-  }, [availableObjects, selectedIds]);
+    return availableObjects.filter(obj => selectedIdSet.has(obj.objectId));
+  }, [availableObjects, selectedIdSet]);
 
   // Determine if raw mode is available (single object, not basic_info)
   const canUseRawMode = useMemo(() => {
@@ -545,10 +523,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserInput(defaultUserInput || '');
-      setSelectedIds(preSelectedObjectIds ? new Set(preSelectedObjectIds) : new Set());
-      setSelectedContextIds(new Set());
-      hasInitializedSelectionRef.current = false;
-      hasInitializedContextRef.current = false;
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
@@ -556,7 +530,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setTranslationStatuses([]);
       setTranslationStatusReady(false);
     }
-  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds]);
+  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput]);
 
   const handleStart = async () => {
     if (objectsToTranslate.length === 0) {
@@ -565,7 +539,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     const spec = getJourneySpec('objectTranslation');
     const journeyId = crypto.randomUUID();
     const selectedObjectIds = objectsToTranslate.map((o) => o.objectId);
-    const selectedContext = Array.from(selectedContextIds);
+    const selectedContext = selectedContextIds;
     const outputMode = rawMode
       ? 'raw_output'
       : (settings.nativeOutputMode ? 'native_tool_call' : 'tool_call');
@@ -624,7 +598,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   };
 
   const handleSelectionChange = (ids: string[] | string) => {
-    setSelectedIds(new Set(Array.isArray(ids) ? ids : [ids]));
+    setPersistedTargetIds(ids);
   };
 
   return (
@@ -683,7 +657,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         </div>
 
         {/* Pre-selected object display (when preSelectedObjectIds is provided) */}
-        {preSelectedObjectIds && preSelectedObjectIds.length > 0 && availableObjects.length > 0 && (
+        {hasPreselectedTargets && availableObjects.length > 0 && (
           <div className="form-group">
             <label>Object to Translate</label>
             <div className="preselected-objects">
@@ -698,25 +672,25 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         )}
 
         {/* Tree-based object selector (when no preSelectedObjectIds) */}
-        {!preSelectedObjectIds && availableObjectIds.length > 0 && (
+        {!hasPreselectedTargets && availableObjectIds.length > 0 && (
           <CollapsibleSection
             label="Objects to Translate"
             expanded={!isObjectsCollapsed}
             onExpandChange={(expanded) => setIsObjectsCollapsed(!expanded)}
-            selectedCount={selectedIds.size}
+            selectedCount={selectedIds.length}
             totalCount={availableObjects.length}
             onToggleAll={(selectAll) => {
               if (selectAll) {
-                setSelectedIds(new Set(availableObjectIds));
+                setPersistedTargetIds(availableObjectIds);
               } else {
-                setSelectedIds(new Set());
+                setPersistedTargetIds([]);
               }
             }}
           >
             <ObjectPicker
               mode="translation"
               selectionMode="multi"
-              selectedIds={Array.from(selectedIds)}
+              selectedIds={selectedIds}
               onChange={handleSelectionChange}
               projectId={projectId}
               language={sourceLanguage}
@@ -760,24 +734,22 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             label="Context (Target Language)"
             expanded={!isContextCollapsed}
             onExpandChange={(expanded) => setIsContextCollapsed(!expanded)}
-            selectedCount={selectedContextIds.size}
+            selectedCount={selectedContextIds.length}
             totalCount={contextObjectIds.length}
             onToggleAll={(selectAll) => {
               if (selectAll) {
-                setSelectedContextIds(new Set(contextObjectIds));
+                setSelectedContextIds(contextObjectIds);
               } else {
-                setSelectedContextIds(new Set());
+                setSelectedContextIds([]);
               }
             }}
           >
             <ObjectPicker
               mode="translation"
               selectionMode="multi"
-              selectedIds={Array.from(selectedContextIds)}
+              selectedIds={selectedContextIds}
               onChange={(ids) => {
-                if (Array.isArray(ids)) {
-                  setSelectedContextIds(new Set(ids));
-                }
+                setSelectedContextIds(ids);
               }}
               projectId={projectId}
               language={targetLanguage}
@@ -791,7 +763,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         )}
 
         {/* Summary - only show for batch mode */}
-        {!preSelectedObjectIds && (
+        {!hasPreselectedTargets && (
           <div className="translation-summary">
             <strong>{objectsToTranslate.length}</strong> of <strong>{availableObjects.length}</strong> objects selected
           </div>

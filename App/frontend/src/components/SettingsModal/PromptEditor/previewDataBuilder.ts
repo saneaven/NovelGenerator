@@ -26,11 +26,12 @@ export interface PreviewDataOptions {
   variableOverrides?: Record<string, any>;
 }
 
-interface FilteredIds {
+export interface FilteredIds {
   contextObjectIds: string[];
   objectIds: string[];
   targetIds: string[];
   contextIds: string[];
+  selectedContextIds: string[];
   selectedEntityIds: string[];
 }
 
@@ -166,18 +167,10 @@ function getAllProjectObjectIds(projectId: string): string[] {
   }
 }
 
-function getAllProjectStoryEntityIds(projectId: string): string[] {
-  try {
-    return readProjectObjectIdsByType(projectId, 'story_entity');
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Build filtered ID arrays based on toggle state.
  */
-function buildFilteredIds(
+export function buildFilteredIds(
   projectId: string | null,
   includeAllFilteredIds: boolean
 ): FilteredIds {
@@ -188,7 +181,8 @@ function buildFilteredIds(
         objectIds: PREVIEW_ALL_OBJECT_IDS,
         targetIds: PREVIEW_ALL_OBJECT_IDS,
         contextIds: PREVIEW_CONTEXT_IDS,
-        selectedEntityIds: [PREVIEW_NESTED_ENTITY_ID],
+        selectedContextIds: PREVIEW_CONTEXT_IDS,
+        selectedEntityIds: PREVIEW_CONTEXT_IDS,
       };
     }
     return {
@@ -196,20 +190,22 @@ function buildFilteredIds(
       objectIds: [],
       targetIds: [],
       contextIds: [],
+      selectedContextIds: [],
       selectedEntityIds: [],
     };
   }
 
   const allIds = getAllProjectObjectIds(projectId);
-  const allStoryEntityIds = getAllProjectStoryEntityIds(projectId);
   const effectiveAllIds = allIds.length > 0 ? allIds : PREVIEW_ALL_OBJECT_IDS;
-  const effectiveStoryEntityIds = allStoryEntityIds.length > 0 ? allStoryEntityIds : [PREVIEW_NESTED_ENTITY_ID];
   return {
     contextObjectIds: effectiveAllIds,
     objectIds: effectiveAllIds,
     targetIds: effectiveAllIds,
     contextIds: effectiveAllIds,
-    selectedEntityIds: effectiveStoryEntityIds,
+    // Preview project data is a placeholder skeleton, so image-context IDs
+    // must use that same placeholder identity space instead of live cache IDs.
+    selectedContextIds: PREVIEW_CONTEXT_IDS,
+    selectedEntityIds: PREVIEW_CONTEXT_IDS,
   };
 }
 
@@ -392,6 +388,7 @@ export function buildModeSpecificData(
           },
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
+          selectedContextIds: filteredIds.selectedContextIds,
           selectedEntityIds: filteredIds.selectedEntityIds,
         },
       };

@@ -290,8 +290,14 @@ class ScenarioManager:
         *,
         payload: dict[str, Any],
         project_data: dict[str, Any],
+        context_object_ids: list[str],
     ) -> dict[str, Any]:
-        selected_entity_ids = _as_str_list(payload.get("selectedEntityIds"))
+        if "selectedContextIds" in payload:
+            selected_context_ids = _as_str_list(payload.get("selectedContextIds"))
+        elif "selectedEntityIds" in payload:
+            selected_context_ids = _as_str_list(payload.get("selectedEntityIds"))
+        else:
+            selected_context_ids = list(context_object_ids)
         object_id = str(payload.get("objectId") or "").strip()
         manuscript_id = str(payload.get("manuscriptId") or "").strip()
         scene_context = _as_dict(payload.get("sceneContext"))
@@ -336,7 +342,9 @@ class ScenarioManager:
             },
             "scenePreContext": str(scene_context.get("preContext") or ""),
             "scenePostContext": str(scene_context.get("postContext") or ""),
-            "selectedEntityIds": selected_entity_ids,
+            "selectedContextIds": selected_context_ids,
+            # Keep the legacy name available to saved journeys and custom templates.
+            "selectedEntityIds": selected_context_ids,
         }
 
     def build_template_data(
@@ -411,6 +419,7 @@ class ScenarioManager:
             "imagePrompt": self._build_image_prompt_data(
                 payload=payload,
                 project_data=project_data,
+                context_object_ids=context_object_ids,
             ),
             "memory": {
                 "summaries": [],

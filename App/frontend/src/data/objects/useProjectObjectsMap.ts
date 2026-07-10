@@ -17,11 +17,16 @@ import type { UnifiedObject } from '../../types/unifiedObject';
 import { useObjectCollectionQuery } from './useObjectCollectionQuery';
 import { useStoryEntityTreeQuery } from './useStoryEntityTreeQuery';
 
-export function useProjectObjectsMap(
+export interface ProjectObjectsMapState {
+  objects: Record<string, UnifiedObject>;
+  isLoading: boolean;
+}
+
+export function useProjectObjectsMapState(
   projectId: string | undefined,
   language: string,
   format: ObjectRichTextFormat = 'markdown',
-): Record<string, UnifiedObject> {
+): ProjectObjectsMapState {
   const basicInfo = useObjectCollectionQuery(projectId, 'basic_info', language, format, true);
   const guidelines = useObjectCollectionQuery(projectId, 'guidelines', language, format, true);
   const outline = useObjectCollectionQuery(projectId, 'outline', language, format, true);
@@ -30,7 +35,7 @@ export function useProjectObjectsMap(
   const events = useObjectCollectionQuery(projectId, 'timeline_event', language, format, true);
   const tree = useStoryEntityTreeQuery(projectId, language, format, true);
 
-  return useMemo(() => {
+  const objects = useMemo(() => {
     const map: Record<string, UnifiedObject> = {};
     const lists: Array<UnifiedObject[] | undefined> = [
       basicInfo.data,
@@ -56,4 +61,22 @@ export function useProjectObjectsMap(
     events.data,
     tree.data,
   ]);
+
+  const isLoading = basicInfo.isLoading
+    || guidelines.isLoading
+    || outline.isLoading
+    || manuscript.isLoading
+    || tracks.isLoading
+    || events.isLoading
+    || tree.isLoading;
+
+  return useMemo(() => ({ objects, isLoading }), [objects, isLoading]);
+}
+
+export function useProjectObjectsMap(
+  projectId: string | undefined,
+  language: string,
+  format: ObjectRichTextFormat = 'markdown',
+): Record<string, UnifiedObject> {
+  return useProjectObjectsMapState(projectId, language, format).objects;
 }

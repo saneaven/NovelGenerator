@@ -73,18 +73,6 @@ function getAllItemIds(groups: Group[]): string[] {
   return ids;
 }
 
-function isSubset<T>(subset: Set<T>, superset: Set<T>): boolean {
-  for (const value of subset) {
-    if (!superset.has(value)) return false;
-  }
-  return true;
-}
-
-function isSameSet<T>(a: Set<T>, b: Set<T>): boolean {
-  if (a.size !== b.size) return false;
-  return isSubset(a, b);
-}
-
 /**
  * Find a group by ID (recursively searching all nested levels)
  */
@@ -238,8 +226,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const [typeFilter, setTypeFilter] = useState<AnyObjectType | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const hasInitializedSelectionRef = useRef(false);
-  const prevSelectableIdSetRef = useRef<Set<string> | null>(null);
-  const prevSelectedIdSetRef = useRef<Set<string> | null>(null);
 
   // Data fetching hook (only used when customGroups is not provided)
   const { groups: fetchedGroups, availableTypes: fetchedTypes, isLoading: fetchLoading, error } = useObjectPickerData({
@@ -340,43 +326,6 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
       }
     }
   }, [selectAllOnLoad, loading, groups, selectionMode, excludedIdSet, preSelectedIdSet, onChange]);
-
-  // Keep "Select All" sticky: when everything was selected and new items are added, auto-select the new items.
-  useEffect(() => {
-    const selectableIds = getAllItemIds(groups).filter(
-      id => !excludedIdSet.has(id) && !preSelectedIdSet.has(id)
-    );
-    const selectableIdSet = new Set(selectableIds);
-
-    const prevSelectableIdSet = prevSelectableIdSetRef.current;
-    const prevSelectedIdSet = prevSelectedIdSetRef.current;
-
-    if (
-      !disabled &&
-      selectionMode === 'multi' &&
-      prevSelectableIdSet &&
-      prevSelectedIdSet &&
-      prevSelectableIdSet.size > 0 &&
-      isSubset(prevSelectableIdSet, prevSelectedIdSet) &&
-      isSameSet(prevSelectedIdSet, selectedIdSet)
-    ) {
-      const addedIds: string[] = [];
-      for (const id of selectableIdSet) {
-        if (!prevSelectableIdSet.has(id)) {
-          addedIds.push(id);
-        }
-      }
-
-      if (addedIds.length > 0) {
-        const nextSelection = new Set(selectedIdSet);
-        addedIds.forEach(id => nextSelection.add(id));
-        onChange(Array.from(nextSelection));
-      }
-    }
-
-    prevSelectableIdSetRef.current = selectableIdSet;
-    prevSelectedIdSetRef.current = new Set(selectedIdSet);
-  }, [groups, excludedIdSet, preSelectedIdSet, selectedIdSet, disabled, selectionMode, onChange]);
 
   // Filter groups based on search
   const filteredGroups = useMemo(() => {

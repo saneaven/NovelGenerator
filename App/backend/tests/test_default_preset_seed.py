@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from App.backend.services.default_preset_seed import load_default_preset_seed
+from App.backend.services.prompt_runtime.template_renderer import TemplateRenderer
 
 
 def _load_alembic_revision_ids() -> list[str]:
@@ -114,6 +115,130 @@ def test_default_scene_image_prompt_includes_story_position_context() -> None:
     assert "**Chapter:** {{ imagePrompt.sceneChapter.chapterNumber }}" in scene_prompt
     assert "**Chapter Title:** {{ imagePrompt.sceneChapter.chapterName }}" in scene_prompt
     assert "do not include act/chapter labels in the generated image prompt" in scene_prompt
+
+
+def test_default_scene_image_prompt_renders_exact_context_object_categories() -> None:
+    document = _load_default_prompt_document()
+    system_template = document["prompts"]["imagePrompt"]["scene"]["system_template"]
+    renderer = TemplateRenderer(fragment_map={"image/guidelines": ""})
+    selected_entity = {
+        "id": "entity-selected",
+        "kind": "character",
+        "name": "Ari",
+        "description": "Silver-haired scout",
+        "content": "ENTITY SELECTED CONTENT",
+        "imagePrompt": "silver braid and amber eyes",
+    }
+    unselected_entity = {
+        "id": "entity-unselected",
+        "kind": "location",
+        "name": "Hidden Port",
+        "description": "Must stay hidden",
+        "content": "UNSELECTED ENTITY CONTENT",
+        "imagePrompt": "",
+    }
+    project = {
+        "storyEntityTree": [
+            {"nodeType": "story_entity", "entity": selected_entity},
+            {"nodeType": "story_entity", "entity": unselected_entity},
+        ],
+        "outline": {
+            "tree": [
+                {
+                    "id": "outline-parent",
+                    "kind": "outline",
+                    "name": "Parent",
+                    "description": "",
+                    "content": "UNSELECTED OUTLINE PARENT CONTENT",
+                    "children": [
+                        {
+                            "id": "chapter-selected",
+                            "kind": "chapter",
+                            "name": "The Raid",
+                            "description": "A sudden attack",
+                            "content": "CHAPTER SELECTED CONTENT",
+                            "children": [],
+                        }
+                    ],
+                }
+            ]
+        },
+        "manuscripts": [
+            {
+                "id": "manuscript-selected",
+                "chapterId": "chapter-selected",
+                "chapterName": "The Raid",
+                "content": "MANUSCRIPT SELECTED CONTENT",
+            }
+        ],
+        "timeline": {
+            "tracks": [
+                {
+                    "id": "track-parent",
+                    "name": "Parent Track",
+                    "description": "",
+                    "content": "UNSELECTED TRACK PARENT CONTENT",
+                    "children": [
+                        {
+                            "id": "track-selected",
+                            "name": "Battle Track",
+                            "description": "The siege sequence",
+                            "content": "TRACK SELECTED CONTENT",
+                            "children": [],
+                        }
+                    ],
+                }
+            ],
+            "events": [
+                {
+                    "id": "event-selected",
+                    "name": "Gate Breach",
+                    "formattedDate": "Day 3",
+                    "description": "The walls fall",
+                    "content": "EVENT SELECTED CONTENT",
+                    "tags": ["siege", "turning point"],
+                }
+            ],
+        },
+    }
+    selected_ids = [
+        "entity-selected",
+        "chapter-selected",
+        "manuscript-selected",
+        "track-selected",
+        "event-selected",
+    ]
+
+    rendered = renderer.render_text(
+        system_template,
+        {"project": project, "imagePrompt": {"selectedContextIds": selected_ids}},
+    )
+
+    assert "## Context Objects" in rendered
+    assert "ENTITY SELECTED CONTENT" in rendered
+    assert "**Saved Image Prompt:** silver braid and amber eyes" in rendered
+    assert "CHAPTER SELECTED CONTENT" in rendered
+    assert "MANUSCRIPT SELECTED CONTENT" in rendered
+    assert "TRACK SELECTED CONTENT" in rendered
+    assert "EVENT SELECTED CONTENT" in rendered
+    assert "**Tags:** siege, turning point" in rendered
+    assert "UNSELECTED ENTITY CONTENT" not in rendered
+    assert "UNSELECTED OUTLINE PARENT CONTENT" not in rendered
+    assert "UNSELECTED TRACK PARENT CONTENT" not in rendered
+
+
+def test_default_scene_image_prompt_omits_empty_context_section() -> None:
+    document = _load_default_prompt_document()
+    system_template = document["prompts"]["imagePrompt"]["scene"]["system_template"]
+    renderer = TemplateRenderer(fragment_map={"image/guidelines": ""})
+
+    rendered = renderer.render_text(
+        system_template,
+        {"project": {}, "imagePrompt": {"selectedContextIds": []}},
+    )
+
+    assert "## Context Objects" not in rendered
+    assert "## Story Entity Context" not in rendered
 
 
 def test_default_prompt_outline_and_manuscript_fragments_include_number_attributes() -> None:

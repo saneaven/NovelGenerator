@@ -290,7 +290,14 @@ export const UNIFIED_SCHEMA = {
     },
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
-    selectedEntityIds: { desc: "IDs of selected story entities", example: ["story-entity-1", "story-entity-2"] as string[] },
+    selectedContextIds: {
+      desc: "IDs of selected context objects",
+      example: ["story-entity-1", "chapter-1", "manuscript-1", "timeline-event-1"] as string[],
+    },
+    selectedEntityIds: {
+      desc: "Deprecated alias of selectedContextIds for legacy templates",
+      example: ["story-entity-1", "chapter-1", "manuscript-1", "timeline-event-1"] as string[],
+    },
   },
 
   // User-defined variables (dynamic, fields determined by user configuration)
