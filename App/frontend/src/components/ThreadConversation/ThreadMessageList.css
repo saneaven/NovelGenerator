@@ -578,6 +578,19 @@
   z-index: var(--z-elevated);
 }
 
+.thread-message-list__reload-button {
+  position: absolute;
+  right: var(--spacing-lg);
+  top: calc(var(--thread-message-list-top-overlay) + var(--spacing-lg));
+  z-index: var(--z-elevated);
+  opacity: 0.55;
+  transition: opacity var(--transition-base);
+}
+
+.thread-message-list__reload-button:hover {
+  opacity: 1;
+}
+
 .thread-message-edit {
   display: flex;
   flex-direction: column;

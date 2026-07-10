@@ -1355,6 +1355,8 @@
     "textFileCount": "{{count}} text file(s)",
     "viewAttachment": "View",
     "viewAgentList": "View agent list",
+    "reloadThread": "Reload chat",
+    "reloadThreadStreamingWarning": "A response is still streaming. Reloading may drop the in-progress response. Reload anyway?",
     "agents": "Agents",
     "aiAgent": "AI Agent",
     "close": "Close",

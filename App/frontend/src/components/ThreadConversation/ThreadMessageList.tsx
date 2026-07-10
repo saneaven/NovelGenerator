@@ -10,7 +10,8 @@ import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { FunctionCallsThread } from '../../toolCall/ui';
 import { useToolCallDecisions } from '../../toolCall/useToolCallDecisions';
 import { IconButton } from '../IconButton';
-import { ChevronDown } from '../icons';
+import { ChevronDown, Refresh } from '../icons';
+import { useThreadReload } from './useThreadReload';
 import { Loading } from '../common/Loading';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
@@ -41,6 +42,10 @@ interface ThreadMessageListProps {
   stickyLatestUser?: boolean;
 }
 
+interface ThreadMessageListBodyProps extends ThreadMessageListProps {
+  onReload: () => void;
+}
+
 function isPendingToolCallStatus(status: string | undefined): boolean {
   return status === 'pending'
     || status === 'streaming'
@@ -63,7 +68,7 @@ function TypingIndicator({ inline = false }: { inline?: boolean }) {
   );
 }
 
-const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
+const ThreadMessageListBody: React.FC<ThreadMessageListBodyProps> = ({
   threadId,
   projectId,
   roleLabels,
@@ -72,6 +77,7 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
   topOverlayHeight = 0,
   bottomOverlayHeight = 0,
   stickyLatestUser = true,
+  onReload,
 }) => {
   const { t } = useTranslation();
   const settings = useSettings();
@@ -416,6 +422,16 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
         </div>
       </div>
 
+      <IconButton
+        className="thread-message-list__reload-button"
+        icon={<Refresh size="sm" />}
+        onClick={onReload}
+        disabled={!threadId}
+        title={t('agent.reloadThread')}
+        ariaLabel={t('agent.reloadThread')}
+        variant="secondary"
+      />
+
       {showScrollButton && (
         <IconButton
           className="thread-message-list__scroll-button"
@@ -428,6 +444,17 @@ const ThreadMessageList: React.FC<ThreadMessageListProps> = ({
 
       {editModal}
     </div>
+  );
+};
+
+const ThreadMessageList: React.FC<ThreadMessageListProps> = (props) => {
+  const { reloadKey, reloadThread } = useThreadReload(props.threadId);
+  return (
+    <ThreadMessageListBody
+      key={reloadKey}
+      {...props}
+      onReload={() => void reloadThread()}
+    />
   );
 };
 
