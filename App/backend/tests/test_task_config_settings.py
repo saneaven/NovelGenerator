@@ -202,6 +202,40 @@ def test_openrouter_reasoning_effort_none_is_not_a_model_option() -> None:
     assert normalized["advanced"]["thinking_config"]["effort"] == "medium"
 
 
+def test_openai_reasoning_effort_accepts_max() -> None:
+    normalized = normalize_task_config(
+        "openai",
+        _task_config(
+            provider="openai",
+            model="gpt-5.6",
+            advanced={
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "max"},
+            },
+        ),
+    )
+
+    assert normalized["advanced"]["thinking_config"]["effort"] == "max"
+
+
+def test_custom_openai_response_reasoning_effort_accepts_max() -> None:
+    normalized = normalize_task_config(
+        "custom",
+        _task_config(
+            provider="custom",
+            model="gpt-5.6",
+            advanced={
+                "custom_kind": "openai_response",
+                "thinking_mode": "model",
+                "thinking_config": {"effort": "max"},
+            },
+        ),
+    )
+
+    assert normalized["advanced"]["custom_kind"] == "openai_response"
+    assert normalized["advanced"]["thinking_config"]["effort"] == "max"
+
+
 def test_custom_claude_reasoning_effort_accepts_xhigh() -> None:
     normalized = normalize_task_config(
         "custom",

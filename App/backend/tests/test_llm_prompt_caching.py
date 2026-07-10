@@ -146,6 +146,22 @@ def test_openai_prepare_responses_request_omits_prompt_cache_hints_when_disabled
     assert "prompt_cache_retention" not in request
 
 
+def test_openai_prepare_responses_request_forwards_max_reasoning_effort() -> None:
+    provider = OpenAIResponsesProvider({})
+    request = provider._prepare_responses_request(
+        model="gpt-5.6",
+        input_items=[{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+        temperature=0.2,
+        tools=None,
+        tool_choice=None,
+        max_tokens=100,
+        thinking_config={"effort": "max"},
+        verbosity=None,
+    )
+
+    assert request["reasoning"] == {"effort": "max", "summary": "auto"}
+
+
 def test_xai_request_kwargs_include_grok_conversation_header() -> None:
     provider = XAIProvider({})
     request = provider._prepare_request_kwargs(

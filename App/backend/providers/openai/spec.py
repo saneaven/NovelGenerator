@@ -83,7 +83,7 @@ SPEC = ProviderSpec(
                         "effort": FieldSpec(
                             kind="enum",
                             default="medium",
-                            options=("none", "minimal", "low", "medium", "high", "xhigh"),
+                            options=("none", "minimal", "low", "medium", "high", "xhigh", "max"),
                             ui=UIHint(
                                 widget="select",
                                 label_key="settings.taskConfig.thinking_config.reasoningEffort",
