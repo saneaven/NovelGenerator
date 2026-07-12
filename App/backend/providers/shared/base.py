@@ -72,6 +72,15 @@ class BaseProvider(ABC):
         cache = provider_settings.get("cache")
         return dict(cache) if isinstance(cache, dict) else {}
 
+    @staticmethod
+    def _service_tier_from_provider_settings(provider_settings: dict[str, Any] | None) -> str | None:
+        if not isinstance(provider_settings, dict):
+            return None
+        value = provider_settings.get("service_tier")
+        if isinstance(value, str) and value and value != "default":
+            return value
+        return None
+
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         return None
 

@@ -123,6 +123,17 @@ SPEC = ProviderSpec(
                     ),
                 ),
                 "provider_settings": ObjectSpec(fields={
+                    "service_tier": FieldSpec(
+                        kind="enum",
+                        options=("default", "auto", "flex", "priority"),
+                        ui=UIHint(
+                            widget="select",
+                            label_key="settings.taskConfig.serviceTier.label",
+                            help_key="settings.taskConfig.serviceTier.hint",
+                            option_label_prefix="settings.taskConfig.serviceTier.options",
+                            order=5,
+                        ),
+                    ),
                     "cache": ObjectSpec(fields={
                         "enabled": FieldSpec(
                             kind="bool",

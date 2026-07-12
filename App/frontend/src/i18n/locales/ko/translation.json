@@ -809,6 +809,16 @@
         "input_budget_no_limit": "최종 입력 예산: 로컬 제한 없음",
         "input_budget_warning": "최종 입력 예산: {{tokens}} 토큰. 출력 예약이 컨텍스트 윈도우보다 크거나 같습니다."
       },
+      "serviceTier": {
+        "label": "서비스 티어",
+        "hint": "Flex는 약 50% 저렴하지만 느리고 피크 시간에 불가할 수 있습니다. Priority는 더 빠른 대신 비쌉니다. 선택한 모델이 해당 티어를 지원하지 않으면 프로바이더 에러가 반환됩니다.",
+        "options": {
+          "default": "기본",
+          "auto": "자동",
+          "flex": "Flex",
+          "priority": "Priority"
+        }
+      },
       "nanogpt": {
         "billing": {
           "billingMode": "결제 모드",

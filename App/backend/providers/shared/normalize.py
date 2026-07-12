@@ -74,7 +74,7 @@ def normalize_field(raw: Any, spec: FieldSpec) -> Any:
             value = bool(raw)
         elif spec.kind == "enum":
             if spec.options is not None and raw not in spec.options:
-                if spec.default is not MISSING:
+                if not _is_missing(spec.default):
                     return deepcopy(spec.default)
                 return SKIP
             value = raw

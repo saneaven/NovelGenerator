@@ -9,6 +9,18 @@ import { applySystemThemeOnce } from './hooks/useSystemTheme'
 import './i18n/i18n' // Initialize i18n
 import './index.css'
 
+// After a deploy, open tabs may request old hashed chunks that no longer exist.
+// Reload once to pick up the new build; a cooldown prevents reload loops.
+window.addEventListener('vite:preloadError', (event) => {
+  const key = 'preload-error-reload-at'
+  const last = Number(window.sessionStorage.getItem(key) ?? 0)
+  if (Date.now() - last > 10_000) {
+    window.sessionStorage.setItem(key, String(Date.now()))
+    event.preventDefault()
+    window.location.reload()
+  }
+})
+
 // Public routes don't load user settings, so sync theme with OS preference immediately
 // to avoid a white flash before React mounts.
 const publicPaths = new Set(['/', '/login', '/register'])

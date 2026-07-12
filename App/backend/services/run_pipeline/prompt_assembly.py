@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, Thread
@@ -24,6 +25,13 @@ from .contracts import CreateContext
 from .text_utils import extract_last_texts
 
 EmitFn = Callable[..., Awaitable[None]]
+
+
+def _load_captured_prompt_snapshot(db: Session, thread: Thread) -> None:
+    """Explicitly load the deferred prompt snapshot for single-thread prompt work."""
+    state = sa_inspect(thread, raiseerr=False)
+    if state is not None and "captured_prompt_snapshot" in state.unloaded:
+        db.refresh(thread, attribute_names=["captured_prompt_snapshot"])
 
 
 async def _emit_stage(
@@ -201,6 +209,7 @@ async def _render(
     }
     system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
 
+    _load_captured_prompt_snapshot(db, thread)
     before = snapshot_thread_row(thread)
     thread.captured_prompt_snapshot = prompt_snapshot
     apply_project_usage_delta(
@@ -337,7 +346,9 @@ async def assemble_resume(
     input_payload: dict[str, Any],
     emit_fn: EmitFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], ScenarioBundle, list[dict[str, Any]]]:
-    if not isinstance(thread.captured_prompt_snapshot, dict):
+    _load_captured_prompt_snapshot(db, thread)
+    captured_prompt_snapshot = thread.captured_prompt_snapshot
+    if not isinstance(captured_prompt_snapshot, dict):
         return await assemble_create(
             db,
             run=run,
@@ -373,7 +384,7 @@ async def assemble_resume(
         run=run,
         bundle_inputs=bundle_inputs,
     )
-    prompt_snapshot = dict(thread.captured_prompt_snapshot)
+    prompt_snapshot = dict(captured_prompt_snapshot)
     archived_until_seq = memory_state.latest_archived_seq(
         db,
         user_id=run.user_id,

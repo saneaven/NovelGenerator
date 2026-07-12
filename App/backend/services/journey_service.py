@@ -76,34 +76,94 @@ class JourneyService:
             .first()
         )
 
-    def _list_owned_project_journeys(
+    def _list_owned_project_journey_rows(
         self,
         db: Session,
         *,
         project_id: UUID,
         user_id: UUID,
-    ) -> list[Journey]:
+    ) -> list[Any]:
         return (
-            db.query(Journey)
+            db.query(
+                Journey.id.label("journey_id"),
+                Journey.project_id.label("project_id"),
+                Journey.kind.label("kind"),
+                Journey.display_label.label("display_label"),
+                Journey.status.label("status"),
+                Journey.last_error.label("last_error"),
+                Journey.updated_at.label("updated_at"),
+            )
             .filter(Journey.project_id == project_id, Journey.user_id == user_id)
             .order_by(Journey.updated_at.desc(), Journey.id.desc())
             .all()
         )
 
-    def _load_child_threads_by_journey_id(
+    def _load_child_thread_rows_by_journey_id(
         self,
         db: Session,
         *,
         journey_ids: list[UUID],
-    ) -> dict[UUID, Thread]:
+    ) -> dict[UUID, Any]:
         if not journey_ids:
             return {}
         rows = (
-            db.query(Thread)
+            db.query(
+                Thread.id.label("thread_id"),
+                Thread.parent_id.label("journey_id"),
+            )
             .filter(Thread.thread_type == "journey", Thread.parent_id.in_(journey_ids))
             .all()
         )
-        return {thread.parent_id: thread for thread in rows}
+        return {row.journey_id: row for row in rows}
+
+    def _load_latest_run_ids_by_thread_id(
+        self,
+        db: Session,
+        *,
+        thread_ids: list[UUID],
+    ) -> dict[UUID, UUID]:
+        if not thread_ids:
+            return {}
+
+        ranked_runs = (
+            db.query(
+                RunModel.id.label("run_id"),
+                RunModel.thread_id.label("thread_id"),
+                func.row_number()
+                .over(
+                    partition_by=RunModel.thread_id,
+                    order_by=(RunModel.run_seq.desc(), RunModel.id.desc()),
+                )
+                .label("run_rank"),
+            )
+            .filter(RunModel.thread_id.in_(thread_ids))
+            .subquery()
+        )
+        rows = (
+            db.query(ranked_runs.c.run_id, ranked_runs.c.thread_id)
+            .filter(ranked_runs.c.run_rank == 1)
+            .all()
+        )
+        return {row.thread_id: row.run_id for row in rows}
+
+    def _load_latest_message_times_by_thread_id(
+        self,
+        db: Session,
+        *,
+        thread_ids: list[UUID],
+    ) -> dict[UUID, datetime]:
+        if not thread_ids:
+            return {}
+        rows = (
+            db.query(
+                RunMessageModel.thread_id.label("thread_id"),
+                func.max(RunMessageModel.created_at).label("latest_message_at"),
+            )
+            .filter(RunMessageModel.thread_id.in_(thread_ids))
+            .group_by(RunMessageModel.thread_id)
+            .all()
+        )
+        return {row.thread_id: row.latest_message_at for row in rows}
 
     async def _emit_deleted_journey_events(
         self,
@@ -150,7 +210,7 @@ class JourneyService:
         project_id: UUID,
         user_id: UUID,
     ) -> list[JourneyRuntimeRow]:
-        journeys = self._list_owned_project_journeys(
+        journeys = self._list_owned_project_journey_rows(
             db,
             project_id=project_id,
             user_id=user_id,
@@ -158,46 +218,35 @@ class JourneyService:
         if not journeys:
             return []
 
-        journey_ids = [row.id for row in journeys]
-        thread_by_journey_id = self._load_child_threads_by_journey_id(db, journey_ids=journey_ids)
+        journey_ids = [row.journey_id for row in journeys]
+        thread_by_journey_id = self._load_child_thread_rows_by_journey_id(
+            db,
+            journey_ids=journey_ids,
+        )
         threads = list(thread_by_journey_id.values())
-        thread_ids = [thread.id for thread in threads]
+        thread_ids = [thread.thread_id for thread in threads]
 
-        latest_run_rows = (
-            db.query(RunModel)
-            .filter(RunModel.thread_id.in_(thread_ids))
-            .order_by(RunModel.thread_id.asc(), RunModel.run_seq.desc(), RunModel.id.desc())
-            .all()
-            if thread_ids
-            else []
+        latest_run_id_by_thread = self._load_latest_run_ids_by_thread_id(
+            db,
+            thread_ids=thread_ids,
         )
-        latest_run_by_thread: dict[UUID, RunModel] = {}
-        for row in latest_run_rows:
-            latest_run_by_thread.setdefault(row.thread_id, row)
-
-        latest_message_rows = (
-            db.query(RunMessageModel.thread_id, func.max(RunMessageModel.created_at))
-            .filter(RunMessageModel.thread_id.in_(thread_ids))
-            .group_by(RunMessageModel.thread_id)
-            .all()
-            if thread_ids
-            else []
+        latest_message_at_by_thread = self._load_latest_message_times_by_thread_id(
+            db,
+            thread_ids=thread_ids,
         )
-        latest_message_at_by_thread = {thread_id: created_at for thread_id, created_at in latest_message_rows}
 
         out: list[JourneyRuntimeRow] = []
         for journey in journeys:
-            thread = thread_by_journey_id.get(journey.id)
+            thread = thread_by_journey_id.get(journey.journey_id)
             if thread is None:
                 continue
-            latest_run = latest_run_by_thread.get(thread.id)
             out.append(
                 JourneyRuntimeRow(
-                    journey_id=journey.id,
+                    journey_id=journey.journey_id,
                     project_id=journey.project_id,
-                    thread_id=thread.id,
-                    latest_run_id=latest_run.id if latest_run is not None else None,
-                    latest_message_at=latest_message_at_by_thread.get(thread.id),
+                    thread_id=thread.thread_id,
+                    latest_run_id=latest_run_id_by_thread.get(thread.thread_id),
+                    latest_message_at=latest_message_at_by_thread.get(thread.thread_id),
                     kind=journey.kind,
                     display_label=journey.display_label,
                     status=journey.status,
@@ -206,6 +255,62 @@ class JourneyService:
                 )
             )
         return out
+
+    def get_owned_journey_runtime(
+        self,
+        db: Session,
+        *,
+        journey_id: UUID,
+        user_id: UUID,
+    ) -> JourneyRuntimeRow:
+        journey = (
+            db.query(
+                Journey.id.label("journey_id"),
+                Journey.project_id.label("project_id"),
+                Journey.kind.label("kind"),
+                Journey.display_label.label("display_label"),
+                Journey.status.label("status"),
+                Journey.last_error.label("last_error"),
+                Journey.updated_at.label("updated_at"),
+            )
+            .filter(Journey.id == journey_id, Journey.user_id == user_id)
+            .first()
+        )
+        if journey is None:
+            raise HTTPException(status_code=404, detail="Journey not found")
+
+        thread = (
+            db.query(Thread.id.label("thread_id"))
+            .filter(Thread.thread_type == "journey", Thread.parent_id == journey.journey_id)
+            .first()
+        )
+        if thread is None:
+            raise RuntimeError("Journey runtime row not found after ownership check")
+
+        latest_run = (
+            db.query(RunModel.id.label("run_id"))
+            .filter(RunModel.thread_id == thread.thread_id)
+            .order_by(RunModel.run_seq.desc(), RunModel.id.desc())
+            .first()
+        )
+        latest_message_at = (
+            db.query(func.max(RunMessageModel.created_at).label("latest_message_at"))
+            .filter(RunMessageModel.thread_id == thread.thread_id)
+            .scalar()
+        )
+
+        return JourneyRuntimeRow(
+            journey_id=journey.journey_id,
+            project_id=journey.project_id,
+            thread_id=thread.thread_id,
+            latest_run_id=latest_run.run_id if latest_run is not None else None,
+            latest_message_at=latest_message_at,
+            kind=journey.kind,
+            display_label=journey.display_label,
+            status=journey.status,
+            last_error=journey.last_error,
+            updated_at=journey.updated_at,
+        )
 
     async def create_and_start_journey(
         self,

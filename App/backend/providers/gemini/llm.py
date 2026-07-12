@@ -462,6 +462,10 @@ class GeminiProvider(BaseProvider):
         if system_instruction:
             config_dict["systemInstruction"] = system_instruction
 
+        service_tier = self._service_tier_from_provider_settings(provider_settings)
+        if service_tier:
+            config_dict["service_tier"] = service_tier
+
         thinking_cfg = self._build_thinking_config(model, thinking_mode, thinking_config)
         if thinking_cfg:
             config_dict["thinkingConfig"] = thinking_cfg

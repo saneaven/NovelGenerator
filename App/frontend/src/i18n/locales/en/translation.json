@@ -809,6 +809,16 @@
         "input_budget_no_limit": "Final input budget: no local limit",
         "input_budget_warning": "Final input budget: {{tokens}} tokens. Output reservation is greater than or equal to the context window."
       },
+      "serviceTier": {
+        "label": "Service Tier",
+        "hint": "Flex is cheaper (~50% off) but slower and may be unavailable at peak times; Priority is faster at a higher price. If the selected model does not support the chosen tier, the provider returns an error.",
+        "options": {
+          "default": "Default",
+          "auto": "Auto",
+          "flex": "Flex",
+          "priority": "Priority"
+        }
+      },
       "nanogpt": {
         "billing": {
           "billingMode": "Billing Mode",

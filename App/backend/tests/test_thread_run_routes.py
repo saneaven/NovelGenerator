@@ -560,6 +560,169 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
     assert response.latest_run["surface"] == "story-entity"
 
 
+class FakeProjectRuntimeQuery:
+    def __init__(self, db: "FakeProjectRuntimeDb", targets: tuple[object, ...]) -> None:
+        self.db = db
+        self.targets = targets
+
+    def filter(self, *_args, **_kwargs) -> "FakeProjectRuntimeQuery":
+        return self
+
+    def order_by(self, *_args, **_kwargs) -> "FakeProjectRuntimeQuery":
+        return self
+
+    def group_by(self, *_args, **_kwargs) -> "FakeProjectRuntimeQuery":
+        return self
+
+    def join(self, *_args, **_kwargs) -> "FakeProjectRuntimeQuery":
+        return self
+
+    def subquery(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            c=SimpleNamespace(
+                thread_id=thread_routes.RunModel.thread_id,
+                max_run_seq=thread_routes.RunModel.run_seq,
+            )
+        )
+
+    def all(self) -> list[object]:
+        first = self.targets[0]
+        if _is_column_for(first, thread_routes.Thread, "id"):
+            return list(self.db.threads)
+        if _is_column_for(first, thread_routes.RunToolCallModel, "thread_id"):
+            return list(self.db.unresolved_counts)
+        if _is_column_for(first, thread_routes.RunModel, "id"):
+            return list(self.db.latest_runs)
+        if _is_column_for(first, thread_routes.RunMessageModel, "thread_id"):
+            return list(self.db.latest_message_times)
+        if _is_column_for(first, thread_routes.Journey, "id"):
+            return list(self.db.journey_metadata)
+        raise AssertionError(f"Unsupported all() targets: {self.targets!r}")
+
+
+class FakeProjectRuntimeDb:
+    def __init__(
+        self,
+        *,
+        threads: list[object],
+        latest_runs: list[object],
+        unresolved_counts: list[tuple[object, int]],
+        latest_message_times: list[tuple[object, datetime]],
+        journey_metadata: list[tuple[object, str, str]],
+    ) -> None:
+        self.threads = threads
+        self.latest_runs = latest_runs
+        self.unresolved_counts = unresolved_counts
+        self.latest_message_times = latest_message_times
+        self.journey_metadata = journey_metadata
+        self.query_targets: list[tuple[object, ...]] = []
+
+    def query(self, *targets: object) -> FakeProjectRuntimeQuery:
+        self.query_targets.append(targets)
+        return FakeProjectRuntimeQuery(self, targets)
+
+
+def test_project_runtime_projects_small_columns_and_bulk_loads_journey_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    journey_parent_id = uuid4()
+    agent_parent_id = uuid4()
+    journey_thread_id = uuid4()
+    agent_thread_id = uuid4()
+    journey_run_id = uuid4()
+    updated_at = datetime.now(UTC)
+    message_at = datetime.now(UTC)
+
+    db = FakeProjectRuntimeDb(
+        threads=[
+            SimpleNamespace(
+                id=journey_thread_id,
+                project_id=project_id,
+                thread_type="journey",
+                parent_id=journey_parent_id,
+                status="error",
+                updated_at=updated_at,
+            ),
+            SimpleNamespace(
+                id=agent_thread_id,
+                project_id=project_id,
+                thread_type="agent",
+                parent_id=agent_parent_id,
+                status="done",
+                updated_at=updated_at,
+            ),
+        ],
+        latest_runs=[
+            SimpleNamespace(
+                id=journey_run_id,
+                thread_id=journey_thread_id,
+                status="error",
+                error="translation failed",
+            )
+        ],
+        unresolved_counts=[(journey_thread_id, 2)],
+        latest_message_times=[(journey_thread_id, message_at)],
+        journey_metadata=[(journey_parent_id, "messageTranslation", "Translate chapter")],
+    )
+    monkeypatch.setattr(
+        thread_routes,
+        "thread_runtime_fields",
+        lambda *_args, **_kwargs: pytest.fail("runtime summary must not resolve parents one by one"),
+    )
+
+    response = thread_routes.list_project_threads_runtime(
+        project_id=project_id,
+        current_user=SimpleNamespace(id=user_id),
+        db=db,  # type: ignore[arg-type]
+    )
+
+    assert len(response.threads) == 2
+    journey_item = response.threads[0]
+    assert journey_item.parent_id == journey_parent_id
+    assert journey_item.journey_kind == "messageTranslation"
+    assert journey_item.display_label == "Translate chapter"
+    assert journey_item.latest_run_id == journey_run_id
+    assert journey_item.latest_run_status == "error"
+    assert journey_item.last_error == "translation failed"
+    assert journey_item.latest_message_at == message_at
+    assert journey_item.unresolved_tool_call_count == 2
+
+    agent_item = response.threads[1]
+    assert agent_item.parent_id == agent_parent_id
+    assert agent_item.journey_kind is None
+    assert agent_item.display_label is None
+    assert agent_item.latest_run_id is None
+    assert agent_item.unresolved_tool_call_count == 0
+
+    thread_targets = next(
+        targets for targets in db.query_targets if _is_column_for(targets[0], thread_routes.Thread, "id")
+    )
+    assert [target.key for target in thread_targets] == [
+        "id",
+        "project_id",
+        "thread_type",
+        "parent_id",
+        "status",
+        "updated_at",
+    ]
+    assert all(target is not thread_routes.Thread.captured_prompt_snapshot for target in thread_targets)
+
+    run_targets = next(
+        targets for targets in db.query_targets if _is_column_for(targets[0], thread_routes.RunModel, "id")
+    )
+    assert [target.key for target in run_targets] == ["id", "thread_id", "status", "error"]
+    assert all(target is not thread_routes.RunModel.input_payload for target in run_targets)
+    assert all(target is not thread_routes.RunModel.mcp_request_json for target in run_targets)
+    assert all(target is not thread_routes.RunModel.mcp_resolution_json for target in run_targets)
+
+    journey_queries = [
+        targets for targets in db.query_targets if _is_column_for(targets[0], thread_routes.Journey, "id")
+    ]
+    assert len(journey_queries) == 1
+
+
 def _is_column_for(target: object, model: object, key: str) -> bool:
     return getattr(target, "class_", None) is model and getattr(target, "key", None) == key
 

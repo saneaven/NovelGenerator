@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 import types
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,6 +25,12 @@ def _install_import_stubs() -> None:
     fake_database.Base = declarative_base()
     fake_database.SessionLocal = lambda: None
     fake_database.get_db = lambda: None
+
+    @contextmanager
+    def _short_session():
+        yield None
+
+    fake_database.short_session = _short_session
     sys.modules["App.backend.database"] = fake_database
     sys.modules["database"] = fake_database
 
@@ -88,6 +95,9 @@ def _install_import_stubs() -> None:
     fake_storage_usage_service.StorageUsageDelta = _FakeDelta
     fake_storage_usage_service.apply_project_usage_delta = lambda *_args, **_kwargs: None
     fake_storage_usage_service.apply_project_usage_deltas = lambda *_args, **_kwargs: None
+    fake_storage_usage_service.build_usage_delta_for_amount = lambda *_args, **_kwargs: _FakeDelta()
+    fake_storage_usage_service.measure_run_message_row = lambda *_args, **_kwargs: 0
+    fake_storage_usage_service.measure_tool_call_row = lambda *_args, **_kwargs: 0
     fake_storage_usage_service.build_image_run_delta = lambda *_args, **_kwargs: _FakeDelta(image_run_bytes=-1)
     fake_storage_usage_service.build_notification_delta = lambda *_args, **_kwargs: _FakeDelta(notification_bytes=-1)
     fake_storage_usage_service.build_run_delta = lambda *_args, **_kwargs: _FakeDelta(chat_bytes=-1)
@@ -168,6 +178,9 @@ class FakeCollectionQuery:
         self._rows = list(rows)
 
     def filter(self, *_args, **_kwargs) -> "FakeCollectionQuery":
+        return self
+
+    def options(self, *_args, **_kwargs) -> "FakeCollectionQuery":
         return self
 
     def all(self) -> list[object]:

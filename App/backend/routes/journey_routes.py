@@ -95,16 +95,12 @@ async def get_journey(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    journey = journey_service.require_owned_journey(db, journey_id=journey_id, user_id=current_user.id)
-    rows = journey_service.list_project_journeys(
+    row = journey_service.get_owned_journey_runtime(
         db,
-        project_id=journey.project_id,
+        journey_id=journey_id,
         user_id=current_user.id,
     )
-    for row in rows:
-        if row.journey_id == journey.id:
-            return _serialize_journey(row)
-    raise RuntimeError("Journey runtime row not found after ownership check")
+    return _serialize_journey(row)
 
 
 @router.post("/journeys/{journey_id}/cancel", status_code=200)

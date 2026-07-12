@@ -11,10 +11,45 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database import short_session
 from ..models.db_models import LLMRequest
+
+
+LLM_REQUEST_RETENTION_LIMIT = 100
+_PRUNE_REQUESTS_SQL = text(
+    """
+    WITH ranked AS (
+        SELECT id
+        FROM (
+            SELECT
+                id,
+                row_number() OVER (ORDER BY created_at DESC, id DESC) AS row_number
+            FROM llm_requests
+            WHERE user_id = :user_id
+        ) AS ranked_requests
+        WHERE row_number > :max_rows
+    ), deleted AS (
+        DELETE FROM llm_requests AS target
+        USING ranked
+        WHERE target.id = ranked.id
+        RETURNING target.project_id
+    )
+    SELECT DISTINCT project_id
+    FROM deleted
+    """
+)
+
+
+def _prune_request_logs(s: Session, *, user_id: UUID) -> set[UUID]:
+    """Keep only the newest request-tracking rows without hydrating log JSON."""
+    rows = s.execute(
+        _PRUNE_REQUESTS_SQL,
+        {"user_id": user_id, "max_rows": LLM_REQUEST_RETENTION_LIMIT},
+    ).all()
+    return {project_id for (project_id,) in rows if isinstance(project_id, UUID)}
 
 
 def _measure_request_row(row: LLMRequest | object) -> int:
@@ -81,6 +116,17 @@ class LLMRequestService:
                 created_at=datetime.utcnow(),
             )
             s.add(row)
+            s.flush()
+            affected_project_ids = _prune_request_logs(s, user_id=user_id)
+            if affected_project_ids:
+                from .storage_usage_service import mark_project_usage_for_reconcile
+
+                for affected_project_id in affected_project_ids:
+                    mark_project_usage_for_reconcile(
+                        s,
+                        project_id=affected_project_id,
+                        user_id=user_id,
+                    )
             s.commit()
 
     def update_request(

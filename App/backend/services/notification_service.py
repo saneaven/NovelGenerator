@@ -6,7 +6,7 @@ from typing import Any, Iterable
 from uuid import UUID
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from ..models.db_models import (
     Agent,
@@ -928,6 +928,7 @@ def _load_threads_for_delete(
     thread_ids: Iterable[UUID | None],
     project_id: UUID | None = None,
     thread_type: str | None = None,
+    load_prompt_snapshot: bool = False,
 ) -> list[Thread]:
     ordered_ids = _dedupe_uuid_values(thread_ids)
     if not ordered_ids:
@@ -937,6 +938,8 @@ def _load_threads_for_delete(
         Thread.user_id == user_id,
         Thread.id.in_(ordered_ids),
     )
+    if load_prompt_snapshot:
+        q = q.options(undefer(Thread.captured_prompt_snapshot))
     if project_id is not None:
         q = q.filter(Thread.project_id == project_id)
     if thread_type is not None:
@@ -965,6 +968,7 @@ def collect_thread_delete_deltas(
         thread_ids=thread_ids,
         project_id=project_id,
         thread_type=thread_type,
+        load_prompt_snapshot=True,
     )
     if not thread_rows:
         return {}

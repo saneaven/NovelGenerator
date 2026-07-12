@@ -15,7 +15,16 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import SessionLocal, get_db
-from ..models.db_models import Project, RunMessageAttachmentModel, RunMessageModel, RunModel, RunToolCallModel, Thread, User
+from ..models.db_models import (
+    Journey,
+    Project,
+    RunMessageAttachmentModel,
+    RunMessageModel,
+    RunModel,
+    RunToolCallModel,
+    Thread,
+    User,
+)
 from ..models.memory_models import MessageMemorySummary
 from ..providers.shared.transport.sse_encoder import encode_sse, iter_sse_with_heartbeat
 from ..schemas.thread_api import (
@@ -693,7 +702,14 @@ def list_project_threads_runtime(
     require_owned_project(db, project_id=project_id, user_id=current_user.id)
 
     threads = (
-        db.query(Thread)
+        db.query(
+            Thread.id,
+            Thread.project_id,
+            Thread.thread_type,
+            Thread.parent_id,
+            Thread.status,
+            Thread.updated_at,
+        )
         .filter(Thread.project_id == project_id, Thread.user_id == current_user.id)
         .order_by(Thread.updated_at.desc())
         .all()
@@ -726,7 +742,12 @@ def list_project_threads_runtime(
         .subquery()
     )
     latest_runs = (
-        db.query(RunModel)
+        db.query(
+            RunModel.id,
+            RunModel.thread_id,
+            RunModel.status,
+            RunModel.error,
+        )
         .join(
             latest_run_seq_subq,
             and_(
@@ -748,18 +769,30 @@ def list_project_threads_runtime(
         )
     }
 
+    journey_parent_ids = [row.parent_id for row in threads if row.thread_type == "journey"]
+    journey_runtime_by_id = {
+        journey_id: (kind, display_label)
+        for journey_id, kind, display_label in (
+            db.query(Journey.id, Journey.kind, Journey.display_label)
+            .filter(Journey.id.in_(journey_parent_ids))
+            .all()
+            if journey_parent_ids
+            else []
+        )
+    }
+
     runtime_rows = []
     for thread in threads:
         latest_run = latest_run_by_thread.get(thread.id)
-        runtime_fields = thread_runtime_fields(db, thread)
+        journey_runtime = journey_runtime_by_id.get(thread.parent_id)
         runtime_rows.append(
             {
                 "id": thread.id,
                 "project_id": thread.project_id,
                 "thread_type": thread.thread_type,
-                "parent_id": runtime_fields["parent_id"],
-                "journey_kind": runtime_fields["journey_kind"],
-                "display_label": runtime_fields["display_label"],
+                "parent_id": thread.parent_id,
+                "journey_kind": journey_runtime[0] if journey_runtime is not None else None,
+                "display_label": journey_runtime[1] if journey_runtime is not None else None,
                 "status": thread.status,
                 "last_error": latest_run.error if latest_run is not None else None,
                 "updated_at": thread.updated_at,

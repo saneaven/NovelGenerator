@@ -320,6 +320,10 @@ class OpenAIResponsesProvider(BaseProvider):
         if max_tokens is not None:
             request["max_output_tokens"] = max_tokens
 
+        service_tier = self._service_tier_from_provider_settings(provider_settings)
+        if service_tier:
+            request["service_tier"] = service_tier
+
         cache_config = self._cache_config_from_provider_settings(provider_settings)
         if bool(cache_config.get("enabled", False)):
             cache_key = getattr(cache_plan, "thread_cache_key", None)

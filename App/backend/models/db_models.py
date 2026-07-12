@@ -1,6 +1,6 @@
 """SQLAlchemy database models for Novel Buds"""
 from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint, CheckConstraint, text as sa_text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
 import uuid
@@ -882,8 +882,8 @@ class Thread(Base):
 
     status = Column(String(20), nullable=False, default='done')
 
-    # Scenario-block prompt snapshot — re-captured on create, extended on resume.
-    captured_prompt_snapshot = Column(JSONB, nullable=True)
+    # Scenario-block prompt snapshot — large JSONB, loaded explicitly only when needed.
+    captured_prompt_snapshot = deferred(Column(JSONB, nullable=True))
 
     # Stable per-thread run ordering (1-based)
     next_run_seq = Column(BigInteger, default=1, nullable=False)

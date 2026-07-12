@@ -146,7 +146,9 @@ class AsyncOpenAIProvider(BaseProvider):
         return False
 
     def _additional_request_kwargs(self, provider_settings: Optional[Dict[str, Any]] = None) -> Dict[str, object]:
-        del provider_settings
+        service_tier = self._service_tier_from_provider_settings(provider_settings)
+        if service_tier:
+            return {"service_tier": service_tier}
         return {}
 
     def _extract_cache_metrics(self, usage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

@@ -1184,6 +1184,6 @@ def test_translate_outline_group_uses_markdown_content_field(monkeypatch) -> Non
 def test_thread_route_runtime_payload_includes_parent_metadata() -> None:
     source = (ROOT / "App" / "backend" / "routes" / "thread_routes.py").read_text(encoding="utf-8")
 
-    assert 'runtime_fields["parent_id"]' in source
-    assert 'runtime_fields["journey_kind"]' in source
-    assert 'runtime_fields["display_label"]' in source
+    assert '"parent_id": thread.parent_id' in source
+    assert '"journey_kind": journey_runtime[0]' in source
+    assert '"display_label": journey_runtime[1]' in source
