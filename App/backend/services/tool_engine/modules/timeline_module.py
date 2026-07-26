@@ -18,7 +18,7 @@ from ..registry import tool_feature_module
 from ..result_utils import invalid_result, make_result, valid_result
 from .feature_common import apply_object_batch_group, filter_allowed_bindings, merge_key_for
 from .object_access import extract_lang_data, patch_object_field, read_object, read_runtime_object, to_uuid
-from .shared import filter_allowed_specs, is_non_journey, is_translation_journey, obj_schema
+from .shared import filter_allowed_specs, is_agent_write_context, is_non_journey, is_translation_journey, obj_schema
 from ....models.db_models import Timeline, TimelineEvent, TimelineEventLink, TimelineTrack
 from ....services.object_service import object_service
 from ....services.timeline_service import ALLOWED_LINK_TYPES, _UNSET, timeline_service
@@ -473,22 +473,26 @@ def _timeline_event_projection(db, *, project_id: UUID, event_id: UUID, language
 
 
 def _normal_specs(ctx) -> list[ToolSpec]:
+    specs = [
+        ToolSpec(
+            name="read_timeline_event",
+            description="Read a single timeline event with fields, dates, tags, and link IDs.",
+            parameters=obj_schema({"id": _ID}, ["id"]),
+            auto_approve_category="read",
+        ),
+        ToolSpec(
+            name="read_timeline_track",
+            description="Read a single timeline track with fields plus child track and event IDs.",
+            parameters=obj_schema({"id": _ID}, ["id"]),
+            auto_approve_category="read",
+        ),
+    ]
+    if not is_agent_write_context(ctx):
+        return filter_allowed_specs(ctx, specs)
+
     date = _date_schema(ctx.db, ctx.project_id)
-    return filter_allowed_specs(
-        ctx,
+    specs.extend(
         [
-            ToolSpec(
-                name="read_timeline_event",
-                description="Read a single timeline event with fields, dates, tags, and link IDs.",
-                parameters=obj_schema({"id": _ID}, ["id"]),
-                auto_approve_category="read",
-            ),
-            ToolSpec(
-                name="read_timeline_track",
-                description="Read a single timeline track with fields plus child track and event IDs.",
-                parameters=obj_schema({"id": _ID}, ["id"]),
-                auto_approve_category="read",
-            ),
             ToolSpec(
                 name="create_timeline_track",
                 description="Create a timeline track.",
@@ -606,8 +610,9 @@ def _normal_specs(ctx) -> list[ToolSpec]:
                 parameters=obj_schema({"id": _ID}, ["id"]),
                 auto_approve_category="delete",
             ),
-        ],
+        ]
     )
+    return filter_allowed_specs(ctx, specs)
 
 
 def _translation_specs(ctx) -> list[ToolSpec]:
@@ -732,6 +737,7 @@ class TimelineFeatureModule(ToolFeatureModule):
                 execute=self._execute_read_timeline_track,
                 build_persisted_meta=_persisted_meta(category="read", op="read", target_kind="timeline_track"),
             )
+        if is_agent_write_context(ctx):
             add_binding(
                 spec_map=normal_specs_by_name,
                 name="create_timeline_track",

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import json
 import sys
 import types
 from typing import Any
 
+import pytest
+
+from App.backend.services.reasoning.history_filter import filter_history_by_run
 from App.backend.services.reasoning.normalize import normalize_reasoning_detail
 
 
@@ -423,6 +427,59 @@ def test_openai_read_reasoning_detail_no_raw_response() -> None:
     assert detail["data"]["items"][0]["id"] == "rs_abc"
 
 
+def test_openai_read_reasoning_detail_stores_tool_output_items_directly() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    raw_output = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc",
+            "status": "completed",
+            "content": None,
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "read_story_entity",
+            "arguments": '{ "id" : "entity-1" }',
+            "status": "completed",
+        },
+    ]
+    snapshot = _Snapshot(
+        content_parts=[],
+        reasoning_details=[],
+        raw_native_response={"output": raw_output},
+    )
+
+    detail = provider.read_reasoning_detail(snapshot, {})
+
+    assert detail is not None
+    assert detail["data"] == {
+        "output_items": [
+            {
+                "id": "rs_1",
+                "type": "reasoning",
+                "summary": [],
+                "encrypted_content": "enc",
+                "status": "completed",
+            },
+            {
+                "id": "fc_1",
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "read_story_entity",
+                "arguments": '{ "id" : "entity-1" }',
+                "status": "completed",
+            },
+        ]
+    }
+    assert "tool_replay" not in detail["data"]
+    assert "version" not in detail["data"]
+
+
 def test_custom_openai_response_read_reasoning_detail_does_not_build_delegate(monkeypatch) -> None:
     _, CustomProvider, _, _, _, _ = _load_providers()
     provider = CustomProvider({})
@@ -448,6 +505,45 @@ def test_custom_openai_response_read_reasoning_detail_does_not_build_delegate(mo
     assert detail is not None
     assert detail["type"] == "openai"
     assert detail["data"]["output_msg_id"] == "msg_xyz"
+
+
+def test_custom_openai_response_stores_the_same_direct_output_items(monkeypatch) -> None:
+    _, CustomProvider, _, _, _, _ = _load_providers()
+    provider = CustomProvider({})
+    monkeypatch.setattr(
+        provider,
+        "_build_openai_response_delegate",
+        lambda: (_ for _ in ()).throw(AssertionError("delegate should not be built")),
+    )
+    raw_output = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc",
+            "status": "completed",
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "read_story_entity",
+            "arguments": "{}",
+            "status": "completed",
+        },
+    ]
+    snapshot = _Snapshot(
+        content_parts=[],
+        reasoning_details=[],
+        raw_native_response={"output": raw_output},
+    )
+
+    detail = provider.read_reasoning_detail(snapshot, {"custom_kind": "openai_response"})
+
+    assert detail is not None
+    assert detail["data"] == {"output_items": raw_output}
+    assert "tool_replay" not in detail["data"]
+    assert "version" not in detail["data"]
 
 
 def test_custom_claude_read_reasoning_detail_does_not_build_delegate(monkeypatch) -> None:
@@ -663,3 +759,563 @@ def test_openai_convert_messages_tool_call_only_assistant_with_tool_results_keep
 
     assert [item["type"] for item in result] == ["reasoning", "message", "function_call", "function_call_output"]
     assert result[3]["call_id"] == "call_1"
+
+
+def test_openai_convert_messages_replays_direct_output_items_without_empty_message() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    output_items = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc",
+            "status": "completed",
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "read_story_entity",
+            "arguments": '{ "id" : "entity-1" }',
+            "status": "completed",
+        },
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_story_entity",
+                        "arguments": '{"id":"entity-1"}',
+                    },
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {"output_items": output_items},
+            },
+        },
+        {
+            "role": "tool_results",
+            "content_parts": [],
+            "tool_results": [
+                {"tool_call_id": "call_1", "content": "result payload"}
+            ],
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert [item["type"] for item in result] == [
+        "reasoning",
+        "function_call",
+        "function_call_output",
+    ]
+    assert result[:2] == output_items
+    assert result[1]["arguments"] == '{ "id" : "entity-1" }'
+    assert result[2]["call_id"] == "call_1"
+
+
+def test_openai_convert_messages_preserves_interleaved_output_item_order() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    output_items = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc-1",
+            "status": "completed",
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "first_tool",
+            "arguments": "{}",
+            "status": "completed",
+        },
+        {
+            "id": "rs_2",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc-2",
+            "status": "completed",
+        },
+        {
+            "id": "fc_2",
+            "type": "function_call",
+            "call_id": "call_2",
+            "name": "second_tool",
+            "arguments": '{"value":2}',
+            "status": "completed",
+        },
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "first_tool", "arguments": "{}"},
+                },
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "second_tool",
+                        "arguments": '{"value": 2}',
+                    },
+                },
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {"output_items": output_items},
+            },
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert result == output_items
+
+
+def test_openai_convert_messages_preserves_real_message_in_direct_output_items() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    output_items = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc",
+            "status": "completed",
+        },
+        {
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "phase": "commentary",
+            "content": [{"type": "output_text", "text": "Calling the tool."}],
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "read_story_entity",
+            "arguments": "{}",
+            "status": "completed",
+        },
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [
+                {"type": "content", "text": "Calling the tool."}
+            ],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_entity", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {"output_items": output_items},
+            },
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert result == output_items
+
+
+def test_openai_convert_messages_legacy_reasoning_without_message_id_does_not_add_message() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_story_entity", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {
+                    "items": [
+                        {
+                            "id": "rs_1",
+                            "type": "reasoning",
+                            "encrypted_content": "enc",
+                        }
+                    ],
+                    "function_call_item_ids": {"call_1": "fc_1"},
+                },
+            },
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert [item["type"] for item in result] == ["reasoning", "function_call"]
+
+
+def test_openai_convert_messages_does_not_treat_other_provider_data_as_output_items() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    provider = OpenAIResponsesProvider({})
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "db_tool", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai_compatible_template",
+                "data": {
+                    "output_items": [
+                        {
+                            "id": "fc_other",
+                            "type": "function_call",
+                            "call_id": "call_other",
+                            "name": "other_tool",
+                            "arguments": "{}",
+                        }
+                    ]
+                },
+            },
+        },
+    ]
+
+    result = provider._convert_messages(messages)
+
+    assert result == [
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "db_tool",
+            "arguments": "{}",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("output_items", "tool_calls"),
+    [
+        (
+            None,
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                }
+            ],
+        ),
+        (
+            [],
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                }
+            ],
+        ),
+        (
+            {"type": "function_call"},
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                }
+            ],
+        ),
+        (
+            [
+                {
+                    "id": "fc_1",
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "tool",
+                }
+            ],
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                }
+            ],
+        ),
+        (
+            [
+                {
+                    "id": "fc_1",
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "tool",
+                    "arguments": "{}",
+                },
+                {
+                    "id": "fc_2",
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "tool",
+                    "arguments": "{}",
+                },
+            ],
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                },
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                },
+            ],
+        ),
+        (
+            [
+                {
+                    "id": "fc_2",
+                    "type": "function_call",
+                    "call_id": "call_2",
+                    "name": "tool",
+                    "arguments": "{}",
+                },
+                {
+                    "id": "fc_1",
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "tool",
+                    "arguments": "{}",
+                },
+            ],
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                },
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                },
+            ],
+        ),
+        (
+            [
+                {
+                    "id": "fc_2",
+                    "type": "function_call",
+                    "call_id": "call_2",
+                    "name": "tool",
+                    "arguments": "{}",
+                }
+            ],
+            [],
+        ),
+    ],
+)
+def test_openai_convert_messages_rejects_inconsistent_direct_output_items(
+    output_items: Any,
+    tool_calls: list[dict[str, Any]],
+) -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    from App.backend.providers.openai.llm import (
+        OPENAI_OUTPUT_ITEMS_ERROR,
+        OpenAIOutputItemsError,
+    )
+
+    provider = OpenAIResponsesProvider({})
+    message: dict[str, Any] = {
+        "role": "assistant",
+        "content_parts": [],
+        "reasoning_detail": {
+            "type": "openai",
+            "data": {"output_items": output_items},
+        },
+    }
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+
+    with pytest.raises(OpenAIOutputItemsError, match=OPENAI_OUTPUT_ITEMS_ERROR):
+        provider._convert_messages([message])
+
+
+def test_openai_stream_rejects_inconsistent_output_items_before_client_call(
+    monkeypatch: Any,
+    caplog: Any,
+) -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    from App.backend.providers.openai.llm import OPENAI_OUTPUT_ITEMS_ERROR
+
+    provider = OpenAIResponsesProvider({})
+    client_called = False
+
+    def _unexpected_client() -> None:
+        nonlocal client_called
+        client_called = True
+        raise AssertionError("OpenAI client must not be created")
+
+    monkeypatch.setattr(provider, "validate_config", lambda: True)
+    monkeypatch.setattr(provider, "_ensure_client", _unexpected_client)
+    messages = [
+        {
+            "role": "assistant",
+            "run_id": "run-1",
+            "content_parts": [],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "tool", "arguments": "{}"},
+                }
+            ],
+            "reasoning_detail": {
+                "type": "openai",
+                "data": {
+                    "output_items": [
+                        {
+                            "id": "fc_2",
+                            "type": "function_call",
+                            "call_id": "call_2",
+                            "name": "tool",
+                            "arguments": '{"secret":"must-not-be-logged"}',
+                        }
+                    ]
+                },
+            },
+        }
+    ]
+
+    async def _collect() -> list[Any]:
+        return [
+            event
+            async for event in provider.stream_chat(
+                messages=messages,
+                model="gpt-test",
+            )
+        ]
+
+    events = asyncio.run(_collect())
+
+    assert client_called is False
+    assert len(events) == 1
+    assert events[0].kind == "error"
+    assert events[0].error is not None
+    assert events[0].error.message == OPENAI_OUTPUT_ITEMS_ERROR
+    assert "run-1" in caplog.text
+    assert "call_1" in caplog.text
+    assert "call_2" in caplog.text
+    assert "must-not-be-logged" not in caplog.text
+
+
+def test_openai_output_items_survive_snapshot_normalization_and_history_filter() -> None:
+    _, _, _, OpenAIResponsesProvider, _, _ = _load_providers()
+    from App.backend.providers.shared.parsing.final_mappers import (
+        map_openai_response_to_snapshot,
+    )
+
+    provider = OpenAIResponsesProvider({})
+    raw_output = [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "encrypted_content": "enc",
+            "status": "completed",
+        },
+        {
+            "id": "fc_1",
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "read_story_entity",
+            "arguments": '{ "id" : "entity-1" }',
+            "status": "completed",
+        },
+    ]
+    snapshot = map_openai_response_to_snapshot(
+        {
+            "status": "completed",
+            "output": raw_output,
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+            },
+        },
+        provider="openai",
+        model="gpt-test",
+    )
+    detail = normalize_reasoning_detail(
+        provider.read_reasoning_detail(snapshot, {})
+    )
+    assert detail is not None
+    tool_call = snapshot.tool_calls[0]
+    messages = [
+        {
+            "role": "assistant",
+            "run_id": "r1",
+            "content_parts": snapshot.content_parts,
+            "reasoning_detail": detail,
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.tool_name,
+                        "arguments": json.dumps(tool_call.arguments),
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool_results",
+            "run_id": "r1",
+            "tool_results": [
+                {"tool_call_id": "call_1", "content": "result payload"}
+            ],
+        },
+    ]
+
+    filtered = filter_history_by_run(
+        messages,
+        current_run_id="r2",
+        tool_limit=1,
+        thinking_limit=0,
+    )
+    converted = provider._convert_messages(filtered)
+
+    assert [item["type"] for item in converted] == [
+        "reasoning",
+        "function_call",
+        "function_call_output",
+    ]
+    assert converted[:2] == raw_output
+    assert converted[1]["arguments"] == '{ "id" : "entity-1" }'

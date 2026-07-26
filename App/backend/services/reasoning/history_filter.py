@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 
@@ -25,6 +26,49 @@ def pick_runs(run_ids: list[str], limit: int) -> set[str]:
     if limit == 0:
         return set()
     return set(run_ids[-limit:])
+
+
+def _output_items_only_reasoning_detail(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("type") != "openai":
+        return None
+    data = raw.get("data")
+    if not isinstance(data, dict):
+        return None
+    if "output_items" not in data:
+        return None
+    output_items = data["output_items"]
+
+    meta_raw = raw.get("meta")
+    meta: dict[str, Any] = {}
+    if isinstance(meta_raw, dict):
+        provider = meta_raw.get("provider")
+        if isinstance(provider, str) and provider:
+            meta["provider"] = provider
+
+    return {
+        "type": raw.get("type"),
+        "meta": meta,
+        "data": {"output_items": copy.deepcopy(output_items)},
+        "token_count": 0,
+    }
+
+
+def _without_output_items(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("type") != "openai":
+        return raw
+    data_raw = raw.get("data")
+    if not isinstance(data_raw, dict) or "output_items" not in data_raw:
+        return raw
+
+    detail = dict(raw)
+    data = dict(data_raw)
+    data.pop("output_items", None)
+    detail["data"] = data
+    return detail
 
 
 def filter_history_by_run(
@@ -62,10 +106,21 @@ def filter_history_by_run(
                         part for part in parts
                         if isinstance(part, dict) and part.get("type") != "thinking"
                     ]
-                out.pop("reasoning_detail", None)
+                output_items_detail = (
+                    _output_items_only_reasoning_detail(out.get("reasoning_detail"))
+                    if run_id in tool_runs
+                    else None
+                )
+                if output_items_detail is not None:
+                    out["reasoning_detail"] = output_items_detail
+                else:
+                    out.pop("reasoning_detail", None)
 
             if run_id not in tool_runs:
                 out.pop("tool_calls", None)
+                reasoning_detail = _without_output_items(out.get("reasoning_detail"))
+                if reasoning_detail is not None:
+                    out["reasoning_detail"] = reasoning_detail
 
         if role == "tool_results" and run_id not in tool_runs:
             continue

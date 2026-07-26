@@ -12,9 +12,10 @@ Benefits:
 - Native reasoning parameter support
 """
 
+import copy
 import logging
 import re
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, NoReturn, Optional
 
 from openai import (
     APIConnectionError,
@@ -36,6 +37,42 @@ from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParse
 # Text/chat model patterns: gpt-* or o{number}*
 TEXT_MODEL_REGEX = re.compile(r'^(gpt-|o\d)')
 logger = logging.getLogger(__name__)
+OPENAI_OUTPUT_ITEMS_ERROR = (
+    "OpenAI output items are inconsistent; rerun the preceding model turn."
+)
+
+
+class OpenAIOutputItemsError(ValueError):
+    """Raised when persisted Responses output items no longer match stored tool calls."""
+
+
+def _copy_without_none(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _copy_without_none(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_copy_without_none(item) for item in value]
+    return copy.deepcopy(value)
+
+
+def build_openai_output_items(raw_native_response: Any) -> List[Dict[str, Any]] | None:
+    """Copy a tool-calling response's output items without changing their order."""
+    if not isinstance(raw_native_response, dict):
+        return None
+    raw_output = raw_native_response.get("output")
+    if not isinstance(raw_output, list):
+        return None
+    if not any(
+        isinstance(item, dict) and item.get("type") == "function_call"
+        for item in raw_output
+    ):
+        return None
+    if not all(isinstance(item, dict) for item in raw_output):
+        return None
+    return [_copy_without_none(item) for item in raw_output]
 
 
 class OpenAIResponsesProvider(BaseProvider):
@@ -110,14 +147,22 @@ class OpenAIResponsesProvider(BaseProvider):
         return filtered
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
-        items = self._filter_reasoning_items(self._snapshot_reasoning_details(final_snapshot))
+        del advanced
+        items = OpenAIResponsesProvider._filter_reasoning_items(
+            self._snapshot_reasoning_details(final_snapshot)
+        )
         reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
-        if not items and not reasoning_text:
+        raw = getattr(final_snapshot, "raw_native_response", None)
+        output_items = build_openai_output_items(raw)
+        if not items and not reasoning_text and output_items is None:
             return None
 
-        data: dict[str, Any] = {"items": items}
-        raw = getattr(final_snapshot, "raw_native_response", None)
-        if isinstance(raw, dict):
+        data: dict[str, Any] = {}
+        if output_items is not None:
+            data["output_items"] = output_items
+        else:
+            data["items"] = items
+        if output_items is None and isinstance(raw, dict):
             for output_item in raw.get("output") or []:
                 if not isinstance(output_item, dict):
                     continue
@@ -194,10 +239,83 @@ class OpenAIResponsesProvider(BaseProvider):
             def _reasoning_data() -> Dict:
                 if not isinstance(reasoning_detail, dict):
                     return {}
+                if reasoning_detail.get("type") != "openai":
+                    return {}
                 return reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
 
             def _reasoning_items() -> List[Dict]:
                 return self._filter_reasoning_items(_reasoning_data().get("items"))
+
+            def _raise_output_items_error(
+                replay_call_ids: List[str] | None = None,
+                stored_call_ids: List[str] | None = None,
+            ) -> NoReturn:
+                logger.error(
+                    "OpenAI Responses output_items validation failed "
+                    "(run_id=%s, replay_call_ids=%s, stored_call_ids=%s)",
+                    msg.get("run_id"),
+                    replay_call_ids or [],
+                    stored_call_ids or [],
+                )
+                raise OpenAIOutputItemsError(OPENAI_OUTPUT_ITEMS_ERROR)
+
+            def _stored_output_items() -> List[Dict[str, Any]] | None:
+                reasoning_data = _reasoning_data()
+                if "output_items" not in reasoning_data:
+                    return None
+                raw_items = reasoning_data["output_items"]
+                if not isinstance(raw_items, list) or not raw_items:
+                    _raise_output_items_error()
+
+                replay_call_ids: List[str] = []
+                seen_call_ids: set[str] = set()
+                output_items: List[Dict[str, Any]] = []
+                for raw_item in raw_items:
+                    if not isinstance(raw_item, dict):
+                        _raise_output_items_error(replay_call_ids)
+                    item = copy.deepcopy(raw_item)
+                    if item.get("type") == "function_call":
+                        call_id = item.get("call_id")
+                        name = item.get("name")
+                        arguments = item.get("arguments")
+                        if (
+                            not isinstance(call_id, str)
+                            or not call_id
+                            or not isinstance(name, str)
+                            or not name
+                            or not isinstance(arguments, str)
+                            or not arguments
+                            or call_id in seen_call_ids
+                        ):
+                            _raise_output_items_error(replay_call_ids)
+                        seen_call_ids.add(call_id)
+                        replay_call_ids.append(call_id)
+                    output_items.append(item)
+
+                if not replay_call_ids:
+                    _raise_output_items_error()
+
+                stored_call_ids: List[str] = []
+                for tool_call in tool_calls or []:
+                    if not isinstance(tool_call, dict):
+                        _raise_output_items_error(
+                            replay_call_ids,
+                            stored_call_ids,
+                        )
+                    call_id = tool_call.get("id")
+                    if not isinstance(call_id, str) or not call_id:
+                        _raise_output_items_error(
+                            replay_call_ids,
+                            stored_call_ids,
+                        )
+                    stored_call_ids.append(call_id)
+
+                if replay_call_ids != stored_call_ids:
+                    _raise_output_items_error(
+                        replay_call_ids,
+                        stored_call_ids,
+                    )
+                return output_items
 
             def _output_msg_id() -> str | None:
                 value = _reasoning_data().get("output_msg_id")
@@ -214,6 +332,14 @@ class OpenAIResponsesProvider(BaseProvider):
                 if output_msg_id:
                     msg_dict["id"] = output_msg_id
 
+            # A persisted Responses output is the authoritative assistant turn.
+            # Replay it without reconstructing or reordering any output items.
+            if role == "assistant":
+                output_items = _stored_output_items()
+                if output_items is not None:
+                    result.extend(output_items)
+                    continue
+
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
                 content_items = build_openai_responses_content(message_parts, role=role)
@@ -225,7 +351,7 @@ class OpenAIResponsesProvider(BaseProvider):
                     msg_dict: Dict = {"role": role, "content": content_items}
                     _apply_output_id(msg_dict, bool(ri) or _output_msg_id() is not None)
                     result.append(msg_dict)
-                elif ri or _output_msg_id() is not None:
+                elif _output_msg_id() is not None:
                     msg_dict = {
                         "type": "message",
                         "role": role,
@@ -379,10 +505,14 @@ class OpenAIResponsesProvider(BaseProvider):
             return
         del provider_preference, thinking_mode, custom_kind
 
-        client = self._ensure_client()
-
         # Convert messages to Responses API format
-        input_items = self._convert_messages(messages)
+        try:
+            input_items = self._convert_messages(messages)
+        except OpenAIOutputItemsError as exc:
+            yield self._error_event(str(exc))
+            return
+
+        client = self._ensure_client()
 
         # Build request via overridable hook
         request = self._prepare_responses_request(

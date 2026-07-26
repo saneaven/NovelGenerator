@@ -97,10 +97,11 @@ from App.backend.services.tool_engine.modules.outline_module import OutlineFeatu
 from App.backend.services.tool_engine.modules.project_data_module import ProjectDataFeatureModule
 from App.backend.services.tool_engine.modules.story_entity_module import StoryEntityFeatureModule
 from App.backend.services.tool_engine.modules.timeline_module import TimelineFeatureModule
+from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 
 
-def _module_context() -> ToolModuleContext:
+def _module_context(*, invocation_mode: str = "agentMode") -> ToolModuleContext:
     return ToolModuleContext(
         db=SimpleNamespace(),
         thread=SimpleNamespace(thread_type="agent"),
@@ -111,7 +112,7 @@ def _module_context() -> ToolModuleContext:
         project_id=uuid4(),
         input_payload={},
         vector_storage_enabled=False,
-        invocation_mode="agentMode",
+        invocation_mode=invocation_mode,
     )
 
 
@@ -592,6 +593,24 @@ def test_timeline_replace_and_patch_schemas_include_structure_metadata(monkeypat
     event_props = specs["patch_timeline_event"].parameters["properties"]
     for key in ("trackId", "startDate", "endDate", "tags"):
         assert key in event_props
+
+
+def test_timeline_plan_mode_offer_is_read_only(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+
+    registry = ToolRegistry()
+    registry.register_module(TimelineFeatureModule())
+    offer = registry.build_offer(_module_context(invocation_mode="planMode"))
+
+    expected = {"read_timeline_event", "read_timeline_track"}
+    assert {tool["name"] for tool in offer.provider_tools} == expected
+    assert {
+        (name, binding.meta.category)
+        for name, binding in offer.bindings_by_name.items()
+    } == {
+        ("read_timeline_event", "read"),
+        ("read_timeline_track", "read"),
+    }
 
 
 def test_timeline_translate_schemas_require_content(monkeypatch) -> None:

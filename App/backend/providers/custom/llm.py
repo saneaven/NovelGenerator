@@ -565,42 +565,11 @@ class CustomProvider(AsyncOpenAIProvider):
         final_snapshot: Any,
         advanced: dict[str, Any],
     ) -> dict[str, Any] | None:
-        del advanced
-        items = OpenAIResponsesProvider._filter_reasoning_items(
-            self._snapshot_reasoning_details(final_snapshot)
+        return OpenAIResponsesProvider.read_reasoning_detail(
+            self,
+            final_snapshot,
+            advanced,
         )
-        reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
-        if not items and not reasoning_text:
-            return None
-
-        data: dict[str, Any] = {"items": items}
-        raw = getattr(final_snapshot, "raw_native_response", None)
-        if isinstance(raw, dict):
-            for output_item in raw.get("output") or []:
-                if not isinstance(output_item, dict):
-                    continue
-                if output_item.get("type") == "message":
-                    msg_id = output_item.get("id")
-                    if isinstance(msg_id, str) and msg_id:
-                        data["output_msg_id"] = msg_id
-                elif output_item.get("type") == "function_call":
-                    call_id = output_item.get("call_id")
-                    item_id = output_item.get("id")
-                    if isinstance(call_id, str) and call_id and isinstance(item_id, str) and item_id:
-                        fc_ids = data.setdefault("function_call_item_ids", {})
-                        fc_ids[call_id] = item_id
-
-        meta: dict[str, Any] = {"provider": "openai"}
-        if reasoning_text:
-            data["reasoning_text"] = reasoning_text
-            meta["thinking_display"] = "reasoning_text"
-
-        return {
-            "type": "openai",
-            "meta": meta,
-            "data": data,
-            "token_count": 0,
-        }
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         effective_custom_kind = self._effective_custom_kind(advanced.get("custom_kind"))

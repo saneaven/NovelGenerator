@@ -71,9 +71,23 @@ def test_build_from_runs_keeps_tool_call_only_assistant_and_attached_tool_result
         "type": "openai",
         "meta": {"provider": "openai"},
         "data": {
-            "items": [{"id": "rs_1", "type": "reasoning", "encrypted_content": "enc"}],
-            "output_msg_id": "msg_1",
-            "function_call_item_ids": {"call_1": "fc_1"},
+            "output_items": [
+                {
+                    "id": "rs_1",
+                    "type": "reasoning",
+                    "summary": [],
+                    "encrypted_content": "enc",
+                    "status": "completed",
+                },
+                {
+                    "id": "fc_1",
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_story_entity",
+                    "arguments": '{ "id" : "abc" }',
+                    "status": "completed",
+                },
+            ],
         },
         "token_count": 0,
     }
