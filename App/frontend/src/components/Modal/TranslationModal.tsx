@@ -7,6 +7,7 @@ import { useTimelineConfig, ensureTimelineLoaded } from '../../data/timeline';
 import type { AnyObjectType, TranslationStatus, UnifiedObject } from '../../types/unifiedObject';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
 import { useJourneyStore } from '../../store/journeyStore';
+import { alert as showAlert } from '../../store/dialogStore';
 import { journeyService } from '../../api/journeyService';
 import { translationService } from '../../api/unifiedObjectService';
 import { Globe, Swap, Document } from '../icons';
@@ -15,6 +16,8 @@ import CollapsibleSection from '../ui/CollapsibleSection';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import ToggleSwitch from '../common/ToggleSwitch';
+import { CustomSelect } from '../ui/CustomSelect';
+import { NumberInput } from '../ui/NumberInput';
 import {
   getStoryEntityFolderData,
 } from '../../types/storyEntityFolder';
@@ -28,6 +31,13 @@ import {
   hasLanguageForObject,
   shouldOfferObjectForTranslation,
 } from './translationAvailability';
+import {
+  chunkTranslationItems,
+  resolveTranslationChunkSize,
+  startTranslationGroupsConcurrently,
+  TRANSLATION_CHUNK_SIZE_OPTIONS,
+  type TranslationChunkSizePreset,
+} from './translationBatching';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -123,6 +133,10 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
   // Raw output mode
   const [rawMode, setRawMode] = useState(false);
+  const [parallelProcessing, setParallelProcessing] = useState(false);
+  const [chunkSizePreset, setChunkSizePreset] = useState<TranslationChunkSizePreset>('1');
+  const [customChunkSize, setCustomChunkSize] = useState<number | undefined>(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [translationStatuses, setTranslationStatuses] = useState<TranslationStatus[]>([]);
   const [translationStatusReady, setTranslationStatusReady] = useState(false);
@@ -527,68 +541,100 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
       setRawMode(false);
+      setParallelProcessing(false);
+      setChunkSizePreset('1');
+      setCustomChunkSize(1);
+      setIsSubmitting(false);
       setTranslationStatuses([]);
       setTranslationStatusReady(false);
     }
   }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput]);
 
   const handleStart = async () => {
-    if (objectsToTranslate.length === 0) {
+    if (objectsToTranslate.length === 0 || isSubmitting) {
       return;
     }
+
+    setIsSubmitting(true);
+
     const spec = getJourneySpec('objectTranslation');
-    const journeyId = crypto.randomUUID();
-    const selectedObjectIds = objectsToTranslate.map((o) => o.objectId);
-    const selectedContext = selectedContextIds;
+    const selectedContext = [...selectedContextIds];
     const outputMode = rawMode
       ? 'raw_output'
       : (settings.nativeOutputMode ? 'native_tool_call' : 'tool_call');
-    const inputPayload = {
-      projectId,
-      sourceLanguage,
-      targetLanguage,
-      userInput: userInput.trim() || undefined,
-      objectIds: selectedObjectIds,
-      contextObjectIds: selectedContext,
-      rawMode,
-      outputMode,
-      translation: {
+
+    const chunkSize = resolveTranslationChunkSize(
+      chunkSizePreset,
+      customChunkSize,
+      objectsToTranslate.length,
+    );
+    const translationGroups = parallelProcessing
+      ? chunkTranslationItems(objectsToTranslate, chunkSize)
+      : [objectsToTranslate];
+
+    const startGroup = async (group: ProjectObjectToTranslate[]) => {
+      const objectIds = group.map((object) => object.objectId);
+      const inputPayload = {
+        projectId,
         sourceLanguage,
         targetLanguage,
-        objectIds: selectedObjectIds,
+        userInput: userInput.trim() || undefined,
+        objectIds,
         contextObjectIds: selectedContext,
-        currentTranslatedContents: [],
-      },
-    };
-    useJourneyStore.getState().createJourney({
-      id: journeyId,
-      kind: 'objectTranslation',
-      input: inputPayload,
-      editingTargets: spec.buildEditingTargets(inputPayload),
-      label: spec.label(inputPayload),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+        rawMode,
+        outputMode,
+        translation: {
+          sourceLanguage,
+          targetLanguage,
+          objectIds,
+          contextObjectIds: selectedContext,
+          currentTranslatedContents: [],
+        },
+      };
 
-    try {
       const created = await journeyService.create(projectId, {
         kind: 'objectTranslation',
         display_label: spec.label(inputPayload),
         input_text: userInput.trim() || 'Translate the selected objects.',
         input_payload: inputPayload,
         surface: 'story-entity',
-        journey_target_ids: selectedObjectIds,
+        journey_target_ids: objectIds,
         context_object_ids: selectedContext,
       });
-      useJourneyStore.getState().updateJourney(journeyId, { threadId: created.thread_id });
-    } catch (error: any) {
-      useJourneyStore.getState().updateJourney(journeyId, {
-        error: error?.message ?? 'Failed to start translation journey',
-      });
-    }
 
-    // Auto-close modal - request continues in background, toast shows progress
-    onClose();
+      const now = Date.now();
+      useJourneyStore.getState().createJourney({
+        id: created.journey_id,
+        kind: 'objectTranslation',
+        input: inputPayload,
+        threadId: created.thread_id,
+        editingTargets: spec.buildEditingTargets(inputPayload),
+        label: spec.label(inputPayload),
+        createdAt: now,
+        updatedAt: now,
+      });
+    };
+
+    try {
+      const results = await startTranslationGroupsConcurrently(
+        translationGroups,
+        startGroup,
+      );
+      const failures = results.filter((result) => result.status === 'rejected');
+
+      // Auto-close modal - successfully created journeys continue in the background.
+      onClose();
+
+      if (failures.length > 0) {
+        void showAlert({
+          title: 'Translation Start Failed',
+          message: `Failed to start ${failures.length} of ${translationGroups.length} translation request${translationGroups.length === 1 ? '' : 's'}.`,
+          variant: 'warning',
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSwapLanguages = () => {
@@ -604,19 +650,22 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   return (
     <BaseModal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => {
+        if (!isSubmitting) onClose();
+      }}
       size="medium"
       title={<><Globe size="xl" /> Translation</>}
       className="translation-modal"
       footer={
         <>
-          <TextButton variant="secondary" onClick={onClose}>
+          <TextButton variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </TextButton>
           <TextButton
             variant="primary"
             onClick={handleStart}
-            disabled={objectsToTranslate.length === 0 || !targetLanguage}
+            disabled={objectsToTranslate.length === 0 || !targetLanguage || isSubmitting}
+            loading={isSubmitting}
           >
             Start Translation
           </TextButton>
@@ -631,6 +680,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               value={sourceLanguage}
               onChange={(e) => setSourceLanguage(e.target.value)}
               className="language-select"
+              disabled={isSubmitting}
             >
               {availableLanguages.map(lang => (
                 <option key={lang} value={lang}>{lang}</option>
@@ -646,6 +696,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               value={targetLanguage}
               onChange={(e) => setTargetLanguage(e.target.value)}
               className="language-select"
+              disabled={isSubmitting}
             >
               {availableLanguages
                 .filter(lang => lang !== sourceLanguage)
@@ -701,6 +752,40 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               emptyMessage="No objects available for translation"
             />
           </CollapsibleSection>
+        )}
+
+        {objectsToTranslate.length > 1 && (
+          <div className="form-group parallel-processing-control">
+            <ToggleSwitch
+              checked={parallelProcessing}
+              onChange={setParallelProcessing}
+              label="Parallel processing"
+              disabled={isSubmitting}
+            />
+            {parallelProcessing && (
+              <div className="parallel-processing-size">
+                <label>Objects per request</label>
+                <CustomSelect
+                  value={chunkSizePreset}
+                  onChange={(value) => setChunkSizePreset(value as TranslationChunkSizePreset)}
+                  options={[...TRANSLATION_CHUNK_SIZE_OPTIONS]}
+                  disabled={isSubmitting}
+                />
+                {chunkSizePreset === 'custom' && (
+                  <NumberInput
+                    value={customChunkSize}
+                    onValueChange={setCustomChunkSize}
+                    min={1}
+                    max={Math.max(1, objectsToTranslate.length)}
+                    integer
+                    disabled={isSubmitting}
+                    aria-label="Custom objects per request"
+                    className="parallel-processing-number-input"
+                  />
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {canUseRawMode && (
