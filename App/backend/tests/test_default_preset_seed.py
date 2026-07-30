@@ -49,6 +49,19 @@ def test_default_preset_sub_agents_match_prompt_scenarios() -> None:
     }
 
 
+def test_default_preset_sub_agents_can_search_and_edit_timeline() -> None:
+    seed = load_default_preset_seed()
+
+    for sub_agent in seed.sub_agents:
+        grants = {
+            grant.feature_key: set(grant.categories)
+            for grant in sub_agent.tool_grants
+        }
+
+        assert grants["search"] == {"read"}, sub_agent.agent_name
+        assert grants["timeline"] == {"read", "write"}, sub_agent.agent_name
+
+
 def test_alembic_versions_include_baseline() -> None:
     backend_root = Path(__file__).resolve().parents[1]
     version_files = sorted(

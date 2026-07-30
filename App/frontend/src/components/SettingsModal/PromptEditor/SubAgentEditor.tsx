@@ -8,11 +8,13 @@ import {
 } from '../../../data/presets';
 import { useResolvedTaskConfig, useSettings } from '../../../data/settings';
 import type {
+  FeatureKey,
   SubAgentAllowedInvocation,
   SubAgentCreatePayload,
   SubAgentDefinition,
   SubAgentToolGrant,
   SubAgentToolGrantCatalogItem,
+  ToolCategory,
 } from '../../../types/subAgents';
 import type { TaskAIConfig } from '../../../data/settings';
 import TaskConfigForm from '../TaskConfigForm';
@@ -504,29 +506,29 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     });
   };
 
-  const setToolGrantChecked = (featureKey: string, category: string, checked: boolean) => {
+  const setToolGrantChecked = (featureKey: FeatureKey, category: ToolCategory, checked: boolean) => {
     updateDraft((cur) => {
       const prev = cur.current.tool_grants;
       const currentGrant = prev.find((item) => item.feature_key === featureKey);
       const currentCategories = currentGrant ? [...currentGrant.categories] : [];
-      const hasCategory = currentCategories.includes(category as any);
+      const hasCategory = currentCategories.includes(category);
       const nextCategories = checked && !hasCategory
-        ? [...currentCategories, category as any]
+        ? [...currentCategories, category]
         : !checked && hasCategory
           ? currentCategories.filter((value) => value !== category)
           : currentCategories;
       const nextGrants = prev
         .filter((item) => item.feature_key !== featureKey)
-        .concat(nextCategories.length > 0 ? [{ feature_key: featureKey as any, categories: nextCategories as any }] : [])
+        .concat(nextCategories.length > 0 ? [{ feature_key: featureKey, categories: nextCategories }] : [])
         .sort((a, b) => a.feature_key.localeCompare(b.feature_key));
       return { ...cur, current: { ...cur.current, tool_grants: nextGrants } };
     });
   };
 
-  const hasToolGrant = (featureKey: string, category: string): boolean => {
+  const hasToolGrant = (featureKey: FeatureKey, category: ToolCategory): boolean => {
     if (!draft) return false;
     const currentGrant = draft.current.tool_grants.find((item) => item.feature_key === featureKey);
-    return Boolean(currentGrant?.categories.includes(category as any));
+    return Boolean(currentGrant?.categories.includes(category));
   };
 
   const setSubAgentAllowedChecked = (subAgentId: string, checked: boolean) => {

@@ -82,7 +82,13 @@ fake_manuscript_access.read_manuscript_markdown = _fake_read_manuscript_markdown
 fake_manuscript_access.ensure_manuscript_exists = lambda *_args, **_kwargs: None
 sys.modules.setdefault("App.backend.services.tool_engine.modules.manuscript_access", fake_manuscript_access)
 
-from App.backend.services.tool_engine.contexts import ToolExecutionContext, ToolGroupExecutionContext, ToolModuleContext, ToolValidationContext
+from App.backend.services.tool_engine.contexts import (
+    ToolAccessPolicy,
+    ToolExecutionContext,
+    ToolGroupExecutionContext,
+    ToolModuleContext,
+    ToolValidationContext,
+)
 from App.backend.services.tool_engine.contracts import (
     ToolDecisionGroup,
     ToolDecisionItem,
@@ -101,10 +107,15 @@ from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.schema_validation import validate_schema_required_enum_additional_properties
 
 
-def _module_context(*, invocation_mode: str = "agentMode") -> ToolModuleContext:
+def _module_context(
+    *,
+    invocation_mode: str = "agentMode",
+    thread_type: str = "agent",
+    feature_categories: dict | None = None,
+) -> ToolModuleContext:
     return ToolModuleContext(
         db=SimpleNamespace(),
-        thread=SimpleNamespace(thread_type="agent"),
+        thread=SimpleNamespace(thread_type=thread_type),
         run=SimpleNamespace(language="English"),
         settings=SimpleNamespace(main_language="English", sub_languages=["Korean", "Japanese"]),
         preset_id=uuid4(),
@@ -113,6 +124,7 @@ def _module_context(*, invocation_mode: str = "agentMode") -> ToolModuleContext:
         input_payload={},
         vector_storage_enabled=False,
         invocation_mode=invocation_mode,
+        access_policy=ToolAccessPolicy(feature_categories=feature_categories),
     )
 
 
@@ -611,6 +623,32 @@ def test_timeline_plan_mode_offer_is_read_only(monkeypatch) -> None:
         ("read_timeline_event", "read"),
         ("read_timeline_track", "read"),
     }
+
+
+def test_timeline_sub_agent_read_write_grant_exposes_read_and_write_tools(monkeypatch) -> None:
+    monkeypatch.setattr(timeline_module.timeline_service, "get_timeline", lambda *_args, **_kwargs: None)
+
+    registry = ToolRegistry()
+    registry.register_module(TimelineFeatureModule())
+    offer = registry.build_offer(
+        _module_context(
+            invocation_mode="subAgent",
+            thread_type="subAgent",
+            feature_categories={"timeline": frozenset({"read", "write"})},
+        )
+    )
+
+    assert {tool["name"] for tool in offer.provider_tools} == {
+        "read_timeline_event",
+        "read_timeline_track",
+        "create_timeline_event",
+        "create_timeline_track",
+        "replace_timeline_event",
+        "replace_timeline_track",
+        "patch_timeline_event",
+        "patch_timeline_track",
+    }
+    assert {binding.meta.category for binding in offer.bindings_by_name.values()} == {"read", "write"}
 
 
 def test_timeline_translate_schemas_require_content(monkeypatch) -> None:

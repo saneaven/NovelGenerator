@@ -2,7 +2,7 @@ import type { TaskAIConfig } from '../domain/settings';
 
 export type SubAgentAllowedInvocation = 'planMode' | 'agentMode' | 'subAgent';
 export type ToolCategory = 'read' | 'write' | 'delete' | 'translate' | 'sub_agent' | 'generate' | 'mcp';
-export type FeatureKey = 'project_data' | 'story_entity' | 'outline' | 'manuscript' | 'search' | 'project_tree' | 'image' | 'sub_agent' | 'mcp';
+export type FeatureKey = 'project_data' | 'story_entity' | 'outline' | 'manuscript' | 'timeline' | 'search' | 'project_tree' | 'image' | 'sub_agent' | 'mcp';
 
 export interface SubAgentToolGrant {
   feature_key: FeatureKey;
