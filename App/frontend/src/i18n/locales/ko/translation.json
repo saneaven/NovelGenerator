@@ -397,6 +397,11 @@
         "placeholder": "ngpt-...",
         "hint": "API 키 받기"
       },
+      "neuralwatt": {
+        "title": "Neuralwatt",
+        "placeholder": "Neuralwatt API 키를 입력하세요",
+        "hint": "API 키 받기"
+      },
       "ollamaCloud": {
         "title": "Ollama Cloud",
         "placeholder": "ollama_...",
@@ -695,6 +700,7 @@
         "openrouter": "OpenRouter를 통해 100개 이상의 AI 모델에 접근",
         "xai": "텍스트 생성을 위한 xAI Grok 모델",
         "nanogpt": "통합 채팅, 임베딩, 이미지 생성을 지원하는 NanoGPT 개인화 모델",
+        "neuralwatt": "reasoning과 Flex 티어를 지원하는 OpenAI 호환 Neuralwatt 모델",
         "ollamaCloud": "채팅과 임베딩을 지원하는 Ollama Cloud 모델",
         "custom": "자체 OpenAI 호환 엔드포인트 사용"
       },

@@ -18,6 +18,7 @@ _BUILTINS = (
     "openrouter",
     "xai",
     "ollama_cloud",
+    "neuralwatt",
     "novelai",
     "custom",
 )

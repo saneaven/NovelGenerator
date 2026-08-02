@@ -44,7 +44,7 @@ The heart of Novel Buds is an agentic system that lets an LLM read and edit the 
 - **Streaming & reasoning**: Server-Sent-Events streaming with thinking/reasoning support (off / model-native / custom), effort levels from `minimal` through `xhigh` / `max`, and full LLM request logging.
 - **Native tool-call fallback**: Models without native tool calling are supported via on-the-fly `<tool_call>` tag parsing, so the same agent flow works across providers.
 
-- **Multi-provider LLM support**: Anthropic Claude, OpenAI, Google Gemini, xAI, OpenRouter, and Ollama Cloud, configurable per project, with thinking/reasoning modes and request logging.
+- **Multi-provider LLM support**: Anthropic Claude, OpenAI, Google Gemini, xAI, OpenRouter, Ollama Cloud, and Neuralwatt, configurable per project, with thinking/reasoning modes and request logging.
 
 ---
 

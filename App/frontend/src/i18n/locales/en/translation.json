@@ -397,6 +397,11 @@
         "placeholder": "ngpt-...",
         "hint": "Get your API key from"
       },
+      "neuralwatt": {
+        "title": "Neuralwatt",
+        "placeholder": "Enter your Neuralwatt API key",
+        "hint": "Get your API key from"
+      },
       "ollamaCloud": {
         "title": "Ollama Cloud",
         "placeholder": "ollama_...",
@@ -695,6 +700,7 @@
         "openrouter": "Access to 100+ AI models via OpenRouter",
         "xai": "xAI Grok models for text generation",
         "nanogpt": "NanoGPT personalized models with unified chat, embeddings, and image generation",
+        "neuralwatt": "OpenAI-compatible Neuralwatt models with reasoning and Flex tier support",
         "ollamaCloud": "Ollama Cloud models with chat and embeddings",
         "custom": "Use your own OpenAI-compatible endpoint"
       },
