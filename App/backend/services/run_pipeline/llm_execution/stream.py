@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ....providers.shared.parsing.content_normalization import (
     StreamContentNormalizer,
+    final_snapshot_has_output,
     has_effective_delta,
     normalize_final_snapshot_content,
 )
@@ -176,6 +177,12 @@ async def execute_stream(
         if prepared.native_tool_call_mode:
             final_snapshot = extract_native_tool_calls_from_snapshot(final_snapshot)
         final_snapshot = normalize_final_snapshot_content(final_snapshot)
+
+        if not final_snapshot_has_output(final_snapshot):
+            raise RuntimeError(
+                "Model returned no content and no tool calls "
+                f"(finish_reason={final_snapshot.finish_reason or 'unknown'})."
+            )
     except Exception as exc:
         session.fail(
             str(exc),
