@@ -461,6 +461,7 @@ def test_neuralwatt_inherited_stream_maps_tools_reasoning_usage_and_cache() -> N
                         "delta": {
                             "content": "answer",
                             "reasoning_content": "reason",
+                            "reasoning": "reason",
                             "tool_calls": [tool_call],
                         }
                     }
@@ -543,24 +544,38 @@ def test_neuralwatt_inherited_stream_maps_tools_reasoning_usage_and_cache() -> N
     assert stream.closed is True
 
 
+def _reasoning_detail_from_chunks(
+    provider: NeuralwattProvider,
+    chunks: list[dict[str, Any]],
+    *,
+    thinking_mode: str = "model",
+) -> dict[str, Any] | None:
+    assembler = FallbackSnapshotAssembler(provider="neuralwatt", model="any-model")
+    for chunk in chunks:
+        mutated, extra_chunks = provider._mutate_chunk(chunk, thinking_mode)
+        for item in ([mutated] if mutated is not None else []) + extra_chunks:
+            for event in provider._chunk_to_events(item):
+                if event.delta is not None:
+                    assembler.apply_delta(event.delta)
+                if event.meta is not None:
+                    assembler.apply_meta(event.meta)
+
+    snapshot = assembler.finalize_or_raise()
+    return normalize_reasoning_detail(
+        provider.read_reasoning_detail(snapshot, {"thinking_mode": thinking_mode})
+    )
+
+
 def _reasoning_detail_from_chunk(
     provider: NeuralwattProvider,
     chunk: dict[str, Any],
     *,
     thinking_mode: str = "model",
 ) -> dict[str, Any] | None:
-    assembler = FallbackSnapshotAssembler(provider="neuralwatt", model="any-model")
-    mutated, extra_chunks = provider._mutate_chunk(chunk, thinking_mode)
-    for item in ([mutated] if mutated is not None else []) + extra_chunks:
-        for event in provider._chunk_to_events(item):
-            if event.delta is not None:
-                assembler.apply_delta(event.delta)
-            if event.meta is not None:
-                assembler.apply_meta(event.meta)
-
-    snapshot = assembler.finalize_or_raise()
-    return normalize_reasoning_detail(
-        provider.read_reasoning_detail(snapshot, {"thinking_mode": thinking_mode})
+    return _reasoning_detail_from_chunks(
+        provider,
+        [chunk],
+        thinking_mode=thinking_mode,
     )
 
 
@@ -571,8 +586,28 @@ def _reasoning_detail_from_chunk(
         ({"reasoning_content": "legacy reasoning"}, "legacy reasoning"),
         ({"reasoning": {"text": "object reasoning"}}, "object reasoning"),
         (
-            {"reasoning_content": "first ", "reasoning": {"text": "second"}},
-            "first second",
+            {"reasoning_content": "same reasoning", "reasoning": "same reasoning"},
+            "same reasoning",
+        ),
+        (
+            {"reasoning_content": "preferred", "reasoning": "fallback"},
+            "preferred",
+        ),
+        (
+            {"reasoning_content": "preferred", "reasoning": {"text": "fallback"}},
+            "preferred",
+        ),
+        (
+            {"reasoning_content": "", "reasoning": "string fallback"},
+            "string fallback",
+        ),
+        (
+            {"reasoning_content": "", "reasoning": {"text": "object fallback"}},
+            "object fallback",
+        ),
+        (
+            {"reasoning_content": "\n", "reasoning": "\n"},
+            "\n",
         ),
     ],
 )
@@ -600,6 +635,88 @@ def test_neuralwatt_reasoning_chunks_normalize_and_persist(
         },
         "token_count": 0,
     }
+
+
+def test_neuralwatt_empty_reasoning_aliases_do_not_create_reasoning_detail() -> None:
+    provider = NeuralwattProvider({})
+
+    reasoning_detail = _reasoning_detail_from_chunk(
+        provider,
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning_content": "",
+                        "reasoning": "",
+                        "content": "answer",
+                    }
+                }
+            ]
+        },
+    )
+
+    assert reasoning_detail is None
+
+
+def test_neuralwatt_dual_alias_chunks_persist_and_replay_once() -> None:
+    provider = NeuralwattProvider({})
+    reasoning_detail = _reasoning_detail_from_chunks(
+        provider,
+        [
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "reasoning": "The",
+                            "reasoning_content": "The",
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "reasoning": " answer",
+                            "reasoning_content": " answer",
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "reasoning": " is",
+                            "reasoning_content": " is",
+                            "content": "555.",
+                        }
+                    }
+                ]
+            },
+        ],
+    )
+
+    assert reasoning_detail is not None
+    assert reasoning_detail["data"]["reasoning"] == "The answer is"
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "555."}],
+                "reasoning_detail": reasoning_detail,
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "555.",
+            "reasoning": "The answer is",
+        }
+    ]
 
 
 def test_neuralwatt_reasoning_is_not_exposed_outside_model_mode() -> None:

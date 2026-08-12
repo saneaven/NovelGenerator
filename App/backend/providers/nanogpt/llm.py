@@ -106,6 +106,36 @@ class NanoGPTProvider(AsyncOpenAIProvider):
     def get_stream_thinking_display_path(self, advanced: dict[str, Any]) -> str | None:
         return "reasoning_text"
 
+    def _convert_assistant_reasoning_history(
+        self,
+        reasoning_detail: Dict[str, Any],
+    ) -> Dict[str, object]:
+        converted = super()._convert_assistant_reasoning_history(reasoning_detail)
+        reasoning_data = (
+            reasoning_detail.get("data")
+            if isinstance(reasoning_detail.get("data"), dict)
+            else {}
+        )
+        reasoning_meta = (
+            reasoning_detail.get("meta")
+            if isinstance(reasoning_detail.get("meta"), dict)
+            else {}
+        )
+        is_nanogpt_detail = (
+            reasoning_detail.get("type") == "nanogpt"
+            or reasoning_meta.get("provider") == "nanogpt"
+        )
+        if not is_nanogpt_detail:
+            return converted
+
+        existing_reasoning = converted.get("reasoning")
+        if not isinstance(existing_reasoning, str) or not existing_reasoning:
+            reasoning_text = reasoning_data.get("reasoning_text")
+            if isinstance(reasoning_text, str) and reasoning_text:
+                converted["reasoning"] = reasoning_text
+
+        return converted
+
     async def get_models(self) -> Dict:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=30.0) as client:

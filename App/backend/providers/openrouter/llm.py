@@ -1,6 +1,57 @@
+import copy
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..shared.async_openai_provider import AsyncOpenAIProvider
+
+
+_REASONING_DETAIL_TEXT_FIELD = {
+    "reasoning.text": "text",
+    "reasoning.summary": "summary",
+}
+
+
+def _merge_openrouter_reasoning_details(details: list[Any]) -> list[Any]:
+    """Merge adjacent streamed OpenRouter reasoning blocks without mutating input."""
+    merged: list[Any] = []
+
+    for raw_detail in details:
+        detail = copy.deepcopy(raw_detail)
+        if not isinstance(detail, dict):
+            merged.append(detail)
+            continue
+
+        detail_type = detail.get("type")
+        text_field = (
+            _REASONING_DETAIL_TEXT_FIELD.get(detail_type)
+            if isinstance(detail_type, str)
+            else None
+        )
+        text = detail.get(text_field) if text_field is not None else None
+        if text_field is None or (text is not None and not isinstance(text, str)):
+            merged.append(detail)
+            continue
+
+        previous = merged[-1] if merged else None
+        previous_text = previous.get(text_field) if isinstance(previous, dict) else None
+        if (
+            isinstance(previous, dict)
+            and previous.get("type") == detail_type
+            and (previous_text is None or isinstance(previous_text, str))
+        ):
+            previous[text_field] = (previous_text or "") + (text or "")
+            metadata_fields = (
+                ("format", "signature")
+                if detail_type == "reasoning.text"
+                else ("format",)
+            )
+            for metadata_field in metadata_fields:
+                if not previous.get(metadata_field) and detail.get(metadata_field):
+                    previous[metadata_field] = copy.deepcopy(detail[metadata_field])
+            continue
+
+        merged.append(detail)
+
+    return merged
 
 
 class OpenRouterProvider(AsyncOpenAIProvider):
@@ -45,7 +96,9 @@ class OpenRouterProvider(AsyncOpenAIProvider):
         return None
 
     def read_reasoning_detail(self, final_snapshot, advanced: Dict) -> Dict | None:
-        details = self._snapshot_reasoning_details(final_snapshot)
+        details = _merge_openrouter_reasoning_details(
+            self._snapshot_reasoning_details(final_snapshot)
+        )
         reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
         if not details and not reasoning_text:
             return None
@@ -66,6 +119,17 @@ class OpenRouterProvider(AsyncOpenAIProvider):
             "data": data,
             "token_count": 0,
         }
+
+    def _convert_assistant_reasoning_history(self, reasoning_detail: Dict[str, Any]) -> Dict[str, object]:
+        copied_detail = copy.deepcopy(reasoning_detail)
+        reasoning_data = copied_detail.get("data")
+        if isinstance(reasoning_data, dict):
+            for key in ("reasoning_details", "details"):
+                raw_details = reasoning_data.get(key)
+                if isinstance(raw_details, list):
+                    reasoning_data[key] = _merge_openrouter_reasoning_details(raw_details)
+
+        return super()._convert_assistant_reasoning_history(copied_detail)
 
     def get_stream_thinking_display_path(self, advanced: Dict) -> str | None:
         return "reasoning"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass
 import json
 import sys
@@ -171,6 +172,210 @@ def test_provider_stream_thinking_display_paths() -> None:
     assert custom.get_stream_thinking_display_path({}) == "text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "openai_response"}) == "reasoning_text"
     assert custom.get_stream_thinking_display_path({"custom_kind": "claude"}) == "reasoning_text"
+
+
+def test_openrouter_merge_reasoning_details_preserves_boundaries_and_input() -> None:
+    _ensure_provider_stubs()
+    from App.backend.providers.openrouter.llm import _merge_openrouter_reasoning_details
+
+    details: list[Any] = [
+        {
+            "id": "text-first",
+            "index": 7,
+            "type": "reasoning.text",
+            "text": "first\n",
+            "format": "",
+            "signature": "",
+        },
+        {
+            "id": "text-later",
+            "index": 0,
+            "type": "reasoning.text",
+            "signature": "sig-later",
+        },
+        {
+            "id": "text-last",
+            "index": 99,
+            "type": "reasoning.text",
+            "text": "second",
+            "format": "openai-responses-v1",
+        },
+        {
+            "id": "summary-first",
+            "index": 11,
+            "type": "reasoning.summary",
+            "summary": "sum",
+        },
+        {
+            "id": "summary-later",
+            "index": 0,
+            "type": "reasoning.summary",
+            "format": "openai-responses-v1",
+        },
+        {
+            "id": "summary-last",
+            "index": 42,
+            "type": "reasoning.summary",
+            "summary": "mary",
+        },
+    ]
+    original = copy.deepcopy(details)
+
+    merged = _merge_openrouter_reasoning_details(details)
+
+    assert merged == [
+        {
+            "id": "text-first",
+            "index": 7,
+            "type": "reasoning.text",
+            "text": "first\nsecond",
+            "format": "openai-responses-v1",
+            "signature": "sig-later",
+        },
+        {
+            "id": "summary-first",
+            "index": 11,
+            "type": "reasoning.summary",
+            "summary": "summary",
+            "format": "openai-responses-v1",
+        },
+    ]
+    assert details == original
+    assert merged is not details
+    assert merged[0] is not details[0]
+
+
+def test_openrouter_merge_reasoning_details_stops_at_opaque_or_malformed_items() -> None:
+    _ensure_provider_stubs()
+    from App.backend.providers.openrouter.llm import _merge_openrouter_reasoning_details
+
+    details: list[Any] = [
+        {"type": "reasoning.text", "text": "a"},
+        {"type": "reasoning.encrypted", "data": "opaque"},
+        {"type": "reasoning.text", "text": "b"},
+        {"type": "vendor.reasoning", "text": "unknown"},
+        {"type": "reasoning.text", "text": "c"},
+        {"type": "reasoning.text", "text": 123},
+        {"type": "reasoning.text", "text": "d"},
+        "malformed",
+        {"type": ["reasoning.text"], "text": "malformed type"},
+        {"id": "summary", "type": "reasoning.summary", "summary": "one"},
+        {"type": "reasoning.summary", "format": "openai-responses-v1"},
+        {"type": "reasoning.summary", "summary": "two"},
+    ]
+
+    assert _merge_openrouter_reasoning_details(details) == [
+        *details[:9],
+        {
+            "id": "summary",
+            "type": "reasoning.summary",
+            "summary": "onetwo",
+            "format": "openai-responses-v1",
+        },
+    ]
+
+
+def test_openrouter_read_reasoning_detail_merges_stream_fragments_before_storage() -> None:
+    _, _, _, _, OpenRouterProvider, _ = _load_providers()
+    provider = OpenRouterProvider({})
+    snapshot = _Snapshot(
+        content_parts=[{"type": "thinking", "text": "first\nsecond"}],
+        reasoning_details=[
+            {
+                "id": "summary-first",
+                "index": 0,
+                "type": "reasoning.summary",
+                "summary": "first\n",
+            },
+            {
+                "id": "summary-later",
+                "index": 0,
+                "type": "reasoning.summary",
+                "summary": "second",
+                "format": "openai-responses-v1",
+            },
+        ],
+    )
+    original_details = copy.deepcopy(snapshot.reasoning_details)
+
+    detail = provider.read_reasoning_detail(snapshot, {})
+
+    assert detail is not None
+    assert detail["meta"] == {
+        "provider": "openrouter",
+        "openrouter_reasoning_format": "openai-responses-v1",
+        "thinking_display": "reasoning",
+    }
+    assert detail["data"] == {
+        "reasoning": "first\nsecond",
+        "reasoning_details": [
+            {
+                "id": "summary-first",
+                "index": 0,
+                "type": "reasoning.summary",
+                "summary": "first\nsecond",
+                "format": "openai-responses-v1",
+            }
+        ],
+    }
+    assert snapshot.reasoning_details == original_details
+
+
+@pytest.mark.parametrize("details_key", ["reasoning_details", "details"])
+def test_openrouter_history_merges_before_reasoning_format_filter(details_key: str) -> None:
+    _, _, _, _, OpenRouterProvider, _ = _load_providers()
+    provider = OpenRouterProvider({})
+    reasoning_detail = {
+        "type": "openrouter",
+        "meta": {
+            "provider": "openrouter",
+            "openrouter_reasoning_format": "openai-responses-v1",
+        },
+        "data": {
+            details_key: [
+                {
+                    "id": "summary-first",
+                    "index": 5,
+                    "type": "reasoning.summary",
+                    "summary": "first",
+                },
+                {
+                    "id": "summary-later",
+                    "index": 0,
+                    "type": "reasoning.summary",
+                    "summary": "\nsecond",
+                    "format": "openai-responses-v1",
+                },
+            ]
+        },
+    }
+    messages = [
+        {
+            "role": "assistant",
+            "content_parts": [{"type": "content", "text": "answer"}],
+            "reasoning_detail": reasoning_detail,
+        }
+    ]
+    original_messages = copy.deepcopy(messages)
+
+    converted = provider._convert_messages(messages)
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning_details": [
+                {
+                    "id": "summary-first",
+                    "index": 5,
+                    "type": "reasoning.summary",
+                    "summary": "first\nsecond",
+                    "format": "openai-responses-v1",
+                }
+            ],
+        }
+    ]
+    assert messages == original_messages
 
 
 def test_nanogpt_read_reasoning_detail_preserves_text_details_and_display() -> None:

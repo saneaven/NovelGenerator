@@ -154,6 +154,101 @@ def test_convert_messages_filters_generic_reasoning_detail_history() -> None:
     ]
 
 
+def test_nanogpt_convert_messages_replays_stored_reasoning_text_and_details() -> None:
+    provider = NanoGPTProvider({})
+    details = [{"format": "native", "encrypted_content": "enc_123"}]
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "nanogpt",
+                    "meta": {"provider": "nanogpt"},
+                    "data": {
+                        "reasoning_text": "stored reasoning",
+                        "reasoning_details": details,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert converted == [
+        {
+            "role": "assistant",
+            "content": "answer",
+            "reasoning": "stored reasoning",
+            "reasoning_details": details,
+        }
+    ]
+
+
+def test_nanogpt_convert_messages_uses_reasoning_text_when_reasoning_is_empty() -> None:
+    provider = NanoGPTProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "meta": {"provider": "nanogpt"},
+                    "data": {
+                        "reasoning": "",
+                        "reasoning_text": "stored reasoning",
+                    },
+                },
+            }
+        ]
+    )
+
+    assert converted[0]["reasoning"] == "stored reasoning"
+
+
+def test_nanogpt_convert_messages_prefers_existing_reasoning_over_reasoning_text() -> None:
+    provider = NanoGPTProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "nanogpt",
+                    "data": {
+                        "reasoning": "canonical reasoning",
+                        "reasoning_text": "display reasoning",
+                    },
+                },
+            }
+        ]
+    )
+
+    assert converted[0]["reasoning"] == "canonical reasoning"
+
+
+def test_nanogpt_convert_messages_does_not_replay_foreign_reasoning_text() -> None:
+    provider = NanoGPTProvider({})
+
+    converted = provider._convert_messages(
+        [
+            {
+                "role": "assistant",
+                "content_parts": [{"type": "content", "text": "answer"}],
+                "reasoning_detail": {
+                    "type": "xai",
+                    "meta": {"provider": "xai"},
+                    "data": {"reasoning_text": "foreign reasoning"},
+                },
+            }
+        ]
+    )
+
+    assert converted == [{"role": "assistant", "content": "answer"}]
+
+
 def test_chunk_to_events_extracts_reasoning_from_delta_thoughts() -> None:
     events = AsyncOpenAIProvider._chunk_to_events(
         {
@@ -347,6 +442,75 @@ def test_nanogpt_final_aggregate_snapshot_prefers_final_message_text() -> None:
         "completion_tokens": 2,
         "total_tokens": 3,
     }
+
+
+def test_nanogpt_final_aggregate_snapshot_accepts_legacy_reasoning_content() -> None:
+    provider = NanoGPTProvider({})
+    raw_accumulated = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "answer",
+                    "reasoning_content": "legacy reasoning",
+                    "reasoning_details": [
+                        {
+                            "format": "native",
+                            "encrypted_content": "enc_123",
+                        }
+                    ],
+                },
+                "finish_reason": "stop",
+            }
+        ]
+    }
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(raw_accumulated, "test-model")
+
+    assert snapshot is not None
+    assert snapshot.content_parts == [
+        {"type": "content", "text": "answer"},
+        {"type": "thinking", "text": "legacy reasoning"},
+    ]
+    assert snapshot.reasoning_details == [
+        {"type": "reasoning.text", "text": "legacy reasoning"},
+        {"format": "native", "encrypted_content": "enc_123"},
+    ]
+    assert snapshot.raw_native_response == raw_accumulated
+    assert "reasoning" not in raw_accumulated["choices"][0]["message"]
+
+    stored_detail = provider.read_reasoning_detail(snapshot, {})
+    assert stored_detail is not None
+    assert stored_detail["data"]["reasoning_text"] == "legacy reasoning"
+
+
+def test_nanogpt_final_aggregate_snapshot_prefers_reasoning_over_legacy_alias() -> None:
+    provider = NanoGPTProvider({})
+
+    snapshot = provider._final_snapshot_from_raw_accumulated(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "answer",
+                        "reasoning": "canonical reasoning",
+                        "reasoning_content": "legacy reasoning",
+                    }
+                }
+            ]
+        },
+        "test-model",
+    )
+
+    assert snapshot is not None
+    assert snapshot.content_parts == [
+        {"type": "content", "text": "answer"},
+        {"type": "thinking", "text": "canonical reasoning"},
+    ]
+    assert snapshot.reasoning_details == [
+        {"type": "reasoning.text", "text": "canonical reasoning"},
+    ]
 
 
 def test_nanogpt_final_aggregate_snapshot_preserves_tool_calls() -> None:

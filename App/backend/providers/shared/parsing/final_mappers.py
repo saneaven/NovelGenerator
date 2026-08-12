@@ -173,6 +173,8 @@ def map_chat_completion_to_snapshot(
                 _append_part(content_parts, "content", part.get("text"))
 
     reasoning_text = message.get("reasoning")
+    if not isinstance(reasoning_text, str) or not reasoning_text:
+        reasoning_text = message.get("reasoning_content")
     if isinstance(reasoning_text, str) and reasoning_text:
         _append_part(content_parts, "thinking", reasoning_text)
         reasoning_details.append({"type": "reasoning.text", "text": reasoning_text})

@@ -177,23 +177,23 @@ class NeuralwattProvider(AsyncOpenAIProvider):
         if not isinstance(delta, dict):
             return chunk, []
 
-        reasoning_chunks: list[str] = []
+        reasoning_text: str | None = None
         reasoning_content = delta.get("reasoning_content")
-        if isinstance(reasoning_content, str):
-            reasoning_chunks.append(reasoning_content)
+        if isinstance(reasoning_content, str) and reasoning_content:
+            reasoning_text = reasoning_content
+        else:
+            reasoning = delta.get("reasoning")
+            if isinstance(reasoning, str) and reasoning:
+                reasoning_text = reasoning
+            elif isinstance(reasoning, dict):
+                object_text = reasoning.get("text")
+                if isinstance(object_text, str) and object_text:
+                    reasoning_text = object_text
 
-        reasoning = delta.get("reasoning")
-        if isinstance(reasoning, str):
-            reasoning_chunks.append(reasoning)
-        elif isinstance(reasoning, dict):
-            reasoning_text = reasoning.get("text")
-            if isinstance(reasoning_text, str):
-                reasoning_chunks.append(reasoning_text)
-
-        if reasoning_chunks:
+        if reasoning_text is not None:
             thinking = delta.setdefault("thinking", {})
             if isinstance(thinking, dict):
-                thinking["text"] = "".join(reasoning_chunks)
+                thinking["text"] = reasoning_text
 
         details = delta.get("reasoning_details")
         if not isinstance(details, list):
