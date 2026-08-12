@@ -35,6 +35,23 @@ def has_effective_delta(payload: DeltaPayload) -> bool:
     )
 
 
+def final_snapshot_has_output(snapshot: FinalSnapshot) -> bool:
+    """Return True if *snapshot* carries anything the run can act on.
+
+    Thinking parts alone do not count: a stream that only produced reasoning
+    and then ended is a truncated turn, not a completed one.
+    """
+    if snapshot.tool_calls:
+        return True
+    for part in snapshot.content_parts or []:
+        if not isinstance(part, dict) or part.get("type") != "content":
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text.strip():
+            return True
+    return False
+
+
 def normalize_final_snapshot_content(snapshot: FinalSnapshot) -> FinalSnapshot:
     parts = snapshot.content_parts or []
     if not parts:

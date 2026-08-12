@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from App.backend.providers.shared.parsing.content_normalization import (
     StreamContentNormalizer,
+    final_snapshot_has_output,
     has_effective_delta,
     normalize_final_snapshot_content,
 )
-from App.backend.providers.shared.contracts import DeltaPayload, FinalSnapshot, extract_native_tool_calls_from_snapshot
+from App.backend.providers.shared.contracts import (
+    DeltaPayload,
+    FinalSnapshot,
+    FinalToolCall,
+    extract_native_tool_calls_from_snapshot,
+)
 from App.backend.providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 
 
@@ -94,6 +100,28 @@ def test_fallback_snapshot_assembler_finalizes_whitespace_only_stream_to_empty_c
 
     assert snapshot.content_parts == []
     assert snapshot.finish_reason == "stop"
+
+
+def test_final_snapshot_has_output_rejects_thinking_only_stream() -> None:
+    assembler = FallbackSnapshotAssembler(provider="test", model="test-model")
+
+    assembler.apply_delta(DeltaPayload(thinking_delta="reasoning about it"))
+
+    snapshot = normalize_final_snapshot_content(assembler.finalize_or_raise())
+
+    assert snapshot.content_parts == [{"type": "thinking", "text": "reasoning about it"}]
+    assert final_snapshot_has_output(snapshot) is False
+
+
+def test_final_snapshot_has_output_accepts_content_or_tool_calls() -> None:
+    assert final_snapshot_has_output(_snapshot([{"type": "content", "text": "hi"}])) is True
+    assert final_snapshot_has_output(_snapshot([{"type": "content", "text": "   "}])) is False
+
+    with_tool_call = _snapshot([{"type": "thinking", "text": "trace"}])
+    with_tool_call.tool_calls = [
+        FinalToolCall(id="call_1", tool_name="do_it", raw_arguments="{}", arguments={})
+    ]
+    assert final_snapshot_has_output(with_tool_call) is True
 
 
 def test_fallback_snapshot_assembler_reuses_id_key_for_later_index_only_delta() -> None:
