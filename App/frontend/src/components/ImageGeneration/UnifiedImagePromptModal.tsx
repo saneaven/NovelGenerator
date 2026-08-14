@@ -101,7 +101,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     setSelectedIds: setSelectedContextIds,
   } = useSharedObjectPickerSelection({
     projectId: contextSelectionProjectId,
-    bucket: 'all-context',
+    bucket: 'image-prompt-context',
     availableIds: availableContextIds,
   });
 

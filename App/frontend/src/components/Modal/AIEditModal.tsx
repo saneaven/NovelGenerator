@@ -137,7 +137,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     setSelectedIds: setSelectedContextIds,
   } = useSharedObjectPickerSelection({
     projectId,
-    bucket: 'all-context',
+    bucket: 'ai-edit-context',
     availableIds: availableContextIds,
     excludedIds,
   });

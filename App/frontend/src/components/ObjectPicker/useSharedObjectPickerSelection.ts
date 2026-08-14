@@ -25,7 +25,8 @@ export interface UseSharedObjectPickerSelectionResult {
 
 /**
  * A controlled-ObjectPicker adapter backed by the persisted shared selection
- * store. The signed-in user and project form the isolation boundary.
+ * store. The signed-in user, project, and explicit bucket form the isolation
+ * boundary.
  */
 export function useSharedObjectPickerSelection({
   projectId,
@@ -69,7 +70,7 @@ export function useSharedObjectPickerSelection({
   return { selectedIds, setSelectedIds };
 }
 
-/** Selectable objects shared by every ObjectPicker in all-context mode. */
+/** Selectable object IDs exposed by ObjectPicker's `all` mode. */
 export function getAllModeSelectableIds(objects: readonly UnifiedObject[]): string[] {
   const ids = new Set<string>();
 

@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type ObjectPickerSelectionBucket =
-  | 'all-context'
+  | 'agent-context'
+  | 'ai-edit-context'
+  | 'image-prompt-context'
   | 'translation-target'
   | 'translation-context';
 
@@ -173,9 +175,16 @@ export const useObjectPickerSelectionStore = create<ObjectPickerSelectionStore>(
     }),
     {
       name: 'object-picker-selections',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ selections: state.selections }),
+      migrate: (persistedState, version) => {
+        if (version === 1) {
+          return { selections: {} };
+        }
+
+        return persistedState as Pick<ObjectPickerSelectionStore, 'selections'>;
+      },
     },
   ),
 );

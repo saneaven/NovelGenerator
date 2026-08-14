@@ -471,7 +471,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ projectId, surface, disp
     setSelectedIds: setSelectedContextIds,
   } = useSharedObjectPickerSelection({
     projectId,
-    bucket: 'all-context',
+    bucket: 'agent-context',
     availableIds: availableContextIds,
   });
   const totalObjectCount = availableContextIds.length;

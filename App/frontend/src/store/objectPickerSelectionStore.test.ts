@@ -25,13 +25,13 @@ describe('objectPickerSelectionStore', () => {
     storageValues.clear();
   });
 
-  it('starts empty and persists version 1 under the shared storage key', () => {
+  it('starts empty and persists version 2 under the shared storage key', () => {
     expect(useObjectPickerSelectionStore.getState().selections).toEqual({});
 
     useObjectPickerSelectionStore.getState().replaceSelectionSlice({
       userId: 'user-1',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'agent-context',
       availableIds: ['object-1'],
       nextSelectedIds: ['object-1'],
     });
@@ -41,25 +41,25 @@ describe('objectPickerSelectionStore', () => {
         selections: {
           'user-1': {
             'project-1': {
-              'all-context': ['object-1'],
+              'agent-context': ['object-1'],
             },
           },
         },
       },
-      version: 1,
+      version: 2,
     });
   });
 
-  it('hydrates persisted selections and isolates users, projects, and buckets', async () => {
+  it('resets all persisted selections when migrating from version 1', async () => {
     storageValues.set('object-picker-selections', JSON.stringify({
       state: {
         selections: {
           'user-1': {
-            'project-1': { 'all-context': ['all-1'] },
-            'project-2': { 'translation-target': ['target-2'] },
-          },
-          'user-2': {
-            'project-1': { 'translation-context': ['context-1'] },
+            'project-1': {
+              'all-context': ['all-1'],
+              'translation-target': ['target-1'],
+              'translation-context': ['context-1'],
+            },
           },
         },
       },
@@ -68,9 +68,34 @@ describe('objectPickerSelectionStore', () => {
 
     await useObjectPickerSelectionStore.persist.rehydrate();
 
+    expect(useObjectPickerSelectionStore.getState().selections).toEqual({});
+    expect(JSON.parse(storageValues.get('object-picker-selections') ?? '{}')).toEqual({
+      state: { selections: {} },
+      version: 2,
+    });
+  });
+
+  it('hydrates version 2 selections and isolates users and projects', async () => {
+    storageValues.set('object-picker-selections', JSON.stringify({
+      state: {
+        selections: {
+          'user-1': {
+            'project-1': { 'agent-context': ['agent-1'] },
+            'project-2': { 'translation-target': ['target-2'] },
+          },
+          'user-2': {
+            'project-1': { 'translation-context': ['context-1'] },
+          },
+        },
+      },
+      version: 2,
+    }));
+
+    await useObjectPickerSelectionStore.persist.rehydrate();
+
     expect(useObjectPickerSelectionStore.getState().selections).toEqual({
       'user-1': {
-        'project-1': { 'all-context': ['all-1'] },
+        'project-1': { 'agent-context': ['agent-1'] },
         'project-2': { 'translation-target': ['target-2'] },
       },
       'user-2': {
@@ -79,12 +104,56 @@ describe('objectPickerSelectionStore', () => {
     });
   });
 
+  it('isolates and restores every bucket within the same user and project', async () => {
+    const action = useObjectPickerSelectionStore.getState().replaceSelectionSlice;
+    const selections = [
+      ['agent-context', 'agent-1'],
+      ['ai-edit-context', 'edit-1'],
+      ['image-prompt-context', 'image-1'],
+      ['translation-target', 'target-1'],
+      ['translation-context', 'context-1'],
+    ] as const;
+
+    selections.forEach(([bucket, objectId]) => {
+      action({
+        userId: 'user-1',
+        projectId: 'project-1',
+        bucket,
+        availableIds: [objectId],
+        nextSelectedIds: [objectId],
+      });
+    });
+
+    const expectedBuckets = {
+      'agent-context': ['agent-1'],
+      'ai-edit-context': ['edit-1'],
+      'image-prompt-context': ['image-1'],
+      'translation-target': ['target-1'],
+      'translation-context': ['context-1'],
+    };
+    expect(
+      useObjectPickerSelectionStore.getState().selections['user-1']['project-1'],
+    ).toEqual(expectedBuckets);
+
+    const persisted = storageValues.get('object-picker-selections');
+    expect(persisted).toBeDefined();
+    if (!persisted) throw new Error('Expected selections to be persisted.');
+    useObjectPickerSelectionStore.setState({ selections: {} });
+    storageValues.set('object-picker-selections', persisted);
+
+    await useObjectPickerSelectionStore.persist.rehydrate();
+
+    expect(
+      useObjectPickerSelectionStore.getState().selections['user-1']['project-1'],
+    ).toEqual(expectedBuckets);
+  });
+
   it('replaces only the editable slice and evaluates functional updates atomically', () => {
     useObjectPickerSelectionStore.setState({
       selections: {
         'user-1': {
           'project-1': {
-            'all-context': ['visible-old', 'language-hidden', 'edit-target'],
+            'ai-edit-context': ['visible-old', 'language-hidden', 'edit-target'],
           },
         },
       },
@@ -93,7 +162,7 @@ describe('objectPickerSelectionStore', () => {
     useObjectPickerSelectionStore.getState().replaceSelectionSlice({
       userId: 'user-1',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'ai-edit-context',
       availableIds: ['visible-old', 'visible-new', 'edit-target'],
       excludedIds: ['edit-target'],
       nextSelectedIds: (current) => [...current, 'visible-new'],
@@ -101,13 +170,13 @@ describe('objectPickerSelectionStore', () => {
 
     expect(
       useObjectPickerSelectionStore.getState()
-        .selections['user-1']['project-1']['all-context'],
+        .selections['user-1']['project-1']['ai-edit-context'],
     ).toEqual(['language-hidden', 'edit-target', 'visible-old', 'visible-new']);
 
     useObjectPickerSelectionStore.getState().replaceSelectionSlice({
       userId: 'user-1',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'ai-edit-context',
       availableIds: ['visible-old', 'visible-new', 'edit-target'],
       excludedIds: ['edit-target'],
       nextSelectedIds: ['visible-new'],
@@ -115,7 +184,7 @@ describe('objectPickerSelectionStore', () => {
 
     expect(
       useObjectPickerSelectionStore.getState()
-        .selections['user-1']['project-1']['all-context'],
+        .selections['user-1']['project-1']['ai-edit-context'],
     ).toEqual(['language-hidden', 'edit-target', 'visible-new']);
   });
 
@@ -123,11 +192,11 @@ describe('objectPickerSelectionStore', () => {
     useObjectPickerSelectionStore.setState({
       selections: {
         'user-1': {
-          'project-1': { 'all-context': ['one'] },
-          'project-2': { 'all-context': ['two'] },
+          'project-1': { 'agent-context': ['one'] },
+          'project-2': { 'agent-context': ['two'] },
         },
         'user-2': {
-          'project-1': { 'all-context': ['other-user'] },
+          'project-1': { 'agent-context': ['other-user'] },
         },
       },
     });
@@ -136,10 +205,10 @@ describe('objectPickerSelectionStore', () => {
 
     expect(useObjectPickerSelectionStore.getState().selections).toEqual({
       'user-1': {
-        'project-2': { 'all-context': ['two'] },
+        'project-2': { 'agent-context': ['two'] },
       },
       'user-2': {
-        'project-1': { 'all-context': ['other-user'] },
+        'project-1': { 'agent-context': ['other-user'] },
       },
     });
   });
@@ -149,14 +218,14 @@ describe('objectPickerSelectionStore', () => {
     action({
       userId: '',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'agent-context',
       availableIds: ['one'],
       nextSelectedIds: ['one'],
     });
     action({
       userId: 'user-1',
       projectId: '',
-      bucket: 'all-context',
+      bucket: 'agent-context',
       availableIds: ['one'],
       nextSelectedIds: ['one'],
     });
@@ -169,25 +238,25 @@ describe('objectPickerSelectionStore', () => {
     action({
       userId: 'user-1',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'agent-context',
       availableIds: ['one'],
       nextSelectedIds: 'one',
     });
     expect(
       useObjectPickerSelectionStore.getState()
-        .selections['user-1']['project-1']['all-context'],
+        .selections['user-1']['project-1']['agent-context'],
     ).toEqual(['one']);
 
     action({
       userId: 'user-1',
       projectId: 'project-1',
-      bucket: 'all-context',
+      bucket: 'agent-context',
       availableIds: ['one'],
       nextSelectedIds: '',
     });
     expect(
       useObjectPickerSelectionStore.getState()
-        .selections['user-1']['project-1']['all-context'],
+        .selections['user-1']['project-1']['agent-context'],
     ).toEqual([]);
   });
 });
