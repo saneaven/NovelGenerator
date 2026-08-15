@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from ..models.db_models import UserSettings
+from ..models.db_models import SubAgentDefinitionModel, UserSettings
 from .search_memory_settings import (
     make_initial_search_memory_settings,
     resolve_memory_settings,
@@ -15,6 +15,7 @@ from .search_memory_settings import (
 )
 from .task_config_settings import (
     make_initial_task_config_settings,
+    normalize_and_validate_task_config,
     resolve_task_config,
     validate_task_config_settings,
 )
@@ -69,6 +70,21 @@ class MemorySettings:
     retrieval: RetrievalSettings
 
 
+def _task_config_from_dict(cfg: dict[str, Any]) -> TaskConfig:
+    provider_preference = cfg.get("provider_preference")
+    advanced = cfg.get("advanced")
+    return TaskConfig(
+        provider=str(cfg["provider"]),
+        model=str(cfg["model"]),
+        temperature=float(cfg["temperature"]),
+        provider_preference=provider_preference if isinstance(provider_preference, dict) else None,
+        max_output_tokens=cfg.get("max_output_tokens"),
+        context_window_tokens=cfg.get("context_window_tokens"),
+        supports_image_input=bool(cfg.get("supports_image_input", True)),
+        advanced=advanced if isinstance(advanced, dict) else {},
+    )
+
+
 class SettingsService:
     def create_settings_row(self, *, user_id: UUID, demo_mode_enabled: bool = False) -> UserSettings:
         return UserSettings(
@@ -99,26 +115,29 @@ class SettingsService:
             raise ValueError("Stored task_config_settings must be an object")
         return validate_task_config_settings(raw)
 
-    def get_task_config(self, db: Session, user_id: UUID, task_type: str) -> TaskConfig:
+    def get_task_config(
+        self,
+        db: Session,
+        user_id: UUID,
+        task_type: str,
+        *,
+        sub_agent: SubAgentDefinitionModel | None = None,
+    ) -> TaskConfig:
         settings = self._get_settings(db, user_id)
         if bool(getattr(settings, "demo_mode_enabled", False)):
             from .demo_runtime import build_demo_task_config
 
             return build_demo_task_config()
 
-        cfg = resolve_task_config(self.get_task_config_settings(db, user_id), task_type)
-        provider_preference = cfg.get("provider_preference")
+        if sub_agent is not None and bool(sub_agent.use_custom_llm_config):
+            raw_override = sub_agent.llm_config_override
+            if not isinstance(raw_override, dict) or not raw_override:
+                raise ValueError(
+                    f"Sub agent '{sub_agent.agent_name}' enables use_custom_llm_config but has no llm_config_override"
+                )
+            return _task_config_from_dict(normalize_and_validate_task_config(raw_override))
 
-        return TaskConfig(
-            provider=str(cfg["provider"]),
-            model=str(cfg["model"]),
-            temperature=float(cfg["temperature"]),
-            provider_preference=provider_preference if isinstance(provider_preference, dict) else None,
-            max_output_tokens=cfg.get("max_output_tokens"),
-            context_window_tokens=cfg.get("context_window_tokens"),
-            supports_image_input=bool(cfg.get("supports_image_input", True)),
-            advanced=cfg.get("advanced") if isinstance(cfg.get("advanced"), dict) else {},
-        )
+        return _task_config_from_dict(resolve_task_config(self.get_task_config_settings(db, user_id), task_type))
 
     def get_active_preset_id(self, db: Session, user_id: UUID) -> UUID | None:
         settings = self._get_settings(db, user_id)

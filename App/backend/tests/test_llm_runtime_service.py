@@ -78,3 +78,28 @@ def test_get_llm_runtime_uses_user_settings_when_demo_is_disabled(monkeypatch) -
         "api_key": "user-key",
         "custom_kind": "claude",
     }
+
+
+def test_get_llm_runtime_forwards_sub_agent_to_task_config(monkeypatch) -> None:
+    sub_agent = SimpleNamespace(agent_name="researcher", use_custom_llm_config=True, llm_config_override={})
+    seen: dict[str, object] = {}
+
+    def _get_task_config(*_args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(provider="openai", advanced={})
+
+    monkeypatch.setattr(
+        runtime_service.settings_service,
+        "get_or_create_settings",
+        lambda *_args, **_kwargs: SimpleNamespace(demo_mode_enabled=False),
+    )
+    monkeypatch.setattr(runtime_service.settings_service, "get_task_config", _get_task_config)
+    monkeypatch.setattr(
+        runtime_service.credential_service,
+        "get_provider_config",
+        lambda *_args, **_kwargs: {"api_key": "user-key"},
+    )
+
+    runtime_service.get_llm_runtime(object(), user_id=uuid4(), task_type="subAgent", sub_agent=sub_agent)
+
+    assert seen["sub_agent"] is sub_agent

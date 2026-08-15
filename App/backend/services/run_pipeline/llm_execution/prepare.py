@@ -159,8 +159,15 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     if preset_id is None:
         raise RuntimeError("No active preset selected")
 
+    parent = resolve_parent(db, thread)
+
     task_type = scenario_bundle.task_type
-    runtime = get_llm_runtime(db, user_id=run.user_id, task_type=task_type)
+    runtime = get_llm_runtime(
+        db,
+        user_id=run.user_id,
+        task_type=task_type,
+        sub_agent=parent.sub_agent_definition,
+    )
     task_config = runtime.task_config
     advanced = task_config.advanced if isinstance(task_config.advanced, dict) else {}
     tokenizer_override_raw = advanced.get("tokenizer_override")
@@ -168,7 +175,6 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     variant_hint_raw = advanced.get("custom_kind")
     variant_hint = variant_hint_raw if isinstance(variant_hint_raw, str) else None
 
-    parent = resolve_parent(db, thread)
     output_mode = resolve_output_mode(
         journey_kind=parent.journey_kind,
         payload=input_payload,

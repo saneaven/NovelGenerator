@@ -93,7 +93,9 @@ fake_settings.settings_service = SimpleNamespace(
 sys.modules["App.backend.services.settings_service"] = fake_settings
 
 fake_parent_runtime = types.ModuleType("App.backend.services.thread_parent_runtime_service")
-fake_parent_runtime.resolve_parent = lambda *_args, **_kwargs: SimpleNamespace(journey_kind=None)
+fake_parent_runtime.resolve_parent = lambda *_args, **_kwargs: SimpleNamespace(
+    journey_kind=None, sub_agent_definition=None
+)
 sys.modules["App.backend.services.thread_parent_runtime_service"] = fake_parent_runtime
 
 fake_token_count = types.ModuleType("App.backend.services.token_count_service")
@@ -262,7 +264,11 @@ def test_prepare_execution_emits_summarizing_stage_per_archive_iteration(monkeyp
         "get_llm_runtime",
         lambda *_args, **_kwargs: SimpleNamespace(task_config=task_config, provider_config={}),
     )
-    monkeypatch.setattr(prepare_module, "resolve_parent", lambda *_args, **_kwargs: SimpleNamespace(journey_kind=None))
+    monkeypatch.setattr(
+        prepare_module,
+        "resolve_parent",
+        lambda *_args, **_kwargs: SimpleNamespace(journey_kind=None, sub_agent_definition=None),
+    )
     monkeypatch.setattr(prepare_module, "resolve_output_mode", lambda *_args, **_kwargs: "text")
     monkeypatch.setattr(prepare_module.mcp_sync_service, "sync_stale_tool_servers", _sync_stale_tool_servers)
     monkeypatch.setattr(prepare_module.tool_engine, "build_offer_for_run", lambda *_args, **_kwargs: "tool-offer")

@@ -57,6 +57,18 @@ def _validate_effective_task_config_semantics(config: dict[str, Any]) -> None:
         raise ValueError(f"Provider '{provider}' does not support llm")
 
 
+def normalize_and_validate_task_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a standalone effective task config and reject providers that cannot run llm."""
+    try:
+        TaskAIConfig.model_validate(config)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+    normalized = normalize_effective_task_config(config)
+    _validate_effective_task_config_semantics(normalized)
+    return normalized
+
+
 def validate_task_config_settings(task_config_settings: dict[str, Any]) -> dict[str, Any]:
     try:
         TaskConfigSettings.model_validate(task_config_settings)
@@ -104,13 +116,9 @@ def normalize_task_config_settings(task_config_settings: dict[str, Any]) -> dict
             raise ValueError(f"Override for {task_type} must be an object")
 
         try:
-            TaskAIConfig.model_validate(override)
-        except ValidationError as exc:
+            normalized_overrides[task_type] = normalize_and_validate_task_config(override)
+        except ValueError as exc:
             raise ValueError(f"Invalid override for {task_type}: {exc}") from exc
-
-        normalized_override = normalize_effective_task_config(override)
-        _validate_effective_task_config_semantics(normalized_override)
-        normalized_overrides[task_type] = normalized_override
 
     return {
         "general": normalized_general,

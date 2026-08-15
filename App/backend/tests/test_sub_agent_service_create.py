@@ -5,6 +5,7 @@ import types
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import declarative_base
 
 
@@ -25,11 +26,37 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.models.db_models import PromptScenarioVersion, SubAgentDefinitionModel
+from App.backend.schemas.settings import TaskAIConfig
 from App.backend.schemas.sub_agents import SubAgentCreate, SubAgentPromptTemplates, SubAgentToolGrant
 from App.backend.services.sub_agent_service import (
     DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE,
     SubAgentService,
 )
+
+
+def _llm_config(provider: str) -> TaskAIConfig:
+    return TaskAIConfig(
+        provider=provider,
+        model="some-model",
+        temperature=0.5,
+        context_window_tokens=32000,
+        advanced={"thinking_mode": "off"},
+    )
+
+
+def _create_payload(**overrides: object) -> SubAgentCreate:
+    payload: dict[str, object] = {
+        "agent_name": "draft_writer",
+        "display_name": "Draft Writer",
+        "description": "Writes the first pass",
+        "enabled": True,
+        "allowed_invocation_modes": ["agentMode", "subAgent"],
+        "tool_grants": [],
+        "allowed_sub_agent_ids": [],
+        "allowed_mcp_server_ids": [],
+    }
+    payload.update(overrides)
+    return SubAgentCreate(**payload)
 
 
 class FakeQuery:
@@ -101,3 +128,39 @@ def test_create_sub_agent_uses_prompt_templates_from_payload() -> None:
     assert created_scenario.scenario["blocks"][0]["rangeMapping"]["assistant_template"] == DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE
     assert session.commits == 1
     assert session.refreshed == [created_model]
+
+
+def test_create_sub_agent_normalizes_llm_config_override() -> None:
+    session = FakeSession()
+
+    SubAgentService.create_sub_agent(
+        session,
+        user_id=uuid4(),
+        preset_id=uuid4(),
+        data=_create_payload(
+            use_custom_llm_config=True,
+            llm_config_override=_llm_config("openai"),
+        ),
+    )
+
+    created_model = next(row for row in session.added if isinstance(row, SubAgentDefinitionModel))
+
+    assert created_model.use_custom_llm_config is True
+    assert created_model.llm_config_override["provider"] == "openai"
+    assert created_model.llm_config_override["model"] == "some-model"
+    assert isinstance(created_model.llm_config_override["advanced"], dict)
+
+
+def test_create_sub_agent_rejects_llm_config_override_for_non_llm_provider() -> None:
+    session = FakeSession()
+
+    with pytest.raises(ValueError, match="llm_config_override"):
+        SubAgentService.create_sub_agent(
+            session,
+            user_id=uuid4(),
+            preset_id=uuid4(),
+            data=_create_payload(
+                use_custom_llm_config=True,
+                llm_config_override=_llm_config("novelai"),
+            ),
+        )

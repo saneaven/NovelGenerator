@@ -360,8 +360,10 @@ class ScenarioManager:
         input_text: str,
         input_payload: dict[str, Any],
     ) -> dict[str, Any]:
-        task_cfg = settings_service.get_task_config(db, user_id, task_type)
         parent = resolve_parent(db, thread)
+        task_cfg = settings_service.get_task_config(
+            db, user_id, task_type, sub_agent=parent.sub_agent_definition
+        )
 
         payload = input_payload
         language = str(run.language or "English")

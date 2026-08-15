@@ -25,6 +25,7 @@ from ..schemas.presets import (
 )
 from .folder_service import FolderService
 from .mcp import mcp_server_service
+from .sub_agent_service import normalize_llm_config_override
 from .default_preset_seed import NormalizedPresetSeed, load_default_preset_seed, normalize_preset_seed
 
 
@@ -254,11 +255,15 @@ class PresetService:
 
         id_map = {item.id: uuid.uuid4() for item in seed.sub_agents}
         for item in seed.sub_agents:
-            llm_config_override = (
+            llm_config_override = normalize_llm_config_override(
                 item.llm_config_override.model_dump(exclude_none=True)
                 if item.llm_config_override is not None
                 else None
             )
+            if item.use_custom_llm_config and not llm_config_override:
+                raise ValueError(
+                    f"Sub agent '{item.agent_name}' enables use_custom_llm_config but has no llm_config_override"
+                )
             mapped_allowed = [str(id_map[ref]) for ref in item.allowed_sub_agent_ids if ref in id_map]
             mapped_mcp_allowed = [str(mcp_id_map[ref]) for ref in item.allowed_mcp_server_ids if ref in mcp_id_map]
 

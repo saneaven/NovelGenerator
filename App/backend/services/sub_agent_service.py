@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..models.db_models import PromptScenarioVersion, SubAgentDefinitionModel, Thread
 from ..schemas.sub_agents import SubAgentCreate, SubAgentDefinition, SubAgentToolGrant, SubAgentUpdate
+from .task_config_settings import normalize_and_validate_task_config
 from .tool_engine.grant_catalog import TOOL_GRANT_CATALOG, ordered_feature_keys
 
 
@@ -35,6 +36,18 @@ Do not summarize unless explicitly requested."""
 
 DEFAULT_SUB_AGENT_USER_PROMPT = "{{input.agentMessage}}"
 DEFAULT_SUB_AGENT_ASSISTANT_TEMPLATE = "{{input.subAgentMessage}}"
+
+
+def normalize_llm_config_override(config: object) -> dict[str, object] | None:
+    """Normalize a Sub Agent LLM override with the same rules as the global task configs."""
+    if config is None:
+        return None
+    if not isinstance(config, dict):
+        raise ValueError("llm_config_override must be an object")
+    try:
+        return normalize_and_validate_task_config(config)
+    except ValueError as exc:
+        raise ValueError(f"Invalid llm_config_override: {exc}") from exc
 
 
 def _resolve_prompt_template_content(
@@ -206,7 +219,7 @@ class SubAgentService:
         now = datetime.utcnow()
 
         use_custom_llm_config = bool(getattr(data, "use_custom_llm_config", False))
-        llm_config_override = (
+        llm_config_override = normalize_llm_config_override(
             data.llm_config_override.model_dump(exclude_none=True) if data.llm_config_override is not None else None
         )
         if use_custom_llm_config and not llm_config_override:
@@ -365,8 +378,13 @@ class SubAgentService:
             model.allowed_mcp_server_ids = [str(x) for x in data.allowed_mcp_server_ids]
         if data.use_custom_llm_config is not None:
             model.use_custom_llm_config = bool(data.use_custom_llm_config)
-        if data.llm_config_override is not None:
-            model.llm_config_override = data.llm_config_override.model_dump(exclude_none=True)
+        # Explicit null clears the override; an absent field leaves it untouched.
+        if "llm_config_override" in data.model_fields_set:
+            model.llm_config_override = normalize_llm_config_override(
+                data.llm_config_override.model_dump(exclude_none=True)
+                if data.llm_config_override is not None
+                else None
+            )
 
         if model.use_custom_llm_config and not model.llm_config_override:
             raise ValueError("llm_config_override is required when use_custom_llm_config is true")
