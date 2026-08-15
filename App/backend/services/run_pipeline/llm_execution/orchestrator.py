@@ -61,6 +61,10 @@ class LLMExecutionOrchestrator:
                 request_id=request_id,
             )
 
+            # Setup is done and the placeholder is committed — hand the slot back
+            # so the next run can prepare while this one streams.
+            request.setup_slot.release()
+
             stream_result = await execute_stream(
                 request,
                 callbacks,
@@ -68,13 +72,19 @@ class LLMExecutionOrchestrator:
                 assistant_message=assistant_message,
                 request_id=request_id,
             )
-            persisted_result = await persist_execution(
-                request,
-                callbacks,
-                prepared,
-                stream_result,
-                assistant_message=assistant_message,
-            )
+            # The persist tail is synchronous JSON assembly plus a commit; gate it
+            # too so runs finishing at the same time don't pile onto the loop.
+            await request.setup_slot.acquire()
+            try:
+                persisted_result = await persist_execution(
+                    request,
+                    callbacks,
+                    prepared,
+                    stream_result,
+                    assistant_message=assistant_message,
+                )
+            finally:
+                request.setup_slot.release()
             await events.emit_terminal_events(
                 callbacks,
                 db=request.db,
@@ -86,6 +96,7 @@ class LLMExecutionOrchestrator:
                 tool_call_summaries=persisted_result.tool_call_summaries,
             )
         finally:
+            request.setup_slot.release()
             if prepared is not None:
                 try:
                     await prepared.provider.aclose()

@@ -8,6 +8,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 import httpx
 
 from ..shared.async_openai_provider import AsyncOpenAIProvider
+from ..shared.errors import provider_error_fields
 from ..shared.contracts import MetaPayload, ProviderErrorPayload, ProviderEvent
 from ..shared.parsing.final_mappers import map_chat_completion_to_snapshot
 from ...utils.outbound_http import filter_additional_body, merge_user_overrides
@@ -515,7 +516,11 @@ class NanoGPTProvider(AsyncOpenAIProvider):
             yield ProviderEvent(kind="error", error=ProviderErrorPayload(message=message or str(exc), status=exc.response.status_code))
             return
         except Exception as exc:  # noqa: BLE001
-            yield ProviderEvent(kind="error", error=ProviderErrorPayload(message=str(exc)))
+            message, status, retryable = provider_error_fields(exc)
+            yield ProviderEvent(
+                kind="error",
+                error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
+            )
             return
 
         try:
@@ -533,7 +538,11 @@ class NanoGPTProvider(AsyncOpenAIProvider):
                     yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
                     return
         except Exception as exc:  # noqa: BLE001
-            yield ProviderEvent(kind="error", error=ProviderErrorPayload(message=str(exc)))
+            message, status, retryable = provider_error_fields(exc)
+            yield ProviderEvent(
+                kind="error",
+                error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
+            )
             return
 
         final_snapshot = self._final_snapshot_from_raw_accumulated(raw_accumulated, model)

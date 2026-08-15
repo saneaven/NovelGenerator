@@ -14,6 +14,7 @@ from ....providers.shared.contracts import (
     merge_meta_payload,
     patch_snapshot_with_meta,
 )
+from ....providers.shared.errors import describe_exception
 from ....providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from ....providers.shared.transport.stream_retry import stream_with_retry
 from . import events
@@ -151,15 +152,19 @@ async def execute_stream(
                 native_final = event.final_native
             elif event.kind == "error":
                 err: ProviderErrorPayload = event.error or ProviderErrorPayload(message="Unknown provider error", status=None)
+                # Keep the HTTP status: 401 and 503 are not the same problem.
+                message = err.message or "Unknown provider error"
+                if err.status is not None:
+                    message = f"[{err.status}] {message}"
                 session.fail(
-                    err.message,
+                    message,
                     content_parts=assembler._content_parts,
                     merged_meta=merged_meta,
                 )
-                raise RuntimeError(err.message)
+                raise RuntimeError(message)
     except Exception as exc:
         session.fail(
-            str(exc),
+            describe_exception(exc),
             content_parts=assembler._content_parts,
             merged_meta=merged_meta,
         )
@@ -185,7 +190,7 @@ async def execute_stream(
             )
     except Exception as exc:
         session.fail(
-            str(exc),
+            describe_exception(exc),
             content_parts=assembler._content_parts,
             merged_meta=merged_meta,
         )

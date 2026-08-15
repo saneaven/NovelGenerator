@@ -283,8 +283,14 @@ export const threadService = {
   async listMessages(threadId: string): Promise<ThreadMessagesResponse> {
     const raw = await apiClient.get<Record<string, unknown>>(`/api/v1/threads/${threadId}/messages`);
     const latestRunRaw = raw.latest_run as Record<string, unknown> | null | undefined;
+    const thread = toThreadInfo((raw.thread ?? {}) as Record<string, unknown>);
+    // The thread payload carries no last_error, so recover it from the run row —
+    // otherwise a reload of a failed thread falls back to a generic message.
+    if (thread.lastError == null && latestRunRaw?.error != null) {
+      thread.lastError = String(latestRunRaw.error);
+    }
     return {
-      thread: toThreadInfo((raw.thread ?? {}) as Record<string, unknown>),
+      thread,
       latestRun: latestRunRaw
         ? {
             id: String(latestRunRaw.id),

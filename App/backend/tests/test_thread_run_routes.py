@@ -516,6 +516,7 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
     latest_run = SimpleNamespace(
         id=uuid4(),
         status="error",
+        error="ConnectTimeout",
         run_seq=7,
         language="Korean",
         run_mode="planMode",
@@ -552,6 +553,7 @@ def test_list_thread_messages_serializes_latest_run_context_fields(monkeypatch: 
     )
 
     assert response.latest_run is not None
+    assert response.latest_run["error"] == "ConnectTimeout"
     assert response.latest_run["input_payload"] == latest_run.input_payload
     assert response.latest_run["context_object_ids"] == latest_run.context_object_ids
     assert response.latest_run["journey_target_ids"] == latest_run.journey_target_ids

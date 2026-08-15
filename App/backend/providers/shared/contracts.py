@@ -421,6 +421,8 @@ class FinalSnapshot:
 class ProviderErrorPayload:
     message: str
     status: Optional[int] = None
+    # Transport-level failures have no status; flag them so retry can see them.
+    retryable: bool = False
 
 
 @dataclass

@@ -875,6 +875,7 @@ def list_thread_messages(
         latest_run={
             "id": latest_run.id,
             "status": latest_run.status,
+            "error": latest_run.error,
             "run_seq": latest_run.run_seq,
             "language": latest_run.language,
             "run_mode": latest_run.run_mode,

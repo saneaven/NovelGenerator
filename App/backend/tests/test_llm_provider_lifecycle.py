@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from App.backend.providers.shared.base import BaseProvider
+from App.backend.services.run_pipeline.runtime import NullSetupSlot
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -111,6 +112,7 @@ def _make_request() -> SimpleNamespace:
         ),
         thread=SimpleNamespace(id="thread-id"),
         checkpoint=SimpleNamespace(),
+        setup_slot=NullSetupSlot(),
         db=object(),
     )
 

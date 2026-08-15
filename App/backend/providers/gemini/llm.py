@@ -9,10 +9,12 @@ from google.genai import errors, types
 
 from ..shared.base import BaseProvider
 from ..shared.contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..shared.errors import provider_error_fields
 from ..shared.parsing.final_mappers import _to_raw_dict
 from ..shared.parsing.multimodal import build_gemini_binary_parts, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ...services.prompt_cache_service import gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
 
@@ -56,9 +58,11 @@ class GeminiProvider(BaseProvider):
         return bool(self.api_key)
 
     def _build_client(self) -> genai.Client:
-        http_options = None
+        # HttpOptions.timeout is milliseconds.
+        timeout_ms = int(get_llm_stream_timeout().read * 1000)
+        http_options = types.HttpOptions(timeout=timeout_ms)
         if self.base_url:
-            http_options = types.HttpOptions(baseUrl=self.base_url)
+            http_options.base_url = self.base_url
         return genai.Client(api_key=self.api_key, http_options=http_options)
 
     def _ensure_client(self) -> genai.Client:
@@ -103,10 +107,12 @@ class GeminiProvider(BaseProvider):
         return "reasoning_text"
 
     @staticmethod
-    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+    def _error_event(
+        message: str, status: Optional[int] = None, retryable: bool = False
+    ) -> ProviderEvent:
         return ProviderEvent(
             kind="error",
-            error=ProviderErrorPayload(message=message, status=status),
+            error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
         )
 
     @staticmethod
@@ -781,19 +787,14 @@ class GeminiProvider(BaseProvider):
                 )
 
         except Exception as exc:  # pragma: no cover - stream errors surfaced via provider error event
-            if isinstance(exc, errors.APIError):
-                message = getattr(exc, "message", None) or str(exc)
-                status = getattr(exc, "status", None) or getattr(exc, "code", None)
-                yield self._error_event(message, status if isinstance(status, int) else None)
-            else:
-                status = (
-                    getattr(exc, "code", None)
-                    or getattr(exc, "status", None)
-                    or getattr(exc, "status_code", None)
-                    or getattr(exc, "http_status", None)
-                )
-                message = getattr(exc, "message", None) or str(exc)
-                yield self._error_event(message, status if isinstance(status, int) else None)
+            message, status, retryable = provider_error_fields(exc)
+            api_message = getattr(exc, "message", None)
+            if isinstance(exc, errors.APIError) and isinstance(api_message, str) and api_message.strip():
+                message = api_message
+            if status is None:
+                http_status = getattr(exc, "http_status", None)
+                status = http_status if isinstance(http_status, int) else None
+            yield self._error_event(message, status, retryable)
             return
         finally:
             if stream is not None and hasattr(stream, "aclose"):

@@ -10,6 +10,7 @@ from jinja2.sandbox import SecurityError
 from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread, UserSettings
+from ...providers.shared.errors import describe_exception
 from ..llm_request_service import llm_request_service
 from ..run_status_policy import RUN_EXECUTION_NOOP_STATUSES
 from ..settings_service import settings_service
@@ -76,8 +77,7 @@ def format_user_run_error(exc: Exception) -> str:
     ):
         return format_template_error(exc)
 
-    text = str(exc).strip()
-    return text or "Run failed."
+    return describe_exception(exc)
 
 
 class RunPipelineExecutionLoop:
@@ -136,6 +136,7 @@ class RunPipelineExecutionLoop:
     async def execute_loop(self, run_id: UUID, *, create_ctx: CreateContext | None = None) -> None:
         db = self._db_factory()
         execution_checkpoint = ExecutionCheckpoint()
+        setup_slot = self._runtime.setup_slot()
         try:
             run = db.query(RunModel).filter(RunModel.id == run_id).first()
             if run is None:
@@ -157,6 +158,26 @@ class RunPipelineExecutionLoop:
 
             settings: UserSettings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
             restored_payload = run.input_payload or {}
+
+            # Only the pre-stream phase is gated; the slot is released once the
+            # stream is about to start so streaming stays fully concurrent.
+            async def _emit_queued() -> None:
+                await self._runtime.emit(
+                    user_id=run.user_id,
+                    project_id=run.project_id,
+                    thread_id=thread.id,
+                    event_name="run:stage",
+                    data={"run_id": str(run.id), "stage": "queued"},
+                )
+
+            await setup_slot.acquire(_emit_queued)
+
+            db.expire_all()
+            run = db.query(RunModel).filter(RunModel.id == run_id).first()
+            if run is None:
+                return
+            if run.status in RUN_EXECUTION_NOOP_STATUSES:
+                return
 
             if create_ctx is not None:
                 system_prompt, conversation, scenario_bundle, cache_boundaries = await prompt_assembly.assemble_create(
@@ -194,6 +215,7 @@ class RunPipelineExecutionLoop:
                     ),
                     checkpoint=execution_checkpoint,
                     emit_fn=self._runtime.emit,
+                    setup_slot=setup_slot,
                 ),
                 LLMExecutionCallbacks(
                     emit_fn=self._runtime.emit,
@@ -218,7 +240,8 @@ class RunPipelineExecutionLoop:
             finally:
                 raise
         except Exception as exc:  # noqa: BLE001
-            logger.error("Run %s failed: %s", run_id, exc, exc_info=True)
+            setup_slot.release()
+            logger.error("Run %s failed: %s", run_id, describe_exception(exc), exc_info=True)
             db.rollback()
             user_error = format_user_run_error(exc)
             if execution_checkpoint.request_id and not execution_checkpoint.finalized:
@@ -254,14 +277,21 @@ class RunPipelineExecutionLoop:
                         if discarded_message_id is not None
                         else None
                     )
-                    await self._status_transitions.apply_status_transition(
-                        db,
-                        run=run,
-                        thread=thread,
-                        status="error",
-                        error=user_error,
-                        emit_error=True,
-                        pre_emit_events=pre_emit_events,
-                    )
+                    try:
+                        await self._status_transitions.apply_status_transition(
+                            db,
+                            run=run,
+                            thread=thread,
+                            status="error",
+                            error=user_error,
+                            emit_error=True,
+                            pre_emit_events=pre_emit_events,
+                        )
+                    except Exception:
+                        # Never let a failure to record the failure strand the run in "running".
+                        logger.error(
+                            "Run %s: could not persist error status", run_id, exc_info=True
+                        )
         finally:
+            setup_slot.release()
             db.close()

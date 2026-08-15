@@ -30,6 +30,7 @@ from openai import (
 from ..shared.base import BaseProvider
 from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ..shared.contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..shared.errors import provider_error_fields
 from ..shared.parsing.final_mappers import map_openai_response_to_snapshot
 from ..shared.parsing.multimodal import build_openai_responses_content, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
@@ -397,11 +398,17 @@ class OpenAIResponsesProvider(BaseProvider):
         return result
 
     @staticmethod
-    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+    def _error_event(
+        message: str, status: Optional[int] = None, retryable: bool = False
+    ) -> ProviderEvent:
         return ProviderEvent(
             kind="error",
-            error=ProviderErrorPayload(message=message, status=status),
+            error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
         )
+
+    @classmethod
+    def _error_event_from_exception(cls, exc: BaseException) -> ProviderEvent:
+        return cls._error_event(*provider_error_fields(exc))
 
     def _prepare_responses_request(
         self,
@@ -674,21 +681,23 @@ class OpenAIResponsesProvider(BaseProvider):
                 elif event_type == "error":
                     error_msg = getattr(event, "message", "Unknown error")
                     error_code = getattr(event, "code", None)
-                    yield self._error_event(error_msg, error_code)
+                    status = error_code if isinstance(error_code, int) else None
+                    if isinstance(error_code, str) and error_code.strip():
+                        error_msg = f"{error_code}: {error_msg}"
+                    yield self._error_event(error_msg, status)
                     return
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             logger.error("OpenAI Responses API error (model=%s): %s", model, exc, exc_info=True)
-            status = getattr(exc, "status_code", None)
-            yield self._error_event(str(exc), status)
+            yield self._error_event_from_exception(exc)
             return
         except OpenAIError as exc:
             logger.error("OpenAI SDK error (model=%s): %s", model, exc, exc_info=True)
-            yield self._error_event(str(exc), getattr(exc, "status_code", None))
+            yield self._error_event_from_exception(exc)
             return
         except Exception as exc:
             logger.error("Unexpected error in OpenAI Responses stream (model=%s): %s", model, exc, exc_info=True)
-            yield self._error_event(str(exc))
+            yield self._error_event_from_exception(exc)
             return
         finally:
             if stream is not None and hasattr(stream, "close"):

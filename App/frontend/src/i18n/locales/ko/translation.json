@@ -1413,6 +1413,7 @@
       }
     },
     "stage": {
+      "queued": "실행 대기 중",
       "retrievingMemory": "과거 대화 기록 검색 중",
       "renderingPrompt": "프롬프트 렌더링 중",
       "summarizingContext": "컨텍스트 요약 중",

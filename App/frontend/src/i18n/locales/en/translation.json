@@ -1413,6 +1413,7 @@
       }
     },
     "stage": {
+      "queued": "Waiting for a run slot",
       "retrievingMemory": "Searching past chat logs",
       "renderingPrompt": "Rendering prompt",
       "summarizingContext": "Summarizing context",

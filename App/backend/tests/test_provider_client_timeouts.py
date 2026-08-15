@@ -35,6 +35,7 @@ import App.backend.providers.openai.llm as openai_responses_provider_module
 from App.backend.providers.shared.async_openai_provider import AsyncOpenAIProvider
 from App.backend.providers.claude.llm import ClaudeProvider
 from App.backend.providers.shared.transport.client_timeouts import (
+    LLM_STREAM_CONNECT_TIMEOUT_ENV_VAR,
     LLM_STREAM_TIMEOUT_ENV_VAR,
     get_llm_stream_timeout,
 )
@@ -43,14 +44,31 @@ from App.backend.providers.openai.llm import OpenAIResponsesProvider
 
 def _assert_default_timeout(timeout: object) -> None:
     assert isinstance(timeout, httpx.Timeout)
-    assert timeout.connect == 5.0
+    assert timeout.connect == 30.0
     assert timeout.read == 3600.0
     assert timeout.write == 3600.0
     assert timeout.pool == 3600.0
 
 
-def test_llm_stream_timeout_helper_uses_centralized_defaults() -> None:
+def test_llm_stream_timeout_helper_uses_centralized_defaults(monkeypatch) -> None:
     assert LLM_STREAM_TIMEOUT_ENV_VAR == "LLM_STREAM_TIMEOUT_SECONDS"
+    assert LLM_STREAM_CONNECT_TIMEOUT_ENV_VAR == "LLM_STREAM_CONNECT_TIMEOUT_SECONDS"
+    monkeypatch.delenv(LLM_STREAM_TIMEOUT_ENV_VAR, raising=False)
+    monkeypatch.delenv(LLM_STREAM_CONNECT_TIMEOUT_ENV_VAR, raising=False)
+    _assert_default_timeout(get_llm_stream_timeout())
+
+
+def test_llm_stream_timeout_reads_env_overrides(monkeypatch) -> None:
+    monkeypatch.setenv(LLM_STREAM_TIMEOUT_ENV_VAR, "120")
+    monkeypatch.setenv(LLM_STREAM_CONNECT_TIMEOUT_ENV_VAR, "7.5")
+    timeout = get_llm_stream_timeout()
+    assert timeout.connect == 7.5
+    assert timeout.read == 120.0
+
+
+def test_llm_stream_timeout_ignores_invalid_env_values(monkeypatch) -> None:
+    monkeypatch.setenv(LLM_STREAM_TIMEOUT_ENV_VAR, "not-a-number")
+    monkeypatch.setenv(LLM_STREAM_CONNECT_TIMEOUT_ENV_VAR, "0")
     _assert_default_timeout(get_llm_stream_timeout())
 
 

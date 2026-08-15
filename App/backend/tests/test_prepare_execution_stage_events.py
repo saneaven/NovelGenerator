@@ -4,7 +4,7 @@ import asyncio
 import importlib
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -129,6 +129,18 @@ fake_contracts = types.ModuleType("App.backend.services.run_pipeline.llm_executi
 fake_contracts.EmitFn = object
 
 
+class _NoopSetupSlot:
+    """Local stand-in: this module stubs sys.modules, so importing runtime here would defeat it."""
+
+    held = False
+
+    async def acquire(self, on_wait=None) -> None:
+        return
+
+    def release(self) -> None:
+        return
+
+
 @dataclass(frozen=True)
 class _LLMExecutionRequest:
     db: object
@@ -142,6 +154,7 @@ class _LLMExecutionRequest:
     input_payload: dict[str, object]
     checkpoint: object
     emit_fn: object = None
+    setup_slot: object = field(default_factory=_NoopSetupSlot)
 
 
 @dataclass

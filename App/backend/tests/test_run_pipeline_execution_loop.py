@@ -40,8 +40,17 @@ from App.backend.services.run_pipeline import execution_loop as execution_loop_m
             "boom",
         ),
         (
+            ValueError("bad config"),
+            "ValueError: bad config",
+        ),
+        # Transport failures carry an empty str(); the type name is the only clue left.
+        (
             RuntimeError("   "),
-            "Run failed.",
+            "RuntimeError",
+        ),
+        (
+            ConnectionResetError(),
+            "ConnectionResetError",
         ),
     ],
 )
@@ -125,7 +134,11 @@ def test_execute_loop_preserves_non_template_errors(monkeypatch: pytest.MonkeyPa
     run_status_event = stack.dispatcher.events[-1]
     assert run_error_event["data"] == {"run_id": str(run.id), "error": "boom"}
     assert run_status_event["event_name"] == "run:status"
-    assert run_status_event["data"] == {"run_id": str(run.id), "status": "error", "error": "boom"}
+    assert run_status_event["data"] == {
+        "run_id": str(run.id),
+        "status": "error",
+        "error": "boom",
+    }
 
 
 def test_execute_loop_midstream_failure_emits_message_error_and_discards_placeholder(

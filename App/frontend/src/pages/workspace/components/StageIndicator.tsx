@@ -9,6 +9,7 @@ interface StageIndicatorProps {
 }
 
 const STAGE_KEY_BY_STAGE: Record<string, string> = {
+  queued: 'agent.stage.queued',
   retrieving_memory: 'agent.stage.retrievingMemory',
   rendering_prompt: 'agent.stage.renderingPrompt',
   summarizing_context: 'agent.stage.summarizingContext',

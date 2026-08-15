@@ -1,8 +1,16 @@
+import logging
 import mimetypes
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Uvicorn only configures its own loggers; without this the app's loggers fall
+# back to logging.lastResort and everything below WARNING is silently dropped.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+)
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse

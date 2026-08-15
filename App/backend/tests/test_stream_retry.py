@@ -32,8 +32,13 @@ def _meta_event() -> ProviderEvent:
     return ProviderEvent(kind="meta")
 
 
-def _error_event(status: int | None = 429, message: str = "rate limited") -> ProviderEvent:
-    return ProviderEvent(kind="error", error=ProviderErrorPayload(message=message, status=status))
+def _error_event(
+    status: int | None = 429, message: str = "rate limited", retryable: bool = False
+) -> ProviderEvent:
+    return ProviderEvent(
+        kind="error",
+        error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
+    )
 
 
 def _make_factory(events_per_attempt: list[list[ProviderEvent]]):
@@ -155,7 +160,9 @@ class TestStreamWithRetry:
 
         result, mock_sleep = asyncio.run(_run())
         assert any(e.kind == "delta" and e.delta.content_delta == "success" for e in result)
-        mock_sleep.assert_called_once_with(0.1)  # 100ms
+        # Jittered backoff: attempt 1 lands in [base/2, base].
+        mock_sleep.assert_called_once()
+        assert 0.05 <= mock_sleep.call_args.args[0] <= 0.1
 
     def test_no_retry_after_content_delta(self):
         """Error after content was yielded passes through (no retry)."""
@@ -250,7 +257,8 @@ class TestStreamWithRetry:
             return mock_sleep
 
         mock_sleep = asyncio.run(_run())
-        mock_sleep.assert_called_once_with(2.5)
+        mock_sleep.assert_called_once()
+        assert 1.25 <= mock_sleep.call_args.args[0] <= 2.5
 
     def test_on_retry_callback_receives_error_details(self):
         attempt_1 = [_error_event(429, "rate limited")]
@@ -278,3 +286,47 @@ class TestStreamWithRetry:
 
         result = asyncio.run(_run())
         assert any(e.kind == "delta" and e.delta.content_delta == "recovered" for e in result)
+
+
+class TestTransportErrorRetry:
+    """Transport failures have no status, so they need the retryable flag."""
+
+    def test_statusless_error_is_not_retried_without_flag(self):
+        cfg = NormalizedRetryConfig(
+            max_retries=2, retryable_status_codes={429, 500}, retry_delay_ms=1
+        )
+        attempt_1 = [_error_event(status=None, message="ConnectTimeout")]
+        attempt_2 = [_delta_event("ok")]
+        factory = _make_factory([attempt_1, attempt_2])
+
+        result = asyncio.run(_collect(stream_with_retry(factory, cfg)))
+        assert [e.kind for e in result] == ["error"]
+
+    def test_statusless_error_is_retried_when_flagged(self):
+        cfg = NormalizedRetryConfig(
+            max_retries=2, retryable_status_codes={429, 500}, retry_delay_ms=1
+        )
+        attempt_1 = [_error_event(status=None, message="ConnectTimeout", retryable=True)]
+        attempt_2 = [_delta_event("recovered")]
+        factory = _make_factory([attempt_1, attempt_2])
+
+        result = asyncio.run(_collect(stream_with_retry(factory, cfg)))
+        assert any(e.kind == "delta" and e.delta.content_delta == "recovered" for e in result)
+
+    def test_backoff_grows_between_attempts(self):
+        cfg = NormalizedRetryConfig(
+            max_retries=3, retryable_status_codes={500}, retry_delay_ms=1000
+        )
+        attempts = [[_error_event(500)], [_error_event(500)], [_delta_event("ok")]]
+        factory = _make_factory(attempts)
+
+        async def _run():
+            with patch(SLEEP_TARGET, new_callable=AsyncMock) as mock_sleep:
+                await _collect(stream_with_retry(factory, cfg))
+            return mock_sleep
+
+        mock_sleep = asyncio.run(_run())
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert len(delays) == 2
+        assert 0.5 <= delays[0] <= 1.0
+        assert 1.0 <= delays[1] <= 2.0

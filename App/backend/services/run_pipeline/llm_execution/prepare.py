@@ -106,6 +106,7 @@ async def _count_provider_messages_tokens(
     tokenizer_override: str | None,
     variant_hint: str | None,
     messages: list[dict[str, Any]],
+    cache: dict[str, Any] | None = None,
 ) -> int:
     system_prompt, conversation = _split_system_prompt(messages)
     return await count_conversation_tokens(
@@ -117,6 +118,7 @@ async def _count_provider_messages_tokens(
         conversation=conversation,
         tokenizer_override=tokenizer_override,
         variant_hint=variant_hint,
+        cache=cache,
     )
 
 
@@ -229,6 +231,8 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
     budget_tokens = _context_budget_tokens(task_config)
     if budget_tokens > 0:
         current_run_user_message_id = _current_run_user_message_id(db, run)
+        # Shared across archive cycles so attachment measurements aren't redone.
+        token_count_cache: dict[str, Any] = {}
         for _ in range(MAX_ARCHIVE_LOOPS):
             total_tokens = await _count_provider_messages_tokens(
                 db=db,
@@ -237,6 +241,7 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                 tokenizer_override=tokenizer_override,
                 variant_hint=variant_hint,
                 messages=provider_messages,
+                cache=token_count_cache,
             )
             if total_tokens <= budget_tokens:
                 break
@@ -259,13 +264,19 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
                     f"Context overflow: no archivable boundary found (tokens={total_tokens}, limit={budget_tokens})"
                 )
 
-            await archive_orchestrator.run(
-                db,
-                run=run,
-                thread=thread,
-                boundary=boundary,
-                scenario_bundle=current_bundle,
-            )
+            # Archiving runs an LLM summarization — network wait, not CPU. Give the
+            # setup slot back for its duration so it can't stall every other run.
+            request.setup_slot.release()
+            try:
+                await archive_orchestrator.run(
+                    db,
+                    run=run,
+                    thread=thread,
+                    boundary=boundary,
+                    scenario_bundle=current_bundle,
+                )
+            finally:
+                await request.setup_slot.acquire()
             current_system_prompt, current_conversation, current_bundle, cache_boundaries = await prompt_assembly.reassemble_create(
                 db,
                 run=run,

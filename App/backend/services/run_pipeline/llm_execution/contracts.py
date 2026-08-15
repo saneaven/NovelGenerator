@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from ...prompt_cache_service import PreparedCachePlan
 from ...prompt_runtime.contracts import ScenarioBundle
 from ...settings_service import TaskConfig
 from ...tool_engine.contracts import ToolOffer
+from ..runtime import NullSetupSlot, SetupSlot
 
 EmitFn = Callable[..., Awaitable[None]]
 PersistToolCallsFn = Callable[..., Awaitable[list[RunToolCallModel]]]
@@ -47,6 +48,7 @@ class LLMExecutionRequest:
     input_payload: dict[str, Any]
     checkpoint: ExecutionCheckpoint
     emit_fn: EmitFn | None = None
+    setup_slot: SetupSlot = field(default_factory=NullSetupSlot)
 
 
 @dataclass

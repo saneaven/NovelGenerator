@@ -7,6 +7,7 @@ from anthropic import AsyncAnthropic
 from ..shared.base import BaseProvider
 from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ..shared.contracts import DeltaPayload, MetaPayload, ProviderErrorPayload, ProviderEvent
+from ..shared.errors import provider_error_fields
 from ..shared.parsing.final_mappers import map_claude_message_to_snapshot
 from ..shared.parsing.multimodal import build_claude_content, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
@@ -105,11 +106,17 @@ class ClaudeProvider(BaseProvider):
         return "reasoning_text"
 
     @staticmethod
-    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+    def _error_event(
+        message: str, status: Optional[int] = None, retryable: bool = False
+    ) -> ProviderEvent:
         return ProviderEvent(
             kind="error",
-            error=ProviderErrorPayload(message=message, status=status),
+            error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
         )
+
+    @classmethod
+    def _error_event_from_exception(cls, exc: BaseException) -> ProviderEvent:
+        return cls._error_event(*provider_error_fields(exc))
 
     @staticmethod
     def _normalize_finish_reason(stop_reason: Optional[str]) -> Optional[str]:
@@ -701,12 +708,7 @@ class ClaudeProvider(BaseProvider):
                     )
 
         except Exception as exc:  # pragma: no cover - surfaced via provider error event
-            status = (
-                getattr(exc, "status_code", None)
-                or getattr(exc, "status", None)
-                or getattr(exc, "code", None)
-            )
-            yield self._error_event(str(exc), status if isinstance(status, int) else None)
+            yield self._error_event_from_exception(exc)
             return
 
     async def get_models(self) -> Dict:

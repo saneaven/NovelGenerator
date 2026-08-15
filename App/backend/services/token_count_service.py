@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from dataclasses import dataclass
@@ -753,6 +754,26 @@ async def count_message_tokens(
         raise RuntimeError(f"Token counting failed with unknown error; tiktoken fallback failed: {fallback_exc}") from fallback_exc
 
 
+def _count_openai_conversation_tokens_sync(
+    safe_model: str,
+    system_prompt: str,
+    conversation: list[dict[str, Any]],
+    cache: TokenCountCache | None,
+) -> int:
+    total = 0
+    if isinstance(system_prompt, str) and system_prompt.strip():
+        total += count_openai_message_tokens(
+            safe_model,
+            {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
+            cache,
+        )
+    for message in conversation:
+        if str(message.get("role") or "") == "system":
+            continue
+        total += count_openai_message_tokens(safe_model, message, cache)
+    return total
+
+
 async def count_conversation_tokens(
     db: Session,
     *,
@@ -772,19 +793,16 @@ async def count_conversation_tokens(
 
     primary_error: Exception | None = None
 
+    # tiktoken over a full conversation is the heaviest blocking step in run setup;
+    # keep it off the event loop so concurrent runs stay responsive.
     if tokenizer == "openai":
-        total = 0
-        if isinstance(system_prompt, str) and system_prompt.strip():
-            total += count_openai_message_tokens(
-                safe_model,
-                {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
-                cache,
-            )
-        for message in conversation:
-            if str(message.get("role") or "") == "system":
-                continue
-            total += count_openai_message_tokens(safe_model, message, cache)
-        return total
+        return await asyncio.to_thread(
+            _count_openai_conversation_tokens_sync,
+            safe_model,
+            system_prompt,
+            conversation,
+            cache,
+        )
 
     if tokenizer == "claude":
         try:
@@ -817,18 +835,15 @@ async def count_conversation_tokens(
             primary_error = exc
 
     try:
-        total = 0
-        if isinstance(system_prompt, str) and system_prompt.strip():
-            total += count_openai_message_tokens(
+        return int(
+            await asyncio.to_thread(
+                _count_openai_conversation_tokens_sync,
                 safe_model,
-                {"role": "system", "content_parts": [{"type": "content", "text": system_prompt}]},
+                system_prompt,
+                conversation,
                 cache,
             )
-        for message in conversation:
-            if str(message.get("role") or "") == "system":
-                continue
-            total += count_openai_message_tokens(safe_model, message, cache)
-        return int(total)
+        )
     except Exception as fallback_exc:
         if primary_error is not None:
             raise RuntimeError(

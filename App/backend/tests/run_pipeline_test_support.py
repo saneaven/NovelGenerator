@@ -231,6 +231,7 @@ def install_import_stubs() -> None:
         input_payload: dict[str, object]
         checkpoint: ExecutionCheckpoint
         emit_fn: object = None
+        setup_slot: object = None
 
     class LLMExecutionOrchestrator:
         async def execute(self, *_args: object, **_kwargs: object) -> None:

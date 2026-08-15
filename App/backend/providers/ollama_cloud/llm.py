@@ -4,6 +4,7 @@ import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from ..shared.base import BaseProvider
+from ..shared.errors import provider_error_fields
 from ..shared.contracts import (
     DeltaPayload,
     MetaPayload,
@@ -553,7 +554,7 @@ class OllamaCloudProvider(BaseProvider):
                             if isinstance(raw_finish, str) and raw_finish:
                                 finish_reason = raw_finish
         except Exception as exc:
-            yield self._error_event(str(exc))
+            yield self._error_event_from_exception(exc)
             return
 
         try:
@@ -565,7 +566,7 @@ class OllamaCloudProvider(BaseProvider):
                 yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
                 return
         except Exception as exc:
-            yield self._error_event(str(exc))
+            yield self._error_event_from_exception(exc)
             return
 
         yield ProviderEvent(
@@ -578,11 +579,17 @@ class OllamaCloudProvider(BaseProvider):
         )
 
     @staticmethod
-    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+    def _error_event(
+        message: str, status: Optional[int] = None, retryable: bool = False
+    ) -> ProviderEvent:
         return ProviderEvent(
             kind="error",
-            error=ProviderErrorPayload(message=message, status=status),
+            error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
         )
+
+    @classmethod
+    def _error_event_from_exception(cls, exc: BaseException) -> ProviderEvent:
+        return cls._error_event(*provider_error_fields(exc))
 
     async def get_models(self) -> Dict:
         import asyncio

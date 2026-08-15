@@ -23,6 +23,7 @@ from ..shared.contracts import (
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 from ..shared.parsing.multimodal import build_openai_chat_content, get_canonical_content_parts
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ..shared.errors import provider_error_fields
 from ...utils.outbound_http import validate_outbound_base_url
 
 class AsyncOpenAIProvider(BaseProvider):
@@ -262,11 +263,17 @@ class AsyncOpenAIProvider(BaseProvider):
 
     # ----- Public API -----------------------------------------------------------------
     @staticmethod
-    def _error_event(message: str, status: Optional[int] = None) -> ProviderEvent:
+    def _error_event(
+        message: str, status: Optional[int] = None, retryable: bool = False
+    ) -> ProviderEvent:
         return ProviderEvent(
             kind="error",
-            error=ProviderErrorPayload(message=message, status=status),
+            error=ProviderErrorPayload(message=message, status=status, retryable=retryable),
         )
+
+    @classmethod
+    def _error_event_from_exception(cls, exc: BaseException) -> ProviderEvent:
+        return cls._error_event(*provider_error_fields(exc))
 
     @staticmethod
     def _chunk_to_events(chunk: Optional[Dict]) -> List[ProviderEvent]:
@@ -658,14 +665,13 @@ class AsyncOpenAIProvider(BaseProvider):
                     await raw_stream.close()
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
-            status = getattr(exc, "status_code", None)
-            yield self._error_event(str(exc), status)
+            yield self._error_event_from_exception(exc)
             return
         except OpenAIError as exc:
-            yield self._error_event(str(exc), getattr(exc, "status_code", None))
+            yield self._error_event_from_exception(exc)
             return
         except Exception as exc:
-            yield self._error_event(str(exc))
+            yield self._error_event_from_exception(exc)
             return
 
         try:
@@ -689,7 +695,7 @@ class AsyncOpenAIProvider(BaseProvider):
                 yield ProviderEvent(kind="meta", meta=MetaPayload(finish_reason="tool_calls"))
                 return
         except Exception as exc:
-            yield self._error_event(str(exc))
+            yield self._error_event_from_exception(exc)
             return
 
         # Check for error finish_reasons and emit error if needed

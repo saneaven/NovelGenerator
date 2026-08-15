@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Awaitable, Callable, Optional
 
@@ -44,13 +45,29 @@ def normalize_retry_config(raw: dict[str, Any] | None) -> NormalizedRetryConfig 
         return None
 
     codes = raw.get("retryableStatusCodes") or raw.get("retryable_status_codes") or []
-    delay = raw.get("retryDelayMs") or raw.get("retry_delay_ms") or 1000
+    delay = raw.get("retryDelayMs")
+    if delay is None:
+        delay = raw.get("retry_delay_ms")
+    if delay is None:
+        delay = 1000
 
     return NormalizedRetryConfig(
         max_retries=int(max_retries),
         retryable_status_codes=set(codes),
-        retry_delay_ms=int(delay),
+        retry_delay_ms=max(0, int(delay)),
     )
+
+
+MAX_RETRY_BACKOFF_SECONDS = 30.0
+
+
+def _backoff_delay_s(base_delay_ms: int, attempt: int) -> float:
+    """Exponential backoff with jitter; a fixed delay hammers a rate-limited provider."""
+    base = max(0.0, base_delay_ms / 1000.0)
+    if base == 0.0:
+        return 0.0
+    delay = min(base * (2 ** max(0, attempt - 1)), MAX_RETRY_BACKOFF_SECONDS)
+    return delay * (0.5 + random.random() / 2.0)
 
 
 def _has_content(delta: Optional[DeltaPayload]) -> bool:
@@ -101,12 +118,14 @@ async def stream_with_retry(
                 if event.kind == "error":
                     error = event.error or ProviderErrorPayload(message="Unknown error", status=None)
 
-                    if (
-                        not content_yielded
-                        and attempt < retry_config.max_retries
-                        and error.status is not None
+                    # Transport failures (timeout, reset, EOF) carry no status, so the
+                    # status list can never match them — they are flagged by the provider.
+                    retryable = bool(getattr(error, "retryable", False)) or (
+                        error.status is not None
                         and error.status in retry_config.retryable_status_codes
-                    ):
+                    )
+
+                    if not content_yielded and attempt < retry_config.max_retries and retryable:
                         attempt += 1
                         logger.warning(
                             "Retryable error (status=%s, attempt %d/%d): %s",
@@ -133,5 +152,4 @@ async def stream_with_retry(
                 await stream.aclose()
 
         if should_retry:
-            delay_s = retry_config.retry_delay_ms / 1000.0
-            await asyncio.sleep(delay_s)
+            await asyncio.sleep(_backoff_delay_s(retry_config.retry_delay_ms, attempt))
