@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -111,34 +112,42 @@ async def _load_bundle_inputs(
     scenario_manager = ScenarioManager()
     target = scenario_manager.resolve_target(db, thread=thread, run=run, payload=input_payload)
     project_data = await build_project_data(db, run.project_id, run.language)
-    template_data = scenario_manager.build_template_data(
-        db,
-        user_id=run.user_id,
-        preset_id=preset_id,
-        task_type=target.task_type,
-        thread=thread,
-        run=run,
-        project_data=project_data,
-        input_text=input_text,
-        input_payload=input_payload,
-    )
-    scenario = scenario_manager.load_active_scenario(
-        db,
-        user_id=run.user_id,
-        preset_id=preset_id,
-        task_type=target.task_type,
-        task_subtype=target.task_subtype,
-    )
 
-    return _BundleInputs(
-        task_type=target.task_type,
-        task_subtype=target.task_subtype,
-        template_data=template_data,
-        system_template=str(scenario.get("system_template") or ""),
-        blocks=scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else [],
-        project_data=project_data,
-        template_renderer_factory=_make_template_renderer_factory(load_user_fragment_map(db, run.user_id, preset_id)),
-    )
+    # Template assembly and fragment loading are synchronous and expensive; run them
+    # off-loop. Safe with the sync Session because the loop awaits and never touches
+    # it concurrently.
+    def _build_bundle() -> _BundleInputs:
+        template_data = scenario_manager.build_template_data(
+            db,
+            user_id=run.user_id,
+            preset_id=preset_id,
+            task_type=target.task_type,
+            thread=thread,
+            run=run,
+            project_data=project_data,
+            input_text=input_text,
+            input_payload=input_payload,
+        )
+        scenario = scenario_manager.load_active_scenario(
+            db,
+            user_id=run.user_id,
+            preset_id=preset_id,
+            task_type=target.task_type,
+            task_subtype=target.task_subtype,
+        )
+        return _BundleInputs(
+            task_type=target.task_type,
+            task_subtype=target.task_subtype,
+            template_data=template_data,
+            system_template=str(scenario.get("system_template") or ""),
+            blocks=scenario.get("blocks") if isinstance(scenario.get("blocks"), list) else [],
+            project_data=project_data,
+            template_renderer_factory=_make_template_renderer_factory(
+                load_user_fragment_map(db, run.user_id, preset_id)
+            ),
+        )
+
+    return await asyncio.to_thread(_build_bundle)
 
 
 def _build_scenario_bundle(
@@ -175,7 +184,8 @@ async def _render(
         template_data=template_data,
     )
     template_renderer = bundle.template_renderer_factory()
-    messages = _load_source_messages(
+    messages = await asyncio.to_thread(
+        _load_source_messages,
         db,
         run=run,
         thread=thread,
@@ -187,39 +197,59 @@ async def _render(
         thread=thread,
         stage="rendering_prompt",
     )
-    prompt_snapshot = assemble_scenario_snapshot(
-        template_renderer=template_renderer,
-        task_type=bundle.task_type,
-        system_template=bundle.system_template,
-        blocks=bundle.blocks,
-        source_conversation=messages,
-        template_data=bundle.template_data,
-        current_run_id=str(run.id),
+    # Read ORM-backed values here; the render itself runs off-loop and must not
+    # touch the Session.
+    system_overlays = (
+        run.mcp_resolution_json.get("system_overlays")
+        if isinstance(run.mcp_resolution_json, dict)
+        else None
     )
-    system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
-    system_prompt = McpMessageAssembler.merge_system_overlays(
-        system_prompt,
-        run.mcp_resolution_json.get("system_overlays") if isinstance(run.mcp_resolution_json, dict) else None,
-    )
-    prompt_snapshot = dict(prompt_snapshot)
-    prompt_snapshot["systemPrompt"] = system_prompt
-    prompt_snapshot["scenario"] = {
-        "taskType": bundle.task_type,
-        "taskSubtype": bundle.task_subtype,
-    }
-    system_prompt, conversation, cache_boundaries = flatten_prompt_snapshot(prompt_snapshot)
+    run_id_str = str(run.id)
 
-    _load_captured_prompt_snapshot(db, thread)
-    before = snapshot_thread_row(thread)
-    thread.captured_prompt_snapshot = prompt_snapshot
-    apply_project_usage_delta(
-        db,
-        user_id=run.user_id,
-        project_id=run.project_id,
-        delta=build_thread_delta(before, snapshot_thread_row(thread)),
-        enforce_quota=True,
+    def _render_snapshot():
+        snapshot = assemble_scenario_snapshot(
+            template_renderer=template_renderer,
+            task_type=bundle.task_type,
+            system_template=bundle.system_template,
+            blocks=bundle.blocks,
+            source_conversation=messages,
+            template_data=bundle.template_data,
+            current_run_id=run_id_str,
+        )
+        rendered_system_prompt, _, _ = flatten_prompt_snapshot(snapshot)
+        rendered_system_prompt = McpMessageAssembler.merge_system_overlays(
+            rendered_system_prompt,
+            system_overlays,
+        )
+        snapshot = dict(snapshot)
+        snapshot["systemPrompt"] = rendered_system_prompt
+        snapshot["scenario"] = {
+            "taskType": bundle.task_type,
+            "taskSubtype": bundle.task_subtype,
+        }
+        return (snapshot, *flatten_prompt_snapshot(snapshot))
+
+    # Jinja rendering is the heaviest CPU step in run setup. Keeping it on the event
+    # loop freezes every other run's SSE and request handling until it finishes.
+    prompt_snapshot, system_prompt, conversation, cache_boundaries = await asyncio.to_thread(
+        _render_snapshot
     )
-    db.commit()
+
+    # Persisting the snapshot writes a large JSONB row and measures it twice; off-loop.
+    def _persist_snapshot() -> None:
+        _load_captured_prompt_snapshot(db, thread)
+        before = snapshot_thread_row(thread)
+        thread.captured_prompt_snapshot = prompt_snapshot
+        apply_project_usage_delta(
+            db,
+            user_id=run.user_id,
+            project_id=run.project_id,
+            delta=build_thread_delta(before, snapshot_thread_row(thread)),
+            enforce_quota=True,
+        )
+        db.commit()
+
+    await asyncio.to_thread(_persist_snapshot)
 
     return system_prompt, conversation, bundle, cache_boundaries
 

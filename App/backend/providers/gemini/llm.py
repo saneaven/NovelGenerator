@@ -14,7 +14,6 @@ from ..shared.parsing.final_mappers import _to_raw_dict
 from ..shared.parsing.multimodal import build_gemini_binary_parts, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ...services.prompt_cache_service import gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
 
@@ -58,11 +57,9 @@ class GeminiProvider(BaseProvider):
         return bool(self.api_key)
 
     def _build_client(self) -> genai.Client:
-        # HttpOptions.timeout is milliseconds.
-        timeout_ms = int(get_llm_stream_timeout().read * 1000)
-        http_options = types.HttpOptions(timeout=timeout_ms)
+        http_options = None
         if self.base_url:
-            http_options.base_url = self.base_url
+            http_options = types.HttpOptions(baseUrl=self.base_url)
         return genai.Client(api_key=self.api_key, http_options=http_options)
 
     def _ensure_client(self) -> genai.Client:
