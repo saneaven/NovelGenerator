@@ -8,6 +8,7 @@ import httpx
 
 from ..shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from ..shared.image.contracts import ImageGenerationOutput, PreparedImageRequest
+from ...schemas.assets import NaturalPromptData
 
 
 NANOGPT_BASE_URL = "https://nano-gpt.com"
@@ -150,7 +151,7 @@ def _to_image_model(raw_model: dict[str, Any]) -> ImageModelDescriptor | None:
         icon_url=str(raw_model.get("icon_url") or "").strip() or None,
         tags=tags or None,
         category=str(raw_model.get("category") or "").strip() or None,
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=supports_image_input,
         supports_mask_input=supports_mask_input,
         supports_multi_image_input=supports_multi_image_input,
@@ -191,9 +192,13 @@ class NanoGPTImageAdapter:
         if not self._api_key:
             return ImageGenerationOutput(success=False, error="NanoGPT client not initialized. Check API key.")
 
-        prompt = request.prompt_payload.prompt
-        if prompt is None:
-            return ImageGenerationOutput(success=False, error="Prompt is required for NanoGPT image generation.")
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NaturalPromptData):
+            return ImageGenerationOutput(
+                success=False,
+                error="Natural prompt data is required for NanoGPT image generation.",
+            )
+        prompt = prompt_data.prompt
 
         settings = request.provider_settings
         payload: dict[str, Any] = {

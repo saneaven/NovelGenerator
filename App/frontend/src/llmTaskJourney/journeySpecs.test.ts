@@ -12,47 +12,26 @@ const { getJourneySpec } = await import('./journeySpecs');
 
 const baseInput: ImagePromptInput = {
   projectId: 'project-1',
-  promptMode: 'natural',
+  promptFormat: 'novelai',
   contextType: 'scene',
   userRequest: 'Show the confrontation.',
 };
 
-describe('image prompt journey context selection', () => {
-  it('uses selectedContextIds as the canonical field and mirrors the legacy alias', () => {
+describe('image prompt journey targets', () => {
+  it('keeps the canonical prompt format and selected context IDs', () => {
     const targets = getJourneySpec('sceneImagePrompt').buildEditingTargets({
       ...baseInput,
       selectedContextIds: ['chapter-1', 'timeline-event-1'],
-      selectedEntityIds: ['legacy-entity-1'],
     });
 
     expect(targets).toMatchObject({
+      promptFormat: 'novelai',
       selectedContextIds: ['chapter-1', 'timeline-event-1'],
-      selectedEntityIds: ['chapter-1', 'timeline-event-1'],
     });
   });
 
-  it('falls back to selectedEntityIds for persisted legacy journeys', () => {
-    const targets = getJourneySpec('sceneImagePrompt').buildEditingTargets({
-      ...baseInput,
-      selectedEntityIds: ['legacy-entity-1'],
-    });
-
-    expect(targets).toMatchObject({
-      selectedContextIds: ['legacy-entity-1'],
-      selectedEntityIds: ['legacy-entity-1'],
-    });
-  });
-
-  it('does not fall back when selectedContextIds is explicitly empty', () => {
-    const targets = getJourneySpec('sceneImagePrompt').buildEditingTargets({
-      ...baseInput,
-      selectedContextIds: [],
-      selectedEntityIds: ['legacy-entity-1'],
-    });
-
-    expect(targets).toMatchObject({
-      selectedContextIds: [],
-      selectedEntityIds: [],
-    });
+  it('uses an empty context list when none is supplied', () => {
+    const targets = getJourneySpec('sceneImagePrompt').buildEditingTargets(baseInput);
+    expect(targets).toMatchObject({ selectedContextIds: [] });
   });
 });

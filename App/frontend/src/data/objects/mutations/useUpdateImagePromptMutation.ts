@@ -7,15 +7,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { unifiedObjectService } from '../../../api/unifiedObjectService';
 import { objectKeys } from '../../keys/objectKeys';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
+import type { StoredImagePrompts } from '../../../domain/imagePrompt';
 
 export interface UpdateImagePromptVars {
   type: ObjectType;
   id: string;
-  prompts: {
-    image_prompt?: string;
-    image_prompt_positive?: string;
-    image_prompt_negative?: string;
-  };
+  prompts: StoredImagePrompts;
 }
 
 export function useUpdateImagePromptMutation() {
@@ -32,9 +29,7 @@ export function useUpdateImagePromptMutation() {
                 ...old,
                 metadata: {
                   ...old.metadata,
-                  image_prompt: result.image_prompt,
-                  image_prompt_positive: result.image_prompt_positive,
-                  image_prompt_negative: result.image_prompt_negative,
+                  image_prompts: result.image_prompts,
                 },
               }
             : old,

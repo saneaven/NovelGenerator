@@ -1,7 +1,10 @@
 import { requireSettingsFromCache } from '../data/settings';
 import { readObjectFromCache } from '../data/objects/objectCache';
 import type { ObjectType } from '../types/unifiedObject';
+import type { PromptFormat } from '../domain/imagePrompt';
 import type { JourneySpec, EditingTargets } from './types';
+
+export type { ImagePromptResult, PromptFormat } from '../domain/imagePrompt';
 
 // =====================================================================
 // Input Types
@@ -37,12 +40,11 @@ export interface MessageTranslationInput {
   targetLanguage: string;
 }
 
-export type PromptMode = 'natural' | 'positive' | 'negative';
 export type ContextType = 'object' | 'scene';
 
 export interface ImagePromptInput {
   projectId: string;
-  promptMode: PromptMode;
+  promptFormat: PromptFormat;
   contextType: ContextType;
   userRequest: string;
   objectType?: 'basic_info' | 'story_entity';
@@ -51,13 +53,6 @@ export interface ImagePromptInput {
   manuscriptId?: string;
   sceneContext?: { preContext: string; postContext: string };
   selectedContextIds?: string[];
-  /** @deprecated Legacy alias retained for persisted journeys. */
-  selectedEntityIds?: string[];
-}
-
-export interface ImagePromptResult {
-  prompt: string;
-  mode: PromptMode;
 }
 
 // =====================================================================
@@ -193,19 +188,18 @@ const imagePromptSpec: JourneySpec<ImagePromptInput> = {
   label: () => 'Image Prompt',
 
   buildEditingTargets: (input) => {
-    const selectedContextIds = input.selectedContextIds ?? input.selectedEntityIds ?? [];
+    const selectedContextIds = input.selectedContextIds ?? [];
     return ({
       kind: input.contextType === 'scene' ? 'sceneImagePrompt' : 'imagePrompt',
       projectId: input.projectId,
       contextType: input.contextType as any,
-      promptMode: input.promptMode,
+      promptFormat: input.promptFormat,
       objectType: input.objectType,
       objectKind: input.objectKind,
       objectId: input.objectId,
       manuscriptId: input.manuscriptId,
       sceneContext: input.sceneContext,
       selectedContextIds,
-      selectedEntityIds: selectedContextIds,
     }) as EditingTargets;
   },
 };

@@ -1,0 +1,98 @@
+.novelai-character-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.novelai-character-prompts__heading,
+.novelai-character-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.novelai-character-prompts__heading h4,
+.novelai-character-prompts__heading p {
+  margin: 0;
+}
+
+.novelai-character-prompts__heading h4 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.novelai-character-prompts__heading p,
+.novelai-character-prompts__empty {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.novelai-character-prompts__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.novelai-character-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.novelai-character-card__header strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.novelai-character-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.novelai-character-card__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.novelai-character-card__fields label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.novelai-character-card__fields textarea {
+  width: 100%;
+  padding: var(--spacing-sm);
+  resize: vertical;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.novelai-character-card__fields textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: var(--shadow-focus-primary);
+}
+
+@media (max-width: 640px) {
+  .novelai-character-prompts__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .novelai-character-card__fields {
+    grid-template-columns: 1fr;
+  }
+}

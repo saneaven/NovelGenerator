@@ -102,7 +102,7 @@ def _project_image_model(model: Any) -> dict[str, Any]:
     return {
         "id": model.id,
         "name": model.name,
-        "prompt_type": model.prompt_type,
+        "prompt_format": model.prompt_format,
         "supports_image_input": model.supports_image_input,
         "supports_mask_input": model.supports_mask_input,
         "supports_multi_image_input": model.supports_multi_image_input,
@@ -135,7 +135,7 @@ def _project_image_spec(spec: Any) -> dict[str, Any]:
     if spec is None:
         return None
     return {
-        "prompt_type": spec.prompt_type,
+        "prompt_format": spec.prompt_format,
         "supports_image_input": spec.supports_image_input,
         "provider_settings": project_object_spec(spec.provider_settings) if spec.provider_settings else None,
         "settings_title_key": spec.settings_title_key,

@@ -41,15 +41,28 @@ def _build_metadata_message(asset: Asset, *, can_view: bool) -> str:
     if asset.width and asset.height:
         lines.append(f"dimensions: {int(asset.width)}x{int(asset.height)}")
 
-    prompt = _styled_prompt_text(asset.generation_prompt)
+    prompt_data = asset.generation_prompt_data if isinstance(asset.generation_prompt_data, dict) else {}
+    prompt_format = str(asset.generation_prompt_format or "").strip()
+    prompt = _styled_prompt_text(prompt_data.get("prompt")) if prompt_format == "natural" else ""
     if prompt:
         lines.append(f"generation prompt: {prompt}")
-    positive = _styled_prompt_text(asset.generation_positive_prompt)
+    positive = _styled_prompt_text(prompt_data.get("positive"))
     if positive:
         lines.append(f"positive prompt: {positive}")
-    negative = _styled_prompt_text(asset.generation_negative_prompt)
+    negative = _styled_prompt_text(prompt_data.get("negative"))
     if negative:
         lines.append(f"negative prompt: {negative}")
+    characters = prompt_data.get("characters")
+    if prompt_format == "novelai" and isinstance(characters, list):
+        for index, character in enumerate(characters, start=1):
+            if not isinstance(character, dict):
+                continue
+            char_positive = str(character.get("positive") or "").strip()
+            char_negative = str(character.get("negative") or "").strip()
+            if char_positive:
+                lines.append(f"character {index}: {char_positive}")
+            if char_negative:
+                lines.append(f"character {index} undesired: {char_negative}")
 
     provider = str(asset.generation_provider or "").strip()
     model = str(asset.generation_model or "").strip()

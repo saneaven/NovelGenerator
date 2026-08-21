@@ -15,19 +15,18 @@ import {
 import { useImageGenerationForm } from '../../imageRun/form/useImageGenerationForm';
 import {
     buildNaturalImageRecipe,
-    buildTagBasedImageRecipe,
+    buildPositiveNegativeImageRecipe,
+    buildNovelAIImageRecipe,
 } from '../../imageRun/form/recipe';
 import { UnifiedImageModal } from '../AssetManager';
-import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
+import UnifiedImagePromptModal from './UnifiedImagePromptModal';
+import NovelAICharacterPromptCards from './NovelAICharacterPromptCards';
 import ImageModelBrowser from './ImageModelBrowser';
 import AuthenticatedImage from '../common/AuthenticatedImage';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useJourneyStore } from '../../store/journeyStore';
-import { useThreadStreamStore } from '../../store/threadStreamStore';
-import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
-import { isPausedLikeThreadStatus } from '../../types/thread';
 import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -35,6 +34,8 @@ import { alert as showAlert } from '../../store/dialogStore';
 import type { ObjectType, StoryEntityKind } from '../../types/unifiedObject';
 import ProviderSettingsFields from '../../providerEngine/ProviderSettingsFields';
 import { buildImageProviderSettingsDraft } from '../../imageRun/form/providerSettings';
+import type { ImagePromptResult, NovelAICharacterPrompt, PromptFormat } from '../../domain/imagePrompt';
+import { normalizeStoredImagePrompts } from '../../domain/imagePrompt';
 import './ImageGenerationModal.css';
 
 // Reference image item
@@ -69,38 +70,6 @@ interface ImageGenerationModalProps {
     assetType?: 'object' | 'scene';
 }
 
-function readPromptValue(value: unknown): string {
-    return typeof value === 'string' ? value : '';
-}
-
-function extractPromptTextFromData(data: Record<string, { contentParts?: Array<{ type: 'content'; text: string }> }>): string {
-    const entry = Object.values(data)[0];
-    if (!entry) return '';
-    return (entry.contentParts ?? [])
-        .filter((part) => part.type === 'content')
-        .map((part) => part.text)
-        .join('');
-}
-
-function extractFinalPromptFromThread(threadId: string): string {
-    const messages = getMergedThreadMessages(threadId);
-    const lastAssistantMsg = [...messages].reverse().find((message) => message.role === 'assistant');
-    if (!lastAssistantMsg) return '';
-
-    const finalText = extractPromptTextFromData(lastAssistantMsg.data);
-    if (finalText) return finalText;
-
-    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
-    for (const toolCall of toolCalls) {
-        const promptFromArguments = readPromptValue((toolCall.arguments as Record<string, unknown> | undefined)?.prompt);
-        if (promptFromArguments) return promptFromArguments;
-        const promptFromResult = readPromptValue((toolCall.result as Record<string, unknown> | null | undefined)?.prompt);
-        if (promptFromResult) return promptFromResult;
-    }
-
-    return '';
-}
-
 const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     onImageGenerated,
     onClose,
@@ -128,37 +97,35 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const savedPromptObject = objectId ? (savedPromptQuery.data ?? null) : null;
     const savedPrompts = useMemo(() => {
         if (!savedPromptObject?.metadata) return null;
-        return {
-            natural: savedPromptObject.metadata.image_prompt || '',
-            positive: savedPromptObject.metadata.image_prompt_positive || '',
-            negative: savedPromptObject.metadata.image_prompt_negative || '',
-        };
-    }, [savedPromptObject]);
+        return normalizeStoredImagePrompts(savedPromptObject.metadata.image_prompts);
+    }, [savedPromptObject?.metadata?.image_prompts]);
     const objectKind = savedPromptObject?.type === 'story_entity' ? savedPromptObject.kind : undefined;
 
     // Natural language prompt (for OpenAI, Gemini, xAI)
     const [prompt, setPrompt] = useState('');
-    // Tag-based prompts (for NovelAI)
+    // Paired prompt formats
     const [positivePrompt, setPositivePrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    // Active tab for tag-based UI
+    const [characterPrompts, setCharacterPrompts] = useState<NovelAICharacterPrompt[]>([]);
     const [activePromptTab, setActivePromptTab] = useState<'positive' | 'negative'>('positive');
 
     const [showPromptBuilder, setShowPromptBuilder] = useState(false);
 
     // Streaming state for AI Assist
     const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
-    const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
+    const [streamingFormat, setStreamingFormat] = useState<PromptFormat | null>(null);
     const [streamingError, setStreamingError] = useState<string | null>(null);
-    const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
     const [providerSettingsDraft, setProviderSettingsDraft] = useState<Record<string, unknown>>({});
 
     // Style selection
     const [selectedNaturalStyleId, setSelectedNaturalStyleId] = useState<string | null>(
         settings.imageGenConfig.selectedNaturalStyleId
     );
-    const [selectedTagBasedStyleId, setSelectedTagBasedStyleId] = useState<string | null>(
-        settings.imageGenConfig.selectedTagBasedStyleId
+    const [selectedPositiveNegativeStyleId, setSelectedPositiveNegativeStyleId] = useState<string | null>(
+        settings.imageGenConfig.selectedPositiveNegativeStyleId
+    );
+    const [selectedNovelAIStyleId, setSelectedNovelAIStyleId] = useState<string | null>(
+        settings.imageGenConfig.selectedNovelAIStyleId
     );
 
     const [customNaturalPrefix, setCustomNaturalPrefix] = useState('');
@@ -180,8 +147,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         loading: modelsLoading,
         error: modelError,
         selectedModel,
-        currentPromptType,
-        isTagBased,
+        currentPromptFormat,
+        isNaturalPrompt,
+        isNovelAIPrompt,
         providerSettingsSpec,
         normalizedProviderSettings,
         providerSettingsFlags,
@@ -254,9 +222,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         () => settings.imageGenConfig.naturalStyles ?? [],
         [settings.imageGenConfig.naturalStyles],
     );
-    const tagBasedStyles = useMemo(
-        () => settings.imageGenConfig.tagBasedStyles ?? [],
-        [settings.imageGenConfig.tagBasedStyles],
+    const positiveNegativeStyles = useMemo(
+        () => settings.imageGenConfig.positiveNegativeStyles ?? [],
+        [settings.imageGenConfig.positiveNegativeStyles],
+    );
+    const novelAIStyles = useMemo(
+        () => settings.imageGenConfig.novelAIStyles ?? [],
+        [settings.imageGenConfig.novelAIStyles],
     );
 
     // Prefill all settings from an existing recipe (Retry flow)
@@ -272,18 +244,29 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         setImageSize(initialRecipe.imageSize);
         setProviderSettingsDraft(buildProviderSettingsDraft(initialRecipe.provider, initialRecipe));
 
-        if (initialRecipe.promptType === 'natural') {
+        if (initialRecipe.promptFormat === 'natural') {
             setSelectedNaturalStyleId(normalizeSelectedStyleId(naturalStyles, initialRecipe.styleId));
-            setSelectedTagBasedStyleId(null);
+            setSelectedPositiveNegativeStyleId(null);
+            setSelectedNovelAIStyleId(null);
             setCustomNaturalPrefix('');
             setCustomNaturalPostfix('');
             setCustomPositivePrefix('');
             setCustomPositivePostfix('');
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
-            setPrompt(initialRecipe.prompt.content ?? '');
+            setPrompt(initialRecipe.promptData.prompt.content ?? '');
+            setCharacterPrompts([]);
         } else {
-            setSelectedTagBasedStyleId(normalizeSelectedStyleId(tagBasedStyles, initialRecipe.styleId));
+            setSelectedPositiveNegativeStyleId(
+                initialRecipe.promptFormat === 'positive_negative'
+                    ? normalizeSelectedStyleId(positiveNegativeStyles, initialRecipe.styleId)
+                    : null,
+            );
+            setSelectedNovelAIStyleId(
+                initialRecipe.promptFormat === 'novelai'
+                    ? normalizeSelectedStyleId(novelAIStyles, initialRecipe.styleId)
+                    : null,
+            );
             setSelectedNaturalStyleId(null);
             setCustomNaturalPrefix('');
             setCustomNaturalPostfix('');
@@ -291,8 +274,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setCustomPositivePostfix('');
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
-            setPositivePrompt(initialRecipe.positive.content ?? '');
-            setNegativePrompt(initialRecipe.negative?.content ?? '');
+            setPositivePrompt(initialRecipe.promptData.positive.content ?? '');
+            setNegativePrompt(initialRecipe.promptData.negative.content ?? '');
+            setCharacterPrompts(
+                initialRecipe.promptFormat === 'novelai'
+                    ? initialRecipe.promptData.characters
+                    : [],
+            );
             setActivePromptTab('positive');
         }
 
@@ -357,7 +345,14 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles, buildProviderSettingsDraft]);
+    }, [
+        initialRecipe,
+        currentProjectId,
+        naturalStyles,
+        positiveNegativeStyles,
+        novelAIStyles,
+        buildProviderSettingsDraft,
+    ]);
 
     useEffect(() => {
         if (!selectedNaturalStyleId) return;
@@ -366,10 +361,16 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     }, [selectedNaturalStyleId, naturalStyles]);
 
     useEffect(() => {
-        if (!selectedTagBasedStyleId) return;
-        if (tagBasedStyles.some((style) => style.id === selectedTagBasedStyleId)) return;
-        setSelectedTagBasedStyleId(null);
-    }, [selectedTagBasedStyleId, tagBasedStyles]);
+        if (!selectedPositiveNegativeStyleId) return;
+        if (positiveNegativeStyles.some((style) => style.id === selectedPositiveNegativeStyleId)) return;
+        setSelectedPositiveNegativeStyleId(null);
+    }, [selectedPositiveNegativeStyleId, positiveNegativeStyles]);
+
+    useEffect(() => {
+        if (!selectedNovelAIStyleId) return;
+        if (novelAIStyles.some((style) => style.id === selectedNovelAIStyleId)) return;
+        setSelectedNovelAIStyleId(null);
+    }, [selectedNovelAIStyleId, novelAIStyles]);
 
     useEffect(() => {
         if (!providerSettingsSpec) return;
@@ -382,18 +383,18 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     useEffect(() => {
         if (!savedPrompts || initialRecipe) return;
 
-        const promptType = currentPromptType;
-        if (promptType === 'natural' && savedPrompts.natural) {
-            setPrompt(savedPrompts.natural);
-        } else if (promptType === 'tag_based') {
-            if (savedPrompts.positive) {
-                setPositivePrompt(savedPrompts.positive);
-            }
-            if (savedPrompts.negative) {
-                setNegativePrompt(savedPrompts.negative);
-            }
+        if (currentPromptFormat === 'natural') {
+            setPrompt(savedPrompts.natural.prompt);
+        } else if (currentPromptFormat === 'positive_negative') {
+            setPositivePrompt(savedPrompts.positive_negative.positive);
+            setNegativePrompt(savedPrompts.positive_negative.negative);
+            setCharacterPrompts([]);
+        } else {
+            setPositivePrompt(savedPrompts.novelai.positive);
+            setNegativePrompt(savedPrompts.novelai.negative);
+            setCharacterPrompts(savedPrompts.novelai.characters);
         }
-    }, [currentPromptType, savedPrompts, initialRecipe]);
+    }, [currentPromptFormat, savedPrompts, initialRecipe]);
 
     // Reset model/size when provider changes
     useEffect(() => {
@@ -415,6 +416,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setCustomPositivePostfix('');
             setCustomNegativePrefix('');
             setCustomNegativePostfix('');
+            setCharacterPrompts([]);
         }
     }, [provider, buildProviderSettingsDraft]);
 
@@ -427,130 +429,24 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const journeyThreadId = useJourneyStore((state) =>
         streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
     );
-    const streamingThreadStatus = useThreadStreamStore((state) =>
-        journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
-    );
-    const streamingThreadError = useThreadStreamStore((state) =>
-        journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
-    );
     const liveView = useThreadLiveViewState(journeyThreadId ?? null);
-    const streamingStatus = useMemo(() => {
-        if (!streamingSessionId) return null;
-        return isPausedLikeThreadStatus(streamingThreadStatus)
-            ? 'halted'
-            : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
-                ? 'done'
-                : 'running';
-    }, [streamingSessionId, streamingThreadStatus]);
-    const streamingDeliveryMode = liveView?.deliveryMode ?? 'live';
     const streamingReasoningDetail = liveView?.reasoningDetail;
-    const streamedText = useMemo(
-        () => (liveView?.contentParts ?? []).map((part) => part.text).join(''),
-        [liveView?.contentParts],
-    );
-    const streamedToolPrompt = useMemo(() => {
-        const firstToolCall = liveView?.streamingToolCalls[0];
-        return readPromptValue((firstToolCall?.arguments as Record<string, unknown> | undefined)?.prompt);
-    }, [liveView?.streamingToolCalls]);
-    const effectivePrompt = useMemo(
-        () => streamedToolPrompt || streamedText,
-        [streamedToolPrompt, streamedText],
-    );
-    const streamThreadId = journeyThreadId ?? null;
-    const streamingErrorMessage = streamingStatus === 'halted'
-        ? (
-            streamingThreadStatus === 'paused'
-                ? 'Prompt generation paused.'
-                : (streamingThreadError ?? 'Failed to generate prompt')
-        )
-        : null;
-    const isSuppressedStreaming = streamingStatus === 'running' && streamingDeliveryMode === 'suppressed';
-    const isStreamingRunning = streamingStatus === 'running';
+    const isSuppressedStreaming = Boolean(streamingSessionId && liveView?.deliveryMode === 'suppressed');
 
-    const applyPromptForMode = useCallback((mode: PromptMode, nextPrompt: string) => {
-        switch (mode) {
-            case 'natural':
-                setPrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-            case 'positive':
-                setPositivePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-            case 'negative':
-                setNegativePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-        }
+    const handleStreamingStart = useCallback((sessionId: string, promptFormat: PromptFormat) => {
+        setStreamingSessionId(sessionId);
+        setStreamingFormat(promptFormat);
+        setStreamingError(null);
     }, []);
 
-    // Reflect incremental streaming updates without re-setting identical prompt text.
-    useEffect(() => {
-        if (!streamingSessionId || !streamingMode) return;
-        if (streamingStatus !== 'running') return;
-        if (!effectivePrompt) return;
-        applyPromptForMode(streamingMode, effectivePrompt);
-    }, [streamingSessionId, streamingMode, streamingStatus, effectivePrompt, applyPromptForMode]);
-
-    // Finalize or fail the streaming session exactly once per terminal transition.
-    useEffect(() => {
-        if (!streamingSessionId || !streamingMode || !streamingStatus) {
-            previousStreamingStatusRef.current = null;
-            return;
-        }
-
-        if (streamingStatus === 'running') {
-            previousStreamingStatusRef.current = 'running';
-            return;
-        }
-
-        if (previousStreamingStatusRef.current === streamingStatus) return;
-        previousStreamingStatusRef.current = streamingStatus;
-
-        if (streamingStatus === 'halted') {
-            setStreamingError(streamingErrorMessage ?? 'Failed to generate prompt');
-            setStreamingSessionId(null);
-            setStreamingMode(null);
-            return;
-        }
-
-        if (streamThreadId) {
-            const finalPrompt = extractFinalPromptFromThread(streamThreadId);
-            if (finalPrompt) {
-                applyPromptForMode(streamingMode, finalPrompt);
-            }
-        }
-
-        setStreamingSessionId(null);
-        setStreamingMode(null);
-    }, [
-        streamingSessionId,
-        streamingMode,
-        streamingStatus,
-        streamingErrorMessage,
-        streamThreadId,
-        applyPromptForMode,
-    ]);
-
-    // Handler for when streaming starts
-    const handleStreamingStart = useCallback((sessionId: string, mode: PromptMode) => {
-        previousStreamingStatusRef.current = null;
-        setStreamingSessionId(sessionId);
-        setStreamingMode(mode);
-        setStreamingError(null);  // Clear previous error
-        // Clear target prompt to show streaming from scratch
-        applyPromptForMode(mode, '');
-    }, [applyPromptForMode]);
-
-    // Handler for streaming errors (direct callback, no store subscription timing issues)
     const handleStreamingError = useCallback((error: string) => {
-        previousStreamingStatusRef.current = null;
         setStreamingError(error);
         setStreamingSessionId(null);
-        setStreamingMode(null);
+        setStreamingFormat(null);
     }, []);
 
-    // Compute streaming states for UI
-    const isStreamingNatural = streamingSessionId !== null && streamingMode === 'natural';
-    const isStreamingPositive = streamingSessionId !== null && streamingMode === 'positive';
-    const isStreamingNegative = streamingSessionId !== null && streamingMode === 'negative';
+    const isStreamingNatural = streamingSessionId !== null && streamingFormat === 'natural';
+    const isStreamingPaired = streamingSessionId !== null && streamingFormat !== 'natural';
     const isStreaming = streamingSessionId !== null;
 
     const getCurrentNaturalStyle = () => {
@@ -558,9 +454,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return naturalStyles.find((s) => s.id === selectedNaturalStyleId) || null;
     };
 
-    const getCurrentTagBasedStyle = () => {
-        if (!selectedTagBasedStyleId) return null;
-        return tagBasedStyles.find((s) => s.id === selectedTagBasedStyleId) || null;
+    const getCurrentPairedStyle = () => {
+        const styles = isNovelAIPrompt ? novelAIStyles : positiveNegativeStyles;
+        const styleId = isNovelAIPrompt ? selectedNovelAIStyleId : selectedPositiveNegativeStyleId;
+        if (!styleId) return null;
+        return styles.find((style) => style.id === styleId) || null;
+    };
+
+    const currentPairedStyleId = isNovelAIPrompt
+        ? selectedNovelAIStyleId
+        : selectedPositiveNegativeStyleId;
+    const currentPairedStyles = isNovelAIPrompt ? novelAIStyles : positiveNegativeStyles;
+    const setCurrentPairedStyleId = (styleId: string | null) => {
+        if (isNovelAIPrompt) setSelectedNovelAIStyleId(styleId);
+        else setSelectedPositiveNegativeStyleId(styleId);
     };
 
     const binding: ImageGenerationBinding | null = useMemo(() => {
@@ -608,13 +515,21 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 ? normalizedProviderSettings
                 : undefined;
 
-        if (isTagBased) {
+        let recipe: ImageGenerationRecipe;
+        if (!isNaturalPrompt) {
             if (!positivePrompt.trim()) {
                 showAlert({ title: 'Missing Prompt', message: 'Please enter a positive prompt' });
                 return;
             }
+            if (isNovelAIPrompt && characterPrompts.some((character) => !character.positive.trim())) {
+                showAlert({
+                    title: 'Incomplete Character Prompt',
+                    message: 'Each NovelAI character card needs a positive prompt.',
+                });
+                return;
+            }
 
-            const style = getCurrentTagBasedStyle() as any;
+            const style = getCurrentPairedStyle();
             const positive: StyledPrompt = {
                 prefix: (style?.positivePrefix ?? customPositivePrefix) || '',
                 content: positivePrompt.trim(),
@@ -623,13 +538,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
             const negPrefix = (style?.negativePrefix ?? customNegativePrefix) || '';
             const negPostfix = (style?.negativePostfix ?? customNegativePostfix) || '';
-            const negContent = negativePrompt.trim();
-            const negative: StyledPrompt | undefined =
-                negContent || negPrefix || negPostfix
-                    ? { prefix: negPrefix, content: negContent, postfix: negPostfix }
-                    : undefined;
+            const negative: StyledPrompt = {
+                prefix: negPrefix,
+                content: negativePrompt.trim(),
+                postfix: negPostfix,
+            };
 
-            const recipe: ImageGenerationRecipe = buildTagBasedImageRecipe({
+            const pairedInput = {
                 provider,
                 model,
                 aspectRatio,
@@ -637,35 +552,27 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 positive,
                 negative,
                 providerSettings,
-                styleId: selectedTagBasedStyleId,
+                styleId: currentPairedStyleId,
                 referenceImages: referenceImagesData,
                 maskImage: maskImageData,
-            });
-
-                const { imageRunId: newTaskId } = await ImageRunRuntime.start(
-                    { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
-                    {
-                        onSuccess: (result) => {
-                            onImageGenerated?.(result.asset);
-                        },
-                    }
-                );
-                setTaskId(newTaskId);
-                onClose?.();
+            };
+            recipe = isNovelAIPrompt
+                ? buildNovelAIImageRecipe({ ...pairedInput, characters: characterPrompts })
+                : buildPositiveNegativeImageRecipe(pairedInput);
         } else {
             if (!prompt.trim()) {
                 showAlert({ title: 'Missing Prompt', message: 'Please enter a prompt' });
                 return;
             }
 
-            const style = getCurrentNaturalStyle() as any;
+            const style = getCurrentNaturalStyle();
             const promptObj: StyledPrompt = {
                 prefix: (style?.prefix ?? customNaturalPrefix) || '',
                 content: prompt.trim(),
                 postfix: (style?.postfix ?? customNaturalPostfix) || '',
             };
 
-            const recipe: ImageGenerationRecipe = buildNaturalImageRecipe({
+            recipe = buildNaturalImageRecipe({
                 provider,
                 model,
                 aspectRatio,
@@ -677,22 +584,32 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 maskImage: maskImageData,
             });
 
-            const { imageRunId: newTaskId } = await ImageRunRuntime.start(
-                { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
-                {
-                    onSuccess: (result) => {
-                        onImageGenerated?.(result.asset);
-                    },
-                }
-            );
-            setTaskId(newTaskId);
-            onClose?.();
         }
+
+        const { imageRunId: newTaskId } = await ImageRunRuntime.start(
+            { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
+            {
+                onSuccess: (result) => {
+                    onImageGenerated?.(result.asset);
+                },
+            },
+        );
+        setTaskId(newTaskId);
+        onClose?.();
     };
 
-    const handlePromptBuilderGenerated = (result: PromptResult) => {
-        applyPromptForMode(result.mode, result.prompt);
+    const handlePromptBuilderGenerated = (result: ImagePromptResult) => {
+        if (result.promptFormat === 'natural') {
+            setPrompt(result.prompt);
+        } else {
+            setPositivePrompt(result.positive);
+            setNegativePrompt(result.negative);
+            setCharacterPrompts(result.promptFormat === 'novelai' ? result.characters : []);
+        }
+        setStreamingSessionId(null);
+        setStreamingFormat(null);
     };
+    const promptBuilderFormat = streamingFormat ?? currentPromptFormat;
 
     return (
         <div className="image-generation-modal">
@@ -707,18 +624,18 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 
             <div className="panel-body">
                 {/* Natural Language Prompt Input */}
-                {!isTagBased && (
+                {isNaturalPrompt && (
                     <div className="form-field">
                         <label>Prompt</label>
                         {/* Thinking display during streaming */}
-                        {isStreamingNatural && streamingStatus && (
+                        {isStreamingNatural && (
                             isSuppressedStreaming ? (
                                 <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
                                     reasoningDetail={streamingReasoningDetail}
-                                    isStreaming={isStreamingRunning}
+                                    isStreaming
                                 />
                             )
                         )}
@@ -744,8 +661,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     </div>
                 )}
 
-                {/* Tag-Based Prompt Input with Tabs */}
-                {isTagBased && (
+                {/* Positive/negative prompt input */}
+                {!isNaturalPrompt && (
                     <div className="form-field">
                         <label>Prompt</label>
                         {provider === 'novelai' && /^nai-diffusion-5-(curated|full)$/.test(selectedModel?.id ?? '') ? (
@@ -754,14 +671,14 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             </p>
                         ) : null}
                         {/* Thinking display during streaming */}
-                        {(isStreamingPositive || isStreamingNegative) && streamingStatus && (
+                        {isStreamingPaired && (
                             isSuppressedStreaming ? (
                                 <PreexistingLiveRunNotice />
                             ) : (
                                 <ThinkingDisplay
                                     messageId={streamingSessionId!}
                                     reasoningDetail={streamingReasoningDetail}
-                                    isStreaming={isStreamingRunning}
+                                    isStreaming
                                 />
                             )
                         )}
@@ -783,20 +700,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             {activePromptTab === 'positive' ? (
                                 <textarea
                                     value={positivePrompt}
-                                    onChange={(e) => !isStreamingPositive && setPositivePrompt(e.target.value)}
+                                    onChange={(e) => !isStreamingPaired && setPositivePrompt(e.target.value)}
                                     placeholder="1girl, solo, long hair, masterpiece, best quality, ..."
                                     rows={4}
-                                    className={`prompt-input ${isStreamingPositive ? 'streaming' : ''}`}
-                                    readOnly={isStreamingPositive}
+                                    className={`prompt-input ${isStreamingPaired ? 'streaming' : ''}`}
+                                    readOnly={isStreamingPaired}
                                 />
                             ) : (
                                 <textarea
                                     value={negativePrompt}
-                                    onChange={(e) => !isStreamingNegative && setNegativePrompt(e.target.value)}
+                                    onChange={(e) => !isStreamingPaired && setNegativePrompt(e.target.value)}
                                     placeholder="lowres, bad anatomy, bad hands, missing fingers, ..."
                                     rows={4}
-                                    className={`prompt-input ${isStreamingNegative ? 'streaming' : ''}`}
-                                    readOnly={isStreamingNegative}
+                                    className={`prompt-input ${isStreamingPaired ? 'streaming' : ''}`}
+                                    readOnly={isStreamingPaired}
                                 />
                             )}
                             <button
@@ -806,9 +723,16 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 type="button"
                                 disabled={isStreaming}
                             >
-                                <AIAssistMini size="sm" /> {(isStreamingPositive || isStreamingNegative) ? 'Generating...' : 'AI Assist'}
+                                <AIAssistMini size="sm" /> {isStreamingPaired ? 'Generating...' : 'AI Assist'}
                             </button>
                         </div>
+                        {isNovelAIPrompt ? (
+                            <NovelAICharacterPromptCards
+                                characters={characterPrompts}
+                                onChange={setCharacterPrompts}
+                                disabled={isStreamingPaired}
+                            />
+                        ) : null}
                     </div>
                 )}
 
@@ -933,7 +857,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         </>
                     )}
 
-                    {!isTagBased && (
+                    {isNaturalPrompt && (
                         <div className="form-field">
                             <label>Style</label>
                             <select
@@ -951,16 +875,16 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         </div>
                     )}
 
-                    {isTagBased && (
+                    {!isNaturalPrompt && (
                         <div className="form-field">
                             <label>Style</label>
                             <select
-                                value={selectedTagBasedStyleId || ''}
-                                onChange={(e) => setSelectedTagBasedStyleId(e.target.value || null)}
+                                value={currentPairedStyleId || ''}
+                                onChange={(e) => setCurrentPairedStyleId(e.target.value || null)}
                                 className="config-select"
                             >
                                 <option value="">None</option>
-                                {tagBasedStyles.map((s) => (
+                                {currentPairedStyles.map((s) => (
                                     <option key={s.id} value={s.id}>
                                         {s.name}
                                     </option>
@@ -1078,7 +1002,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 ) : null}
 
                 {/* Natural Style Preview */}
-                {!isTagBased && selectedNaturalStyleId && getCurrentNaturalStyle() && (
+                {isNaturalPrompt && selectedNaturalStyleId && getCurrentNaturalStyle() && (
                     <div className="style-preview-box">
                         <span className="preview-label">Style Preview:</span>
                         <span className="preview-text">
@@ -1089,16 +1013,16 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     </div>
                 )}
 
-                {/* Tag-Based Style Preview */}
-                {isTagBased && selectedTagBasedStyleId && getCurrentTagBasedStyle() && (
-                    <div className="style-preview-box tag-based">
+                {/* Positive/negative style preview */}
+                {!isNaturalPrompt && currentPairedStyleId && getCurrentPairedStyle() && (
+                    <div className="style-preview-box positive-negative">
                         <span className="preview-label">Style Tags:</span>
                         <div className="tag-preview-rows">
                             <div className="tag-row">
 	                                <span className="tag-indicator positive">+</span>
 	                                <span className="tag-text">
 	                                    {(() => {
-	                                        const style = getCurrentTagBasedStyle();
+	                                        const style = getCurrentPairedStyle();
 	                                        const combined = [style?.positivePrefix, style?.positivePostfix]
 	                                            .filter(Boolean)
 	                                            .join(' ')
@@ -1111,7 +1035,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
 	                                <span className="tag-indicator negative">-</span>
 	                                <span className="tag-text">
 	                                    {(() => {
-	                                        const style = getCurrentTagBasedStyle();
+	                                        const style = getCurrentPairedStyle();
 	                                        const combined = [style?.negativePrefix, style?.negativePostfix]
 	                                            .filter(Boolean)
 	                                            .join(' ')
@@ -1138,7 +1062,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     disabled={
                         isGenerating ||
                         Boolean(generationBlocker) ||
-                        (isTagBased ? !positivePrompt.trim() : !prompt.trim())
+                        (isNaturalPrompt ? !prompt.trim() : !positivePrompt.trim()) ||
+                        (isNovelAIPrompt && characterPrompts.some((character) => !character.positive.trim()))
                     }
                 >
                     {isGenerating ? 'Generating...' : 'Generate Image'}
@@ -1146,7 +1071,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             </div>
 
             {/* AI Prompt Builder Modal - supports object and scene contexts */}
-            {showPromptBuilder && (objectType && objectId ? (
+            {objectType && objectId ? (
                 <UnifiedImagePromptModal
                     isOpen={showPromptBuilder}
                     onClose={() => setShowPromptBuilder(false)}
@@ -1157,7 +1082,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     objectType={objectType as 'basic_info' | 'story_entity'}
                     objectKind={objectKind as StoryEntityKind | undefined}
                     objectId={objectId}
-                    promptMode={isTagBased ? activePromptTab : 'natural'}
+                    promptFormat={promptBuilderFormat}
                 />
             ) : sceneContext ? (
                 <UnifiedImagePromptModal
@@ -1169,9 +1094,9 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     contextType="scene"
                     manuscriptId={manuscriptId}
                     sceneContext={sceneContext}
-                    promptMode={isTagBased ? activePromptTab : 'natural'}
+                    promptFormat={promptBuilderFormat}
                 />
-            ) : null)}
+            ) : null}
 
             {/* Reference Image Picker Modal */}
             {assetPickerMode && (

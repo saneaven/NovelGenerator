@@ -13,6 +13,14 @@ from database import Base
 from utils.timeline_calendar import DEFAULT_CALENDAR_JSON
 
 
+def _empty_image_prompts() -> dict:
+    return {
+        "natural": {"prompt": ""},
+        "positive_negative": {"positive": "", "negative": ""},
+        "novelai": {"positive": "", "negative": "", "characters": []},
+    }
+
+
 # ============================================================================
 # USER & AUTHENTICATION
 # ============================================================================
@@ -78,9 +86,11 @@ class UserSettings(Base):
         "aspect_ratio": "1:1",
         "image_size": "1K",
         "naturalStyles": [],
-        "tagBasedStyles": [],
+        "positiveNegativeStyles": [],
+        "novelAIStyles": [],
         "selectedNaturalStyleId": null,
-        "selectedTagBasedStyleId": null,
+        "selectedPositiveNegativeStyleId": null,
+        "selectedNovelAIStyleId": null,
         "providerSettings": {
             "openai": {"quality": "medium", "background": "auto", "output_format": "png", "output_compression": 90, "moderation": "auto"},
             "novelai": {
@@ -550,10 +560,16 @@ class BasicInfo(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
 
-    # Image prompt fields (stored on base object, not versioned)
-    image_prompt = Column(Text, nullable=True)  # Natural language prompt
-    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
-    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
+    image_prompts = Column(
+        JSONB,
+        nullable=False,
+        default=_empty_image_prompts,
+        server_default=sa_text(
+            "'{\"natural\":{\"prompt\":\"\"},"
+            "\"positive_negative\":{\"positive\":\"\",\"negative\":\"\"},"
+            "\"novelai\":{\"positive\":\"\",\"negative\":\"\",\"characters\":[]}}'::jsonb"
+        ),
+    )
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -621,10 +637,16 @@ class StoryEntity(Base):
     folder_id = Column(UUID(as_uuid=True), ForeignKey("story_entity_folders.id", ondelete="SET NULL"), nullable=True, index=True)
     display_order = Column(Integer, nullable=False, default=0)
 
-    # Image prompt fields (stored on base object, not versioned)
-    image_prompt = Column(Text, nullable=True)  # Natural language prompt
-    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
-    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
+    image_prompts = Column(
+        JSONB,
+        nullable=False,
+        default=_empty_image_prompts,
+        server_default=sa_text(
+            "'{\"natural\":{\"prompt\":\"\"},"
+            "\"positive_negative\":{\"positive\":\"\",\"negative\":\"\"},"
+            "\"novelai\":{\"positive\":\"\",\"negative\":\"\",\"characters\":[]}}'::jsonb"
+        ),
+    )
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -1290,13 +1312,8 @@ class Asset(Base):
     # Tool-call owned preview assets remain hidden until explicitly applied.
     preview_image_run_id = Column(UUID(as_uuid=True), ForeignKey('image_runs.id', ondelete='SET NULL'), nullable=True, index=True)
 
-    # Generation metadata - prompts stored as StyledPrompt JSON structure
-    # StyledPrompt: { "prefix": str, "content": str, "postfix": str }
-    # Natural language providers (OpenAI, Gemini, xAI): use generation_prompt only
-    # Tag-based providers (NovelAI): use generation_positive_prompt and generation_negative_prompt only
-    generation_prompt = Column(JSONB, nullable=True)  # Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt = Column(JSONB, nullable=True)  # Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt = Column(JSONB, nullable=True)  # Negative prompt for tag-based (NovelAI)
+    generation_prompt_format = Column(String(32), nullable=True)
+    generation_prompt_data = Column(JSONB, nullable=True)
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
     generation_style_id = Column(String(255), nullable=True)

@@ -74,7 +74,7 @@
   border-color: var(--color-brand-primary);
 }
 
-/* Tag-Based Field Groups */
+/* Positive / Negative Field Groups */
 .style-editor-field-group {
   display: flex;
   flex-direction: column;
@@ -102,7 +102,7 @@
   font-size: var(--font-size-xs);
 }
 
-.style-editor-preview--tag-based {
+.style-editor-preview--positive-negative {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);

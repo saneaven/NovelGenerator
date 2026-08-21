@@ -27,7 +27,7 @@ def _descriptor_to_api_dict(model: ImageModelDescriptor) -> dict[str, Any]:
         "icon_url": model.icon_url,
         "tags": list(model.tags or ()),
         "category": model.category,
-        "prompt_type": model.prompt_type,
+        "prompt_format": model.prompt_format,
         "supports_image_input": model.supports_image_input,
         "supports_mask_input": model.supports_mask_input,
         "supports_multi_image_input": model.supports_multi_image_input,
@@ -93,7 +93,7 @@ class ImageModelCatalogService:
         return ImageModelDescriptor(
             id=str(model or provider),
             name=str(model or provider),
-            prompt_type=image_spec.prompt_type,
+            prompt_format=image_spec.prompt_format,
             supports_image_input=image_spec.supports_image_input,
             geometry=ImageModelGeometrySpec(
                 supported_aspect_ratios=fallback_ratios,

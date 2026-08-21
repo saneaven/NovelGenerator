@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from ..shared.image.contracts import ImageGenerationOutput, PreparedImageRequest
+from ...schemas.assets import NovelAICharacterPrompt, NovelAIPromptData
 from .spec import V5_SUPPORTED_SAMPLERS
 
 
@@ -38,21 +39,21 @@ class NovelAIImageAdapter:
                 error="NovelAI access token not configured. Check API key.",
             )
 
-        positive_prompt = request.prompt_payload.positive_prompt
-        if positive_prompt is None:
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NovelAIPromptData):
             return ImageGenerationOutput(
                 success=False,
-                error="Positive prompt is required for NovelAI image generation.",
+                error="NovelAI prompt data is required for NovelAI image generation.",
             )
 
-        negative_prompt = request.prompt_payload.negative_prompt
+        positive_prompt = prompt_data.positive
+        negative_prompt = prompt_data.negative
+        characters = prompt_data.characters
         final_positive = (
             f"{positive_prompt.prefix}{positive_prompt.content}{positive_prompt.postfix}"
         )
         final_negative = (
             f"{negative_prompt.prefix}{negative_prompt.content}{negative_prompt.postfix}"
-            if negative_prompt is not None
-            else ""
         )
 
         try:
@@ -69,6 +70,7 @@ class NovelAIImageAdapter:
                 request=request,
                 positive_prompt=final_positive,
                 negative_prompt=final_negative,
+                characters=characters,
                 width=width,
                 height=height,
             )
@@ -77,6 +79,7 @@ class NovelAIImageAdapter:
                 request=request,
                 positive_prompt=final_positive,
                 negative_prompt=final_negative,
+                characters=characters,
                 width=width,
                 height=height,
             )
@@ -146,13 +149,20 @@ class NovelAIImageAdapter:
     @staticmethod
     def _structured_prompt(
         caption: str,
+        character_captions: list[str],
         *,
         legacy_uc: bool | None = None,
     ) -> dict[str, Any]:
         prompt: dict[str, Any] = {
             "caption": {
                 "base_caption": caption,
-                "char_captions": [],
+                "char_captions": [
+                    {
+                        "char_caption": character_caption,
+                        "centers": [],
+                    }
+                    for character_caption in character_captions
+                ],
             },
             "use_coords": False,
             "use_order": True,
@@ -167,6 +177,7 @@ class NovelAIImageAdapter:
         request: PreparedImageRequest,
         positive_prompt: str,
         negative_prompt: str,
+        characters: list[NovelAICharacterPrompt],
         width: int,
         height: int,
     ) -> dict[str, Any]:
@@ -197,9 +208,15 @@ class NovelAIImageAdapter:
             "dynamic_thresholding": False,
             "sm": False,
             "sm_dyn": False,
-            "v4_prompt": self._structured_prompt(positive_prompt),
+            "v4_prompt": self._structured_prompt(
+                positive_prompt,
+                [character.positive for character in characters],
+            ),
             "negative_prompt": negative_prompt,
-            "v4_negative_prompt": self._structured_prompt(negative_prompt),
+            "v4_negative_prompt": self._structured_prompt(
+                negative_prompt,
+                [character.negative for character in characters],
+            ),
         }
         payload = {
             "input": positive_prompt,
@@ -238,6 +255,7 @@ class NovelAIImageAdapter:
         request: PreparedImageRequest,
         positive_prompt: str,
         negative_prompt: str,
+        characters: list[NovelAICharacterPrompt],
         width: int,
         height: int,
     ) -> dict[str, Any]:
@@ -277,9 +295,16 @@ class NovelAIImageAdapter:
             "sm_dyn": False,
             "image_format": "png",
             "straight_alpha": True,
-            "v4_prompt": self._structured_prompt(positive_prompt),
+            "v4_prompt": self._structured_prompt(
+                positive_prompt,
+                [character.positive for character in characters],
+            ),
             "negative_prompt": negative_prompt,
-            "v4_negative_prompt": self._structured_prompt(negative_prompt, legacy_uc=False),
+            "v4_negative_prompt": self._structured_prompt(
+                negative_prompt,
+                [character.negative for character in characters],
+                legacy_uc=False,
+            ),
         }
         if sampler == "k_euler_ancestral":
             parameters["deliberate_euler_ancestral_bug"] = False

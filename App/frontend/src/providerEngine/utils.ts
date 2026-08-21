@@ -427,7 +427,7 @@ export function toImageModelInfo(model: PublicImageModelDescriptor) {
     icon_url: model.icon_url ?? null,
     tags: model.tags ?? null,
     category: model.category ?? null,
-    prompt_type: model.prompt_type,
+    prompt_format: model.prompt_format,
     supports_image_input: model.supports_image_input,
     supports_mask_input: Boolean(model.supports_mask_input),
     supports_multi_image_input: Boolean(model.supports_multi_image_input),

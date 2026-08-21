@@ -122,6 +122,21 @@
     color: var(--color-text-primary);
 }
 
+.image-prompt-manager .prompt-pair-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-md);
+}
+
+.image-prompt-manager .prompt-pair-fields > label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+}
+
 .image-prompt-manager .prompt-actions {
     display: flex;
     gap: var(--spacing-sm);
@@ -212,3 +227,18 @@
 }
 
 /* Save button styling now comes from TextButton component */
+
+@media (max-width: 768px) {
+    .image-prompt-manager .prompt-tabs {
+        overflow-x: auto;
+    }
+
+    .image-prompt-manager .prompt-tab {
+        padding-inline: var(--spacing-sm);
+        white-space: nowrap;
+    }
+
+    .image-prompt-manager .prompt-pair-fields {
+        grid-template-columns: 1fr;
+    }
+}

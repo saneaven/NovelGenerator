@@ -142,7 +142,7 @@ SPEC = ProviderSpec(
                 "fallback_resolutions": ["512px", "1K", "2K", "4K"],
             },
         ),
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=False,
         models_adapter="dynamic",
         catalog_cache_policy="none",

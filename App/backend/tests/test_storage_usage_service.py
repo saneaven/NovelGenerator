@@ -150,9 +150,8 @@ def test_measure_asset_row_includes_file_size_and_metadata() -> None:
     asset = SimpleNamespace(
         file_size=123,
         name="Cover",
-        generation_prompt={"content": "sunrise"},
-        generation_positive_prompt=None,
-        generation_negative_prompt=None,
+        generation_prompt_format="natural",
+        generation_prompt_data={"prompt": {"content": "sunrise"}},
         generation_settings={"quality": "high"},
         generation_reference_images=[{"asset_id": "x"}],
         generation_reference_objects=[{"id": "y", "type": "character"}],
@@ -177,9 +176,7 @@ def test_uuid_rows_accepts_row_like_values() -> None:
 
 def test_story_core_delta_ignores_non_measured_fields() -> None:
     row = SimpleNamespace(
-        image_prompt="prompt",
-        image_prompt_positive=None,
-        image_prompt_negative=None,
+        image_prompts={"natural": {"prompt": "prompt"}},
         updated_at="before",
         status="draft",
     )
@@ -195,8 +192,8 @@ def test_story_core_delta_ignores_non_measured_fields() -> None:
 
 def test_asset_rows_delta_supports_negative_bulk_delete() -> None:
     rows = [
-        SimpleNamespace(file_size=10, name="a", generation_prompt=None, generation_positive_prompt=None, generation_negative_prompt=None, generation_settings=None, generation_reference_images=None, generation_reference_objects=None),
-        SimpleNamespace(file_size=20, name="b", generation_prompt=None, generation_positive_prompt=None, generation_negative_prompt=None, generation_settings=None, generation_reference_images=None, generation_reference_objects=None),
+        SimpleNamespace(file_size=10, name="a", generation_prompt_format=None, generation_prompt_data=None, generation_settings=None, generation_reference_images=None, generation_reference_objects=None),
+        SimpleNamespace(file_size=20, name="b", generation_prompt_format=None, generation_prompt_data=None, generation_settings=None, generation_reference_images=None, generation_reference_objects=None),
     ]
 
     delta = build_asset_rows_delta(rows, [])

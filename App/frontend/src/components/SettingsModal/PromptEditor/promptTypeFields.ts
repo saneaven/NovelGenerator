@@ -36,7 +36,12 @@ const TRANSLATION_FIELDS: PromptTypeField[] = [
 
 // Image Prompt prompts
 const IMAGE_PROMPT_FIELDS: PromptTypeField[] = [
-  { path: 'imagePrompt.promptMode', label: 'Prompt Mode', type: 'dropdown', options: ['natural', 'positive', 'negative'] },
+  {
+    path: 'imagePrompt.promptFormat',
+    label: 'Prompt Format',
+    type: 'dropdown',
+    options: ['natural', 'positive_negative', 'novelai'],
+  },
   {
     path: '_preview.imagePrompt.currentTargetType',
     label: 'Current Target Preview',

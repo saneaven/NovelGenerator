@@ -78,7 +78,7 @@ def build_memory_summary_template_data(
             "messages": [],
         },
         "imagePrompt": {
-            "promptMode": "natural",
+            "promptFormat": "natural",
             "currentTarget": {
                 "basicInfo": None,
                 "storyEntity": None,
@@ -86,7 +86,6 @@ def build_memory_summary_template_data(
             "scenePreContext": "",
             "scenePostContext": "",
             "selectedContextIds": [],
-            "selectedEntityIds": [],
         },
         "memory": {
             "summaries": [],

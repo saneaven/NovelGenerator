@@ -32,7 +32,6 @@ export interface FilteredIds {
   targetIds: string[];
   contextIds: string[];
   selectedContextIds: string[];
-  selectedEntityIds: string[];
 }
 
 const PREVIEW_BASIC_INFO = {
@@ -58,9 +57,18 @@ const PREVIEW_STORY_ENTITY = {
   folderId: '[ placeholder-folder-characters-id ]',
   folderPath: ['Characters'],
   displayOrder: 1,
-  imagePrompt: '[ Placeholder for saved natural language prompt ]',
-  imagePromptPositive: '[ Placeholder for saved positive tags ]',
-  imagePromptNegative: '[ Placeholder for saved negative tags ]',
+  imagePrompts: {
+    natural: { prompt: '[ Placeholder for saved natural language prompt ]' },
+    positive_negative: {
+      positive: '[ Placeholder for saved positive prompt ]',
+      negative: '[ Placeholder for saved negative prompt ]',
+    },
+    novelai: {
+      positive: '[ Placeholder for saved NovelAI positive prompt ]',
+      negative: '[ Placeholder for saved NovelAI negative prompt ]',
+      characters: [],
+    },
+  },
 };
 
 const PREVIEW_OUTLINE = {
@@ -182,7 +190,6 @@ export function buildFilteredIds(
         targetIds: PREVIEW_ALL_OBJECT_IDS,
         contextIds: PREVIEW_CONTEXT_IDS,
         selectedContextIds: PREVIEW_CONTEXT_IDS,
-        selectedEntityIds: PREVIEW_CONTEXT_IDS,
       };
     }
     return {
@@ -191,7 +198,6 @@ export function buildFilteredIds(
       targetIds: [],
       contextIds: [],
       selectedContextIds: [],
-      selectedEntityIds: [],
     };
   }
 
@@ -205,7 +211,6 @@ export function buildFilteredIds(
     // Preview project data is a placeholder skeleton, so image-context IDs
     // must use that same placeholder identity space instead of live cache IDs.
     selectedContextIds: PREVIEW_CONTEXT_IDS,
-    selectedEntityIds: PREVIEW_CONTEXT_IDS,
   };
 }
 
@@ -354,16 +359,14 @@ export function buildModeSpecificData(
     case 'imagePrompt':
       modeData = {
         imagePrompt: {
-          promptMode: 'natural',
+          promptFormat: 'natural',
           currentTarget: {
             basicInfo: imagePromptTarget === 'basicInfo'
               ? {
                   id: PREVIEW_BASIC_INFO.id,
                   title: PREVIEW_BASIC_INFO.title,
                   logline: PREVIEW_BASIC_INFO.logline,
-                  image_prompt: '[ Placeholder for saved natural language prompt ]',
-                  image_prompt_positive: '[ Placeholder for saved positive tags ]',
-                  image_prompt_negative: '[ Placeholder for saved negative tags ]',
+                  imagePrompts: PREVIEW_STORY_ENTITY.imagePrompts,
                 }
               : null,
             storyEntity: imagePromptTarget === 'storyEntity'
@@ -373,9 +376,7 @@ export function buildModeSpecificData(
                   name: PREVIEW_STORY_ENTITY.name,
                   description: PREVIEW_STORY_ENTITY.description,
                   content: PREVIEW_STORY_ENTITY.content,
-                  image_prompt: PREVIEW_STORY_ENTITY.imagePrompt,
-                  image_prompt_positive: PREVIEW_STORY_ENTITY.imagePromptPositive,
-                  image_prompt_negative: PREVIEW_STORY_ENTITY.imagePromptNegative,
+                  imagePrompts: PREVIEW_STORY_ENTITY.imagePrompts,
                 }
               : null,
           },
@@ -389,7 +390,6 @@ export function buildModeSpecificData(
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
           selectedContextIds: filteredIds.selectedContextIds,
-          selectedEntityIds: filteredIds.selectedEntityIds,
         },
       };
       break;

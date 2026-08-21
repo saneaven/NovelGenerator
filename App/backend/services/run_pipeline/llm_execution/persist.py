@@ -70,6 +70,37 @@ def _cache_metrics_dict(final_snapshot: Any) -> dict[str, Any]:
     return final_snapshot.cache_metrics if isinstance(getattr(final_snapshot, "cache_metrics", None), dict) else {}
 
 
+def _run_ending_tool_state(
+    tool_offer: Any,
+    persisted_tools: list[RunToolCallModel],
+) -> tuple[str, str | None] | None:
+    specs_by_name = getattr(tool_offer, "specs_by_name", {})
+    if not isinstance(specs_by_name, dict):
+        return None
+    ending_names = {
+        str(name)
+        for name, spec in specs_by_name.items()
+        if bool(getattr(spec, "ends_run", False))
+    }
+    if not ending_names:
+        return None
+    if not persisted_tools:
+        return "error", "Required run-ending tool call was not produced"
+    if len(persisted_tools) != 1:
+        return "error", "Run-ending journey requires exactly one tool call"
+
+    for row in persisted_tools:
+        if str(row.tool_name) not in ending_names:
+            return "error", f"Unexpected tool call in run-ending journey: {row.tool_name}"
+        if row.status != "applied":
+            reason = str(row.reason or "").strip()
+            if not reason and isinstance(row.result, dict):
+                reason = str(row.result.get("error") or row.result.get("message") or "").strip()
+            return "error", reason or f"Run-ending tool {row.tool_name} failed"
+
+    return "done", None
+
+
 def _touch_selected_prompt_cache_row(db: Any, row_id: Any) -> None:
     if not row_id:
         return
@@ -306,13 +337,20 @@ async def persist_execution(
             preset_id=prepared.preset_id,
         )
 
-    derived = derive_run_status(
-        current_status=run.status,
-        tool_call_statuses=[tc.status for tc in persisted_tools],
-    )
-    if derived:
-        run.status = derived
-        thread.status = derived
+    run_ending_state = _run_ending_tool_state(getattr(prepared, "tool_offer", None), persisted_tools)
+    if run_ending_state is not None:
+        terminal_status, terminal_error = run_ending_state
+        run.status = terminal_status
+        run.error = terminal_error
+        thread.status = terminal_status
+    else:
+        derived = derive_run_status(
+            current_status=run.status,
+            tool_call_statuses=[tc.status for tc in persisted_tools],
+        )
+        if derived:
+            run.status = derived
+            thread.status = derived
 
     if not assistant_message_delta_applied:
         apply_project_usage_delta(

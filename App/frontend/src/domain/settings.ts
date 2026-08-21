@@ -36,7 +36,6 @@ export type {
 
 // Types
 export type ImageProviderType = string;
-export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Supported UI languages for interface localization
@@ -117,8 +116,8 @@ export interface NaturalImageStyle {
   postfix: string;  // Appended to prompt
 }
 
-// Custom image style for tag-based providers (prefix/postfix for positive and negative prompts)
-export interface TagBasedImageStyle {
+// Custom image style for positive/negative prompt formats.
+export interface PositiveNegativeImageStyle {
   id: string;
   name: string;
   positivePrefix: string;   // Prepended to positive prompt
@@ -135,11 +134,13 @@ export interface ImageGenConfig {
   image_size: string;
   [key: string]: unknown;
 
-  // Separate custom styles per prompt type
-  naturalStyles: NaturalImageStyle[];      // For OpenAI, Gemini, xAI
-  tagBasedStyles: TagBasedImageStyle[];    // For NovelAI
+  // Separate custom styles per prompt format
+  naturalStyles: NaturalImageStyle[];
+  positiveNegativeStyles: PositiveNegativeImageStyle[];
+  novelAIStyles: PositiveNegativeImageStyle[];
   selectedNaturalStyleId: string | null;
-  selectedTagBasedStyleId: string | null;
+  selectedPositiveNegativeStyleId: string | null;
+  selectedNovelAIStyleId: string | null;
 
   // Per-provider settings
   providerSettings: Record<string, Record<string, unknown>>;

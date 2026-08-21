@@ -495,9 +495,8 @@ class ProjectTransferService:
             "mime_type": asset.mime_type,
             "original_ext": ext,
             "generation": {
-                "prompt": asset.generation_prompt,
-                "positive_prompt": asset.generation_positive_prompt,
-                "negative_prompt": asset.generation_negative_prompt,
+                "prompt_format": asset.generation_prompt_format,
+                "prompt_data": asset.generation_prompt_data,
                 "provider": asset.generation_provider,
                 "model": asset.generation_model,
                 "requested_aspect_ratio": asset.generation_requested_aspect_ratio,
@@ -589,14 +588,10 @@ class ProjectTransferService:
             if obj_type == STORY_ENTITY_TYPE:
                 meta["folder_id"] = str(getattr(obj, "folder_id")) if getattr(obj, "folder_id", None) else None
                 meta["display_order"] = int(getattr(obj, "display_order") or 0)
-                meta["image_prompt"] = getattr(obj, "image_prompt", None)
-                meta["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
-                meta["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
+                meta["image_prompts"] = getattr(obj, "image_prompts", None)
 
             if obj_type == "basic_info":
-                meta["image_prompt"] = getattr(obj, "image_prompt", None)
-                meta["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
-                meta["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
+                meta["image_prompts"] = getattr(obj, "image_prompts", None)
 
             if obj_type == "outline":
                 meta["parent_id"] = str(getattr(obj, "parent_id")) if getattr(obj, "parent_id", None) is not None else None
@@ -978,9 +973,8 @@ class ProjectTransferService:
                         file_path=file_path,
                         mime_type=mime_type,
                         asset_type=a.get("asset_type"),
-                        generation_prompt=gen.get("prompt"),
-                        generation_positive_prompt=gen.get("positive_prompt"),
-                        generation_negative_prompt=gen.get("negative_prompt"),
+                        generation_prompt_format=gen.get("prompt_format"),
+                        generation_prompt_data=gen.get("prompt_data"),
                         generation_provider=gen.get("provider"),
                         generation_model=gen.get("model"),
                         generation_requested_aspect_ratio=gen.get("requested_aspect_ratio"),
@@ -1177,9 +1171,7 @@ class ProjectTransferService:
                 BasicInfo(
                     id=new_id,
                     project_id=project_id,
-                    image_prompt=meta.get("image_prompt"),
-                    image_prompt_positive=meta.get("image_prompt_positive"),
-                    image_prompt_negative=meta.get("image_prompt_negative"),
+                    image_prompts=meta.get("image_prompts"),
                     created_at=meta_dt(meta, "created_at"),
                     updated_at=meta_dt(meta, "updated_at"),
                 )
@@ -1237,9 +1229,7 @@ class ProjectTransferService:
                     kind=require_story_entity_kind(item.get("kind")),
                     folder_id=folder_id,
                     display_order=int(meta.get("display_order") or 0),
-                    image_prompt=meta.get("image_prompt"),
-                    image_prompt_positive=meta.get("image_prompt_positive"),
-                    image_prompt_negative=meta.get("image_prompt_negative"),
+                    image_prompts=meta.get("image_prompts"),
                     created_at=meta_dt(meta, "created_at"),
                     updated_at=meta_dt(meta, "updated_at"),
                 )

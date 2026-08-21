@@ -684,11 +684,20 @@
         "preview": "Preview:",
         "deleteStyle": "Delete style"
       },
-      "tagBasedStyles": {
-        "title": "Custom Styles (Tag-Based)",
+      "positiveNegativeStyles": {
+        "title": "Custom Styles (Positive / Negative)",
         "description": "Create custom styles with prefix and postfix for both positive and negative prompts.",
         "defaultStyle": "Default Style",
         "defaultStyleHint": "Style to apply by default when generating images",
+        "none": "None",
+        "positivePrompt": "Positive Prompt",
+        "negativePrompt": "Negative Prompt"
+      },
+      "novelAIStyles": {
+        "title": "Custom Styles (NovelAI)",
+        "description": "Create NovelAI styles with prefix and postfix for the base positive and negative prompts.",
+        "defaultStyle": "Default Style",
+        "defaultStyleHint": "Style to apply by default when generating NovelAI images",
         "none": "None",
         "positivePrompt": "Positive Prompt",
         "negativePrompt": "Negative Prompt"
@@ -1190,7 +1199,7 @@
           "targetLanguage": "Target Language",
           "objectType": "Object Type",
           "objectInfo": "Object Info",
-          "promptMode": "Prompt Mode",
+          "promptFormat": "Prompt Format",
           "currentPrompt": "Current Prompt",
           "positiveTags": "Positive Tags",
           "negativeTags": "Negative Tags",

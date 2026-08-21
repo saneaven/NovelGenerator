@@ -1,5 +1,5 @@
 """Schemas for canonical project objects."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 from typing import Optional, Dict, Any, List, Literal
 from .common import BaseMetadata, VersionBase
@@ -61,23 +61,50 @@ class NameDescriptionUpdate(BaseModel):
     rich_text_format: Optional[Literal["tiptap", "markdown"]] = None
 
 
+class StoredNaturalPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    prompt: str = ""
+
+
+class StoredPositiveNegativePrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    positive: str = ""
+    negative: str = ""
+
+
+class StoredNovelAICharacterPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    positive: str = ""
+    negative: str = ""
+
+
+class StoredNovelAIPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    positive: str = ""
+    negative: str = ""
+    characters: List[StoredNovelAICharacterPrompt] = Field(default_factory=list)
+
+
+class StoredImagePrompts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    natural: StoredNaturalPrompt = Field(default_factory=StoredNaturalPrompt)
+    positive_negative: StoredPositiveNegativePrompt = Field(default_factory=StoredPositiveNegativePrompt)
+    novelai: StoredNovelAIPrompt = Field(default_factory=StoredNovelAIPrompt)
+
+
 class NameDescriptionResponse(BaseMetadata):
     """Name/description object response"""
     project_id: UUID
     name: Optional[str]
     description: Optional[str]  # One-line summary for object indexes
     content: Optional[Any]  # Full content projection
-    # Image prompts (stored on base object, not versioned)
-    image_prompt: Optional[str] = None
-    image_prompt_positive: Optional[str] = None
-    image_prompt_negative: Optional[str] = None
+    image_prompts: Optional[StoredImagePrompts] = None
 
 
 class ImagePromptUpdate(BaseModel):
     """Update image prompts for a project object."""
-    image_prompt: Optional[str] = None
-    image_prompt_positive: Optional[str] = None
-    image_prompt_negative: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+    image_prompts: StoredImagePrompts
 
 
 # ============================================================================

@@ -6,13 +6,17 @@ import pytest
 
 from App.backend.providers.shared.image import orchestrator as image_orchestrator
 from App.backend.providers.shared.image.contracts import ResolvedGeometry
-from App.backend.providers.shared.image.request_validation import validate_canonical_recipe
+from App.backend.providers.shared.image.request_validation import (
+    build_prompt_payload,
+    validate_canonical_recipe,
+)
 from App.backend.providers.shared.image.settings import validate_image_gen_config
 from App.backend.providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from App.backend.services.image_model_catalog_service import (
     image_model_catalog_service,
     sanitize_generation_settings,
 )
+from App.backend.schemas.assets import ImageRunRecipe, PositiveNegativePromptData
 
 
 def test_validate_image_gen_config_rejects_legacy_shape() -> None:
@@ -30,13 +34,120 @@ def test_validate_canonical_recipe_rejects_legacy_geometry_aliases() -> None:
     with pytest.raises(Exception):
         validate_canonical_recipe(
             {
-                "prompt_type": "natural",
+                "prompt_format": "natural",
+                "prompt_data": {"prompt": {"content": "castle"}},
                 "provider": "openai",
                 "model": "gpt-image-2",
                 "requested_ratio": "1536x1024",
-                "prompt": {"prefix": "", "content": "castle", "postfix": ""},
             }
         )
+
+
+def test_validate_canonical_recipe_rejects_blank_novelai_character_positive() -> None:
+    with pytest.raises(Exception, match="character positive prompt must not be blank"):
+        validate_canonical_recipe(
+            {
+                "prompt_format": "novelai",
+                "prompt_data": {
+                    "positive": {"content": "two characters"},
+                    "negative": {"content": ""},
+                    "characters": [{"positive": "  ", "negative": "blurry"}],
+                },
+                "provider": "novelai",
+                "model": "nai-diffusion-5-curated",
+                "requested_aspect_ratio": "13:19",
+                "requested_image_size": "832x1216",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("prompt_format", "prompt_data"),
+    [
+        ("natural", {"prompt": {"prefix": " ", "content": "", "postfix": ""}}),
+        (
+            "positive_negative",
+            {"positive": {"content": " "}, "negative": {"content": ""}},
+        ),
+        (
+            "novelai",
+            {
+                "positive": {"content": ""},
+                "negative": {"content": ""},
+                "characters": [],
+            },
+        ),
+    ],
+)
+def test_validate_canonical_recipe_rejects_blank_base_prompt(
+    prompt_format: str,
+    prompt_data: dict,
+) -> None:
+    with pytest.raises(Exception, match="prompt must not be blank"):
+        validate_canonical_recipe(
+            {
+                "prompt_format": prompt_format,
+                "prompt_data": prompt_data,
+                "provider": "openai" if prompt_format != "novelai" else "novelai",
+                "model": "test-model",
+                "requested_aspect_ratio": "1:1",
+                "requested_image_size": "1K",
+            }
+        )
+
+
+def test_validate_canonical_recipe_accepts_style_only_base_prompt() -> None:
+    normalized = validate_canonical_recipe(
+        {
+            "prompt_format": "positive_negative",
+            "prompt_data": {
+                "positive": {"prefix": "masterpiece"},
+                "negative": {"content": ""},
+            },
+            "provider": "openai",
+            "model": "test-model",
+            "requested_aspect_ratio": "1:1",
+            "requested_image_size": "1K",
+        }
+    )
+
+    assert normalized["prompt_data"]["positive"]["prefix"] == "masterpiece"
+
+
+def test_build_prompt_payload_supports_positive_negative_format() -> None:
+    recipe = ImageRunRecipe.model_validate(
+        {
+            "prompt_format": "positive_negative",
+            "prompt_data": {
+                "positive": {"prefix": "photo of ", "content": "a castle"},
+                "negative": {"content": "blurry"},
+            },
+            "provider": "test",
+            "model": "test-model",
+            "requested_aspect_ratio": "1:1",
+            "requested_image_size": "1K",
+        }
+    )
+    descriptor = ImageModelDescriptor(
+        id="test-model",
+        name="Test model",
+        prompt_format="positive_negative",
+        supports_image_input=False,
+        geometry=ImageModelGeometrySpec(
+            supported_aspect_ratios=("1:1",),
+            supported_resolutions=("1K",),
+            default_aspect_ratio="1:1",
+            default_resolution="1K",
+            resolution_mode="native_tier",
+        ),
+    )
+
+    payload = build_prompt_payload(recipe, descriptor)
+
+    assert payload.prompt_format == "positive_negative"
+    assert isinstance(payload.prompt_data, PositiveNegativePromptData)
+    assert payload.prompt_data.positive.content == "a castle"
+    assert payload.prompt_data.negative.content == "blurry"
 
 
 def test_sanitize_generation_settings_drops_geometry_keys_and_unknown_values() -> None:
@@ -62,12 +173,16 @@ def test_sanitize_generation_settings_drops_geometry_keys_and_unknown_values() -
 
 def test_canonical_recipe_preserves_conditional_reference_settings() -> None:
     normalized = validate_canonical_recipe({
-        "prompt_type": "tag_based",
+        "prompt_format": "novelai",
+        "prompt_data": {
+            "positive": {"content": "1girl"},
+            "negative": {"content": ""},
+            "characters": [],
+        },
         "provider": "novelai",
         "model": "nai-diffusion-5-curated",
         "requested_aspect_ratio": "13:19",
         "requested_image_size": "832x1216",
-        "positive_prompt": {"content": "1girl"},
         "reference_images": [{"asset_id": "ref", "strength": 0}],
         "provider_settings": {
             "referenceMode": "i2i",
@@ -85,7 +200,7 @@ def test_prepare_image_request_preserves_zero_reference_strength(monkeypatch) ->
     descriptor = ImageModelDescriptor(
         id="test-image-model",
         name="Test image model",
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=True,
         geometry=ImageModelGeometrySpec(
             supported_aspect_ratios=("1:1",),
@@ -141,12 +256,12 @@ def test_prepare_image_request_preserves_zero_reference_strength(monkeypatch) ->
             user_id="user",
             project_id="project",
             raw_recipe={
-                "prompt_type": "natural",
+                "prompt_format": "natural",
+                "prompt_data": {"prompt": {"content": "castle"}},
                 "provider": "openai",
                 "model": "test-image-model",
                 "requested_aspect_ratio": "1:1",
                 "requested_image_size": "1K",
-                "prompt": {"content": "castle"},
                 "reference_images": [{"asset_id": "ref", "strength": 0}],
             },
         )
@@ -225,7 +340,7 @@ def test_resolve_geometry_handles_native_exact_models(monkeypatch) -> None:
         return ImageModelDescriptor(
             id=model,
             name=model,
-            prompt_type="natural",
+            prompt_format="natural",
             supports_image_input=True,
             geometry=ImageModelGeometrySpec(
                 supported_aspect_ratios=("1:1", "3:2", "2:3"),

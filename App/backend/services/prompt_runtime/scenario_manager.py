@@ -122,10 +122,10 @@ class ScenarioManager:
             if journey_kind == "messageTranslation":
                 return ScenarioTarget(task_type="translation", task_subtype="message")
 
-            if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
-                context_type = str(payload.get("contextType") or "").strip()
-                task_subtype = "scene" if context_type == "scene" else "object"
-                return ScenarioTarget(task_type="imagePrompt", task_subtype=task_subtype)
+            if journey_kind == "imagePrompt":
+                return ScenarioTarget(task_type="imagePrompt", task_subtype="object")
+            if journey_kind == "sceneImagePrompt":
+                return ScenarioTarget(task_type="imagePrompt", task_subtype="scene")
 
             if journey_kind == "manuscriptEdit":
                 return ScenarioTarget(task_type="editAssistant", task_subtype="manuscript")
@@ -292,10 +292,12 @@ class ScenarioManager:
         project_data: dict[str, Any],
         context_object_ids: list[str],
     ) -> dict[str, Any]:
+        prompt_format = payload.get("promptFormat")
+        if prompt_format not in {"natural", "positive_negative", "novelai"}:
+            raise ValueError("Image prompt journeys require a valid promptFormat")
+
         if "selectedContextIds" in payload:
             selected_context_ids = _as_str_list(payload.get("selectedContextIds"))
-        elif "selectedEntityIds" in payload:
-            selected_context_ids = _as_str_list(payload.get("selectedEntityIds"))
         else:
             selected_context_ids = list(context_object_ids)
         object_id = str(payload.get("objectId") or "").strip()
@@ -308,15 +310,13 @@ class ScenarioManager:
         scene_manuscript = _find_manuscript_by_id(project_data, manuscript_id)
 
         return {
-            "promptMode": str(payload.get("promptMode") or "natural"),
+            "promptFormat": prompt_format,
             "currentTarget": {
                 "basicInfo": {
                     "id": str(basic_info.get("id") or ""),
                     "title": str(basic_info.get("title") or ""),
                     "logline": str(basic_info.get("logline") or ""),
-                    "image_prompt": str(basic_info.get("imagePrompt") or ""),
-                    "image_prompt_positive": str(basic_info.get("imagePromptPositive") or ""),
-                    "image_prompt_negative": str(basic_info.get("imagePromptNegative") or ""),
+                    "imagePrompts": _as_dict(basic_info.get("imagePrompts")),
                 }
                 if basic_info
                 else None,
@@ -326,9 +326,7 @@ class ScenarioManager:
                     "name": str(story_entity.get("name") or ""),
                     "description": str(story_entity.get("description") or ""),
                     "content": str(story_entity.get("content") or ""),
-                    "image_prompt": str(story_entity.get("imagePrompt") or ""),
-                    "image_prompt_positive": str(story_entity.get("imagePromptPositive") or ""),
-                    "image_prompt_negative": str(story_entity.get("imagePromptNegative") or ""),
+                    "imagePrompts": _as_dict(story_entity.get("imagePrompts")),
                 }
                 if story_entity
                 else None,
@@ -343,8 +341,6 @@ class ScenarioManager:
             "scenePreContext": str(scene_context.get("preContext") or ""),
             "scenePostContext": str(scene_context.get("postContext") or ""),
             "selectedContextIds": selected_context_ids,
-            # Keep the legacy name available to saved journeys and custom templates.
-            "selectedEntityIds": selected_context_ids,
         }
 
     def build_template_data(

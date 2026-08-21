@@ -1,4 +1,5 @@
 import type { StyledPrompt } from '../api/assetService';
+import type { NovelAICharacterPrompt } from '../domain/imagePrompt';
 
 export type ImageGenerationBinding =
   | { type: 'scene'; manuscriptId: string }
@@ -13,29 +14,37 @@ export type MaskImageRef = {
   assetId: string;
 };
 
-export type ImageGenerationRecipe =
+type CommonImageGenerationRecipe = {
+  provider: string;
+  model: string;
+  aspectRatio: string;
+  imageSize: string;
+  providerSettings?: Record<string, unknown>;
+  styleId?: string | null;
+  referenceImages?: ReferenceImageRef[];
+  maskImage?: MaskImageRef;
+};
+
+export type ImageGenerationRecipe = CommonImageGenerationRecipe & (
   | {
-      promptType: 'natural';
-      provider: string;
-      model: string;
-      aspectRatio: string;
-      imageSize: string;
-      prompt: StyledPrompt;
-      providerSettings?: Record<string, unknown>;
-      styleId?: string | null;
-      referenceImages?: ReferenceImageRef[];
-      maskImage?: MaskImageRef;
+      promptFormat: 'natural';
+      promptData: {
+        prompt: StyledPrompt;
+      };
     }
   | {
-      promptType: 'tag_based';
-      provider: string;
-      model: string;
-      aspectRatio: string;
-      imageSize: string;
-      positive: StyledPrompt;
-      negative?: StyledPrompt;
-      providerSettings?: Record<string, unknown>;
-      styleId?: string | null;
-      referenceImages?: ReferenceImageRef[];
-      maskImage?: MaskImageRef;
-    };
+      promptFormat: 'positive_negative';
+      promptData: {
+        positive: StyledPrompt;
+        negative: StyledPrompt;
+      };
+    }
+  | {
+      promptFormat: 'novelai';
+      promptData: {
+        positive: StyledPrompt;
+        negative: StyledPrompt;
+        characters: NovelAICharacterPrompt[];
+      };
+    }
+);

@@ -143,7 +143,8 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
         && mode !== 'picker'
         && !!item.asset.generation_provider
         && !!item.asset.generation_model
-        && (!!item.asset.generation_prompt || !!item.asset.generation_positive_prompt);
+        && !!item.asset.generation_prompt_format
+        && !!item.asset.generation_prompt_data;
 
     return (
         <div

@@ -54,6 +54,26 @@ class ToolRegistry:
                 specs_by_name[spec.name] = spec
                 bindings_by_name[spec.name] = binding
 
+        # A run-ending submission tool is the output channel for its journey.
+        # Keep it exclusive so unrelated tools (including selected MCP tools)
+        # cannot compete with the required submission call.
+        ending_names = {
+            name
+            for name, spec in specs_by_name.items()
+            if spec.ends_run
+        }
+        if ending_names:
+            specs_by_name = {
+                name: spec
+                for name, spec in specs_by_name.items()
+                if name in ending_names
+            }
+            bindings_by_name = {
+                name: binding
+                for name, binding in bindings_by_name.items()
+                if name in ending_names
+            }
+
         provider_tools = [
             {
                 "name": spec.name,

@@ -137,8 +137,32 @@ class RunToolCallPersistence:
                     vector_storage_enabled=settings_service.is_vector_storage_enabled(db, run.user_id),
                 )
                 if validation.valid:
-                    row.status = "pending"
-                    row.reason = None
+                    execution_policy = (
+                        str(getattr(binding.spec, "execution_policy", "approval"))
+                        if binding is not None
+                        else "approval"
+                    )
+                    if binding is not None and execution_policy == "immediate":
+                        settings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access
+                        vector_storage_enabled = settings_service.is_vector_storage_enabled(db, run.user_id)
+                        await tool_engine.execute_immediate_tool_call(
+                            db=db,
+                            thread=thread,
+                            run=run,
+                            settings=settings,
+                            row=row,
+                            binding=binding,
+                            args=arguments,
+                            user_id=run.user_id,
+                            project_id=run.project_id,
+                            language=run.language,
+                            preset_id=preset_id,
+                            input_payload=run.input_payload if isinstance(run.input_payload, dict) else {},
+                            vector_storage_enabled=vector_storage_enabled,
+                        )
+                    else:
+                        row.status = "pending"
+                        row.reason = None
                 else:
                     row.status = "failed"
                     row.reason = (

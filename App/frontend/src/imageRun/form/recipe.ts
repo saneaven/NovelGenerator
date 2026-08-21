@@ -1,4 +1,5 @@
 import type { StyledPrompt } from '../../api/assetService';
+import type { NovelAICharacterPrompt } from '../../domain/imagePrompt';
 import type { ImageGenerationRecipe, ReferenceImageRef, MaskImageRef } from '../types';
 
 interface CommonRecipeInput {
@@ -18,12 +19,12 @@ export function buildNaturalImageRecipe(
   },
 ): ImageGenerationRecipe {
   return {
-    promptType: 'natural',
+    promptFormat: 'natural',
     provider: input.provider,
     model: input.model,
     aspectRatio: input.aspectRatio,
     imageSize: input.imageSize,
-    prompt: input.prompt,
+    promptData: { prompt: input.prompt },
     providerSettings: input.providerSettings,
     styleId: input.styleId ?? null,
     referenceImages: input.referenceImages,
@@ -31,20 +32,47 @@ export function buildNaturalImageRecipe(
   };
 }
 
-export function buildTagBasedImageRecipe(
+export function buildPositiveNegativeImageRecipe(
   input: CommonRecipeInput & {
     positive: StyledPrompt;
-    negative?: StyledPrompt;
+    negative: StyledPrompt;
   },
 ): ImageGenerationRecipe {
   return {
-    promptType: 'tag_based',
+    promptFormat: 'positive_negative',
     provider: input.provider,
     model: input.model,
     aspectRatio: input.aspectRatio,
     imageSize: input.imageSize,
-    positive: input.positive,
-    negative: input.negative,
+    promptData: {
+      positive: input.positive,
+      negative: input.negative,
+    },
+    providerSettings: input.providerSettings,
+    styleId: input.styleId ?? null,
+    referenceImages: input.referenceImages,
+    maskImage: input.maskImage,
+  };
+}
+
+export function buildNovelAIImageRecipe(
+  input: CommonRecipeInput & {
+    positive: StyledPrompt;
+    negative: StyledPrompt;
+    characters: NovelAICharacterPrompt[];
+  },
+): ImageGenerationRecipe {
+  return {
+    promptFormat: 'novelai',
+    provider: input.provider,
+    model: input.model,
+    aspectRatio: input.aspectRatio,
+    imageSize: input.imageSize,
+    promptData: {
+      positive: input.positive,
+      negative: input.negative,
+      characters: input.characters,
+    },
     providerSettings: input.providerSettings,
     styleId: input.styleId ?? null,
     referenceImages: input.referenceImages,

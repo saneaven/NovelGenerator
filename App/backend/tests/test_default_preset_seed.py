@@ -140,7 +140,11 @@ def test_default_scene_image_prompt_renders_exact_context_object_categories() ->
         "name": "Ari",
         "description": "Silver-haired scout",
         "content": "ENTITY SELECTED CONTENT",
-        "imagePrompt": "silver braid and amber eyes",
+        "imagePrompts": {
+            "natural": {"prompt": "silver braid and amber eyes"},
+            "positive_negative": {"positive": "silver braid", "negative": ""},
+            "novelai": {"positive": "1girl", "negative": "", "characters": []},
+        },
     }
     unselected_entity = {
         "id": "entity-unselected",
@@ -148,7 +152,11 @@ def test_default_scene_image_prompt_renders_exact_context_object_categories() ->
         "name": "Hidden Port",
         "description": "Must stay hidden",
         "content": "UNSELECTED ENTITY CONTENT",
-        "imagePrompt": "",
+        "imagePrompts": {
+            "natural": {"prompt": ""},
+            "positive_negative": {"positive": "", "negative": ""},
+            "novelai": {"positive": "", "negative": "", "characters": []},
+        },
     }
     project = {
         "storyEntityTree": [
@@ -229,7 +237,8 @@ def test_default_scene_image_prompt_renders_exact_context_object_categories() ->
 
     assert "## Context Objects" in rendered
     assert "ENTITY SELECTED CONTENT" in rendered
-    assert "**Saved Image Prompt:** silver braid and amber eyes" in rendered
+    assert "**Saved Image Prompts:**" in rendered
+    assert "silver braid and amber eyes" in rendered
     assert "CHAPTER SELECTED CONTENT" in rendered
     assert "MANUSCRIPT SELECTED CONTENT" in rendered
     assert "TRACK SELECTED CONTENT" in rendered
@@ -238,6 +247,22 @@ def test_default_scene_image_prompt_renders_exact_context_object_categories() ->
     assert "UNSELECTED ENTITY CONTENT" not in rendered
     assert "UNSELECTED OUTLINE PARENT CONTENT" not in rendered
     assert "UNSELECTED TRACK PARENT CONTENT" not in rendered
+
+
+def test_default_image_prompt_scenarios_require_submit_tool_and_novelai_character_arrays() -> None:
+    document = _load_default_prompt_document()
+    object_scenario = document["prompts"]["imagePrompt"]["object"]
+    scene_scenario = document["prompts"]["imagePrompt"]["scene"]
+    guidelines = document["fragments"]["image"]["guidelines"]["content"]
+
+    for scenario in (object_scenario, scene_scenario):
+        assert "submit_image_prompt" in scenario["system_template"]
+        assert "submit_image_prompt" in scenario["blocks"][-1]["rangeMapping"]["user_template"]
+
+    assert "imagePrompt.promptFormat" in guidelines
+    assert "Each character belongs in its own array item" in guidelines
+    assert "base positive prompt" in guidelines
+    assert "corresponding character negative prompt" in guidelines
 
 
 def test_default_scene_image_prompt_omits_empty_context_section() -> None:

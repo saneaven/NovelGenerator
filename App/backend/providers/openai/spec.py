@@ -182,7 +182,7 @@ SPEC = ProviderSpec(
     ),
     image=ImageSpec(
         runtime=RuntimeSpec(adapter="default"),
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=True,
         catalog_cache_policy="static",
         settings_title_key="settings.imageGen.openaiSettings.title",
@@ -254,7 +254,7 @@ SPEC = ProviderSpec(
             ImageModelDescriptor(
                 id=OPENAI_DEFAULT_MODEL,
                 name="GPT Image 2",
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input=True,
                 supports_mask_input=True,
                 supports_multi_image_input=True,

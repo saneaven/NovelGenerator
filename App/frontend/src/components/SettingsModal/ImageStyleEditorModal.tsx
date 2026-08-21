@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CustomSelect } from '../ui/CustomSelect';
 import { TextButton } from '../TextButton';
-import type { NaturalImageStyle, TagBasedImageStyle } from '../../domain/settings';
+import type { NaturalImageStyle, PositiveNegativeImageStyle } from '../../domain/settings';
 import { generateTempId } from '../../utils/tempId';
 import { confirm } from '../../store/dialogStore';
 import './ImageStyleEditorModal.css';
@@ -13,13 +13,13 @@ interface NaturalProps {
   onChange: (styles: NaturalImageStyle[]) => void;
 }
 
-interface TagBasedProps {
-  mode: 'tag_based';
-  styles: TagBasedImageStyle[];
-  onChange: (styles: TagBasedImageStyle[]) => void;
+interface PairedProps {
+  mode: 'positive_negative' | 'novelai';
+  styles: PositiveNegativeImageStyle[];
+  onChange: (styles: PositiveNegativeImageStyle[]) => void;
 }
 
-type Props = NaturalProps | TagBasedProps;
+type Props = NaturalProps | PairedProps;
 
 const ImageStyleEditorModal: React.FC<Props> = (props) => {
   const { mode } = props;
@@ -27,7 +27,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
   const tp = 'settings.imageGen.styleEditor';
   const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
 
-  const styles = props.styles as (NaturalImageStyle | TagBasedImageStyle)[];
+  const styles = props.styles as (NaturalImageStyle | PositiveNegativeImageStyle)[];
 
   useEffect(() => {
     if (styles.length === 0) {
@@ -54,7 +54,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       (props as NaturalProps).onChange([...(props as NaturalProps).styles, newStyle]);
       setSelectedStyleId(newStyle.id);
     } else {
-      const newStyle: TagBasedImageStyle = {
+      const newStyle: PositiveNegativeImageStyle = {
         id: generateTempId(),
         name: 'New Style',
         positivePrefix: '',
@@ -62,7 +62,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         negativePrefix: '',
         negativePostfix: '',
       };
-      (props as TagBasedProps).onChange([...(props as TagBasedProps).styles, newStyle]);
+      (props as PairedProps).onChange([...(props as PairedProps).styles, newStyle]);
       setSelectedStyleId(newStyle.id);
     }
   };
@@ -82,13 +82,13 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       (props as NaturalProps).onChange(remaining);
       setSelectedStyleId(remaining.length > 0 ? remaining[0].id : null);
     } else {
-      const remaining = (props as TagBasedProps).styles.filter((s) => s.id !== selectedStyleId);
-      (props as TagBasedProps).onChange(remaining);
+      const remaining = (props as PairedProps).styles.filter((s) => s.id !== selectedStyleId);
+      (props as PairedProps).onChange(remaining);
       setSelectedStyleId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
 
-  const handleUpdate = (updates: Partial<NaturalImageStyle> & Partial<TagBasedImageStyle>) => {
+  const handleUpdate = (updates: Partial<NaturalImageStyle> & Partial<PositiveNegativeImageStyle>) => {
     if (!selectedStyleId) return;
     if (mode === 'natural') {
       (props as NaturalProps).onChange(
@@ -97,8 +97,8 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         )
       );
     } else {
-      (props as TagBasedProps).onChange(
-        (props as TagBasedProps).styles.map((s) =>
+      (props as PairedProps).onChange(
+        (props as PairedProps).styles.map((s) =>
           s.id === selectedStyleId ? { ...s, ...updates } : s
         )
       );
@@ -145,7 +145,11 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
     </div>
   );
 
-  const renderTagBasedEditor = (style: TagBasedImageStyle) => (
+  const pairedStyleKey = mode === 'novelai'
+    ? 'settings.imageGen.novelAIStyles'
+    : 'settings.imageGen.positiveNegativeStyles';
+
+  const renderPairedEditor = (style: PositiveNegativeImageStyle) => (
     <div className="style-editor-fields">
       <div className="style-editor-field">
         <label>{t('settings.imageGen.naturalStyles.styleName')}</label>
@@ -157,7 +161,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         />
       </div>
       <div className="style-editor-field-group">
-        <label className="style-editor-group-label">{t('settings.imageGen.tagBasedStyles.positivePrompt')}</label>
+        <label className="style-editor-group-label">{t(`${pairedStyleKey}.positivePrompt`)}</label>
         <div className="style-editor-field-row">
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
@@ -180,7 +184,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         </div>
       </div>
       <div className="style-editor-field-group">
-        <label className="style-editor-group-label">{t('settings.imageGen.tagBasedStyles.negativePrompt')}</label>
+        <label className="style-editor-group-label">{t(`${pairedStyleKey}.negativePrompt`)}</label>
         <div className="style-editor-field-row">
           <div className="style-editor-field">
             <label>{t('settings.imageGen.naturalStyles.prefix')}</label>
@@ -203,7 +207,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
         </div>
       </div>
       {(style.positivePrefix || style.positivePostfix || style.negativePrefix || style.negativePostfix) && (
-        <div className="style-editor-preview style-editor-preview--tag-based">
+        <div className="style-editor-preview style-editor-preview--positive-negative">
           <div className="style-editor-preview-row">
             <span className="style-editor-preview-label style-editor-preview-label--positive">+</span>
             <span className="style-editor-preview-text">
@@ -241,7 +245,7 @@ const ImageStyleEditorModal: React.FC<Props> = (props) => {
       {selectedStyle ? (
         mode === 'natural'
           ? renderNaturalEditor(selectedStyle as NaturalImageStyle)
-          : renderTagBasedEditor(selectedStyle as TagBasedImageStyle)
+          : renderPairedEditor(selectedStyle as PositiveNegativeImageStyle)
       ) : (
         <div className="style-editor-empty">{t(`${tp}.noStyles`)}</div>
       )}

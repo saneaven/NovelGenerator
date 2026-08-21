@@ -10,6 +10,7 @@ from .parsing.tool_call_arguments import parse_tool_call_arguments
 ProviderId = str
 CapabilityName = Literal["llm", "embedding", "image"]
 TokenizerFamily = Literal["openai", "claude", "gemini"]
+ImagePromptFormat = Literal["natural", "positive_negative", "novelai"]
 
 
 class _Missing:
@@ -134,7 +135,7 @@ class ImageModelGeometrySpec:
 class ImageModelDescriptor:
     id: str
     name: str
-    prompt_type: Literal["natural", "tag_based"]
+    prompt_format: ImagePromptFormat
     supports_image_input: bool
     geometry: ImageModelGeometrySpec
     description: str | None = None
@@ -154,7 +155,7 @@ class ImageModelDescriptor:
 @dataclass(frozen=True)
 class ResolvedImageGeometry:
     model: str
-    prompt_type: str
+    prompt_format: ImagePromptFormat
     supports_image_input: bool
     requested_aspect_ratio: str
     requested_image_size: str
@@ -166,7 +167,7 @@ class ResolvedImageGeometry:
 @dataclass(frozen=True)
 class ImageSpec:
     runtime: RuntimeSpec
-    prompt_type: Literal["natural", "tag_based"]
+    prompt_format: ImagePromptFormat
     supports_image_input: bool
     provider_settings: ObjectSpec | None = None
     settings_title_key: str | None = None

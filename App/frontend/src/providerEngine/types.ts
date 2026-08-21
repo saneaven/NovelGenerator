@@ -1,3 +1,5 @@
+import type { PromptFormat } from '../domain/imagePrompt';
+
 export type PublicConditionOp =
   | 'eq'
   | 'neq'
@@ -86,7 +88,7 @@ export interface PublicImageModelGeometrySpec {
 export interface PublicImageModelDescriptor {
   id: string;
   name: string;
-  prompt_type: 'natural' | 'tag_based';
+  prompt_format: PromptFormat;
   supports_image_input: boolean;
   supports_mask_input?: boolean;
   supports_multi_image_input?: boolean;
@@ -113,7 +115,7 @@ export interface PublicImageModelDescriptor {
 }
 
 export interface PublicImageSpec {
-  prompt_type: 'natural' | 'tag_based';
+  prompt_format: PromptFormat;
   supports_image_input: boolean;
   provider_settings?: PublicObjectSpec | null;
   settings_title_key?: string | null;

@@ -42,6 +42,12 @@ def _install_import_stubs() -> None:
     fake_storage_usage.snapshot_run_message_row = lambda row: row
     sys.modules["App.backend.services.storage_usage_service"] = fake_storage_usage
 
+    fake_prompt_cache = types.ModuleType("App.backend.services.prompt_cache_service")
+    fake_prompt_cache.PreparedCachePlan = object
+    fake_prompt_cache.touch_thread_prompt_cache = lambda *_args, **_kwargs: None
+    fake_prompt_cache.upsert_thread_prompt_cache = lambda *_args, **_kwargs: None
+    sys.modules["App.backend.services.prompt_cache_service"] = fake_prompt_cache
+
     fake_raw_output = types.ModuleType("App.backend.services.run_pipeline.raw_output")
 
     async def apply_raw_output(*_args, **_kwargs) -> None:
@@ -132,3 +138,45 @@ def test_persist_execution_rejects_tool_calls_in_raw_output_mode() -> None:
                 assistant_message=assistant_message,
             )
         )
+
+
+def _ending_offer() -> SimpleNamespace:
+    return SimpleNamespace(
+        specs_by_name={"submit_image_prompt": SimpleNamespace(ends_run=True)}
+    )
+
+
+def _tool_row(
+    *,
+    name: str = "submit_image_prompt",
+    status: str = "applied",
+    reason: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        tool_name=name,
+        status=status,
+        reason=reason,
+        result=None,
+    )
+
+
+def test_run_ending_tool_state_requires_exactly_one_applied_submit_call() -> None:
+    assert persist_module._run_ending_tool_state(  # pylint: disable=protected-access
+        _ending_offer(),
+        [_tool_row()],
+    ) == ("done", None)
+
+    error_cases = [
+        [],
+        [_tool_row(), _tool_row()],
+        [_tool_row(name="wrong_tool")],
+        [_tool_row(status="failed", reason="invalid prompt")],
+        [_tool_row(status="failed", reason="executor failed")],
+    ]
+    for rows in error_cases:
+        status, error = persist_module._run_ending_tool_state(  # pylint: disable=protected-access
+            _ending_offer(),
+            rows,
+        )
+        assert status == "error"
+        assert error

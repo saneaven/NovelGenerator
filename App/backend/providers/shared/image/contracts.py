@@ -4,15 +4,13 @@ from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
 from ..contracts import ImageModelDescriptor
-from ....schemas.assets import StyledPrompt
+from ....schemas.assets import ImagePromptData, PromptFormat
 
 
 @dataclass(frozen=True)
 class ImagePromptPayload:
-    prompt_type: str
-    prompt: StyledPrompt | None = None
-    positive_prompt: StyledPrompt | None = None
-    negative_prompt: StyledPrompt | None = None
+    prompt_format: PromptFormat
+    prompt_data: ImagePromptData
     style_id: str | None = None
 
 

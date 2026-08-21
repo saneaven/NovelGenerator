@@ -25,7 +25,7 @@ from ..models.db_models import (
     UserSettings,
 )
 from ..providers.registry import require_spec
-from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, StyledPrompt
+from ..schemas.assets import CreateImageRunRequest, ImageRunResponse, PromptFormat, StyledPrompt
 from ..services.deletion_service import delete_assets_with_files
 from ..services.image_model_catalog_service import sanitize_generation_settings
 from ..services.notification_service import (
@@ -83,30 +83,6 @@ def _parse_uuid(raw: Any, *, field_name: str) -> UUID:
         raise ValueError(f"Invalid {field_name}: {raw}") from exc
 
 
-def _styled_prompt_to_dict(value: StyledPrompt | dict[str, Any] | None) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    if isinstance(value, StyledPrompt):
-        return value.model_dump()
-    if isinstance(value, dict):
-        return {
-            "prefix": str(value.get("prefix") or ""),
-            "content": str(value.get("content") or ""),
-            "postfix": str(value.get("postfix") or ""),
-        }
-    return None
-
-
-def _styled_prompt_from_dict(value: Any) -> StyledPrompt | None:
-    if not isinstance(value, dict):
-        return None
-    return StyledPrompt(
-        prefix=str(value.get("prefix") or ""),
-        content=str(value.get("content") or ""),
-        postfix=str(value.get("postfix") or ""),
-    )
-
-
 def _safe_lang_data(obj: dict[str, Any], language: str) -> dict[str, Any]:
     data = obj.get("data")
     if not isinstance(data, dict):
@@ -128,7 +104,7 @@ def _object_display_name(obj: dict[str, Any], language: str, *, fallback: str) -
     return fallback
 
 
-def _resolve_prompt_type(provider_name: str, model_name: str) -> str:
+def resolve_prompt_format(provider_name: str, model_name: str) -> PromptFormat:
     provider_spec = require_spec(provider_name)
     image_spec = provider_spec.image
     if image_spec is None:
@@ -136,44 +112,99 @@ def _resolve_prompt_type(provider_name: str, model_name: str) -> str:
     if model_name:
         for descriptor in image_spec.models:
             if descriptor.id == model_name:
-                return descriptor.prompt_type
-    return image_spec.prompt_type
+                return descriptor.prompt_format
+    return image_spec.prompt_format
 
 
-def _selected_style(config: Any, prompt_type: str) -> tuple[str | None, dict[str, Any] | None]:
-    selected_natural_style_id = str(config.get("selectedNaturalStyleId") or "").strip() or None
-    selected_tag_style_id = str(config.get("selectedTagBasedStyleId") or "").strip() or None
-    natural_styles = config.get("naturalStyles") if isinstance(config.get("naturalStyles"), list) else []
-    tag_based_styles = config.get("tagBasedStyles") if isinstance(config.get("tagBasedStyles"), list) else []
-    if prompt_type == "tag_based":
-        selected_id = selected_tag_style_id
-        if not selected_id:
-            return None, None
-        return selected_id, next(
-            (
-                dict(style)
-                for style in tag_based_styles
-                if isinstance(style, dict) and str(style.get("id") or "") == selected_id
-            ),
-            None,
-        )
-    selected_id = selected_natural_style_id
+def _settings_prompt_format(settings_row: UserSettings) -> PromptFormat:
+    raw = settings_row.image_gen_config if isinstance(settings_row.image_gen_config, dict) else {}
+    config = validate_image_gen_config(raw)
+    provider_name = str(config.get("provider") or "").strip()
+    model_name = str(config.get("model") or "").strip()
+    return resolve_prompt_format(provider_name, model_name)
+
+
+def _selected_style(
+    config: dict[str, Any],
+    prompt_format: PromptFormat,
+) -> tuple[str | None, dict[str, Any] | None]:
+    style_config_keys = {
+        "natural": ("selectedNaturalStyleId", "naturalStyles"),
+        "positive_negative": (
+            "selectedPositiveNegativeStyleId",
+            "positiveNegativeStyles",
+        ),
+        "novelai": ("selectedNovelAIStyleId", "novelAIStyles"),
+    }
+    selected_key, styles_key = style_config_keys[prompt_format]
+    selected_id = str(config.get(selected_key) or "").strip() or None
     if not selected_id:
         return None, None
+    styles = config.get(styles_key) if isinstance(config.get(styles_key), list) else []
     return selected_id, next(
         (
             dict(style)
-            for style in natural_styles
+            for style in styles
             if isinstance(style, dict) and str(style.get("id") or "") == selected_id
         ),
         None,
     )
 
 
+def _tool_prompt_data(
+    arguments: dict[str, Any],
+    prompt_format: PromptFormat,
+) -> dict[str, Any]:
+    if prompt_format == "natural":
+        prompt = arguments.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt must be a non-blank string")
+        return {"prompt": prompt}
+
+    positive = arguments.get("positive")
+    negative = arguments.get("negative")
+    if not isinstance(positive, str) or not positive.strip():
+        raise ValueError("positive must be a non-blank string")
+    if not isinstance(negative, str):
+        raise ValueError("negative must be a string")
+    data: dict[str, Any] = {
+        "positive": positive,
+        "negative": negative,
+    }
+    if prompt_format == "novelai":
+        characters = arguments.get("characters")
+        if not isinstance(characters, list):
+            raise ValueError("characters must be an array")
+        normalized_characters: list[dict[str, str]] = []
+        for index, character in enumerate(characters):
+            if not isinstance(character, dict):
+                raise ValueError(f"characters[{index}] must be an object")
+            if set(character) != {"positive", "negative"}:
+                raise ValueError(
+                    f"characters[{index}] must contain only positive and negative"
+                )
+            character_positive = character["positive"]
+            character_negative = character["negative"]
+            if not isinstance(character_positive, str) or not character_positive.strip():
+                raise ValueError(
+                    f"characters[{index}].positive must be a non-blank string"
+                )
+            if not isinstance(character_negative, str):
+                raise ValueError(f"characters[{index}].negative must be a string")
+            normalized_characters.append(
+                {
+                    "positive": character_positive,
+                    "negative": character_negative,
+                }
+            )
+        data["characters"] = normalized_characters
+    return data
+
+
 def _build_tool_recipe_snapshot(
     *,
     settings_row: UserSettings,
-    prompt_text: str,
+    prompt_data: dict[str, Any],
     requested_aspect_ratio: str,
     requested_image_size: str | None,
 ) -> dict[str, Any]:
@@ -182,43 +213,50 @@ def _build_tool_recipe_snapshot(
     provider_name = str(config.get("provider") or "").strip()
     model_name = str(config.get("model") or "").strip()
     image_size = str(config.get("image_size") or "").strip() or "1K"
-    prompt_type = _resolve_prompt_type(provider_name, model_name)
-    style_id, style = _selected_style(config, prompt_type)
+    prompt_format = resolve_prompt_format(provider_name, model_name)
+    style_id, style = _selected_style(config, prompt_format)
     style = style or {}
 
-    prompt_payload: StyledPrompt | None = None
-    positive_payload: StyledPrompt | None = None
-    negative_payload: StyledPrompt | None = None
-    if prompt_type == "tag_based":
-        positive_payload = StyledPrompt(
+    if prompt_format == "natural":
+        recipe_prompt_data: dict[str, Any] = {
+            "prompt": StyledPrompt(
+                prefix=str(style.get("prefix") or ""),
+                content=prompt_data["prompt"],
+                postfix=str(style.get("postfix") or ""),
+            ).model_dump(),
+        }
+    else:
+        positive = StyledPrompt(
             prefix=str(style.get("positivePrefix") or ""),
-            content=prompt_text,
+            content=prompt_data["positive"],
             postfix=str(style.get("positivePostfix") or ""),
         )
-        negative_prefix = str(style.get("negativePrefix") or "")
-        negative_postfix = str(style.get("negativePostfix") or "")
-        if negative_prefix or negative_postfix:
-            negative_payload = StyledPrompt(prefix=negative_prefix, content="", postfix=negative_postfix)
-    else:
-        prompt_payload = StyledPrompt(
-            prefix=str(style.get("prefix") or ""),
-            content=prompt_text,
-            postfix=str(style.get("postfix") or ""),
+        negative = StyledPrompt(
+            prefix=str(style.get("negativePrefix") or ""),
+            content=prompt_data["negative"],
+            postfix=str(style.get("negativePostfix") or ""),
         )
+        recipe_prompt_data = {
+            "positive": positive.model_dump(),
+            "negative": negative.model_dump(),
+        }
+        if prompt_format == "novelai":
+            recipe_prompt_data["characters"] = [
+                dict(character)
+                for character in prompt_data["characters"]
+            ]
 
     provider_settings_map = config.get("providerSettings") if isinstance(config.get("providerSettings"), dict) else {}
     stored_provider_settings = _json_dict(provider_settings_map.get(provider_name))
 
     return {
-        "prompt_type": prompt_type,
+        "prompt_format": prompt_format,
+        "prompt_data": recipe_prompt_data,
         "provider": provider_name,
         "model": model_name,
         "requested_aspect_ratio": requested_aspect_ratio,
         "requested_image_size": str(requested_image_size or image_size).strip() or image_size,
         "style_id": style_id,
-        "prompt": _styled_prompt_to_dict(prompt_payload),
-        "positive_prompt": _styled_prompt_to_dict(positive_payload),
-        "negative_prompt": _styled_prompt_to_dict(negative_payload),
         "provider_settings": sanitize_generation_settings(provider_name, stored_provider_settings),
         "reference_images": None,
         "mask_image": None,
@@ -489,20 +527,21 @@ class ImageRunService:
         if not isinstance(tool_call.arguments, dict):
             raise ValueError("Image tool arguments are invalid")
 
-        prompt_text = str(tool_call.arguments.get("prompt") or "").strip()
         requested_aspect_ratio = str(tool_call.arguments.get("ratio") or "").strip()
         requested_image_size = str(tool_call.arguments.get("image_size") or "").strip() or None
-        if not prompt_text:
-            raise ValueError("prompt must be a non-empty string")
         if not requested_aspect_ratio:
             raise ValueError("ratio must be a non-empty string")
 
         settings_row = settings_service._get_settings(db, user_id)  # pylint: disable=protected-access
-        recipe = _build_tool_recipe_snapshot(
-            settings_row=settings_row,
-            prompt_text=prompt_text,
-            requested_aspect_ratio=requested_aspect_ratio,
-            requested_image_size=requested_image_size,
+        prompt_format = _settings_prompt_format(settings_row)
+        prompt_data = _tool_prompt_data(tool_call.arguments, prompt_format)
+        recipe = validate_canonical_recipe(
+            _build_tool_recipe_snapshot(
+                settings_row=settings_row,
+                prompt_data=prompt_data,
+                requested_aspect_ratio=requested_aspect_ratio,
+                requested_image_size=requested_image_size,
+            )
         )
 
         before_excerpt: str | None = None
@@ -886,9 +925,6 @@ class ImageRunService:
         else:
             raise ValueError("No image data returned from provider")
 
-        prompt_payload = _styled_prompt_from_dict(recipe.get("prompt"))
-        positive_prompt = _styled_prompt_from_dict(recipe.get("positive_prompt"))
-        negative_prompt = _styled_prompt_from_dict(recipe.get("negative_prompt"))
         target = _json_dict(_json_dict(row.request_snapshot).get("target"))
         asset_type = "scene" if target.get("type") == "scene" else "object"
         asset = Asset(
@@ -900,9 +936,8 @@ class ImageRunService:
             file_path=file_path,
             mime_type=mime_type,
             asset_type=asset_type,
-            generation_prompt=_styled_prompt_to_dict(prompt_payload),
-            generation_positive_prompt=_styled_prompt_to_dict(positive_prompt),
-            generation_negative_prompt=_styled_prompt_to_dict(negative_prompt),
+            generation_prompt_format=str(recipe["prompt_format"]),
+            generation_prompt_data=dict(recipe["prompt_data"]),
             generation_provider=str(recipe.get("provider") or ""),
             generation_model=str(recipe.get("model") or ""),
             generation_style_id=str(recipe.get("style_id") or "") or None,

@@ -106,9 +106,7 @@ def _story_entity_payload(
         "folderId": str(row.folder_id) if row.folder_id else None,
         "folderPath": list(folder_path),
         "displayOrder": int(row.display_order or 0),
-        "imagePrompt": getattr(row, "image_prompt", None),
-        "imagePromptPositive": getattr(row, "image_prompt_positive", None),
-        "imagePromptNegative": getattr(row, "image_prompt_negative", None),
+        "imagePrompts": getattr(row, "image_prompts", None),
     }
 
 
@@ -435,6 +433,7 @@ async def build_project_data(
         if basic is None:
             return {"id": "", "title": "", "logline": "", "genres": [], "tags": []}, None
         payload = normalize_basic_info_data(_lang_data(get_latest("basic_info", basic.id), lang))
+        payload["imagePrompts"] = getattr(basic, "image_prompts", None)
         return (
             {"id": str(basic.id), **payload},
             {
@@ -443,9 +442,7 @@ async def build_project_data(
                 "name": str(payload.get("title") or ""),
                 "description": str(payload.get("logline") or ""),
                 "content": basic_info_summary_text(payload),
-                "imagePrompt": getattr(basic, "image_prompt", None),
-                "imagePromptPositive": getattr(basic, "image_prompt_positive", None),
-                "imagePromptNegative": getattr(basic, "image_prompt_negative", None),
+                "imagePrompts": getattr(basic, "image_prompts", None),
             },
         )
 

@@ -1,540 +1,325 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useUpdateImagePromptMutation } from '../../data/objects/mutations/useUpdateImagePromptMutation';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useSettings } from '../../data/settings';
-import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
+import UnifiedImagePromptModal from '../ImageGeneration/UnifiedImagePromptModal';
+import NovelAICharacterPromptCards from '../ImageGeneration/NovelAICharacterPromptCards';
 import ThinkingDisplay from '../common/ThinkingDisplay';
 import PreexistingLiveRunNotice from '../common/PreexistingLiveRunNotice';
 import { useThreadLiveViewState } from '../../hooks/useThreadLiveViewState';
-import { useThreadStreamStore } from '../../store/threadStreamStore';
-import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
-import { isPausedLikeThreadStatus } from '../../types/thread';
+import type { ImagePromptResult, PromptFormat, StoredImagePrompts } from '../../domain/imagePrompt';
+import { createEmptyStoredImagePrompts, normalizeStoredImagePrompts } from '../../domain/imagePrompt';
 import type { ObjectType, StoryEntityKind } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
 
 interface ImagePromptManagerProps {
-    objectType: string;
-    objectId: string;
+  objectType: string;
+  objectId: string;
 }
 
-type PromptTabType = PromptMode;
+const FORMAT_LABELS: Record<PromptFormat, string> = {
+  natural: 'Natural Language',
+  positive_negative: 'Positive / Negative',
+  novelai: 'NovelAI',
+};
 
-function readPromptValue(value: unknown): string {
-    return typeof value === 'string' ? value : '';
-}
+const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({ objectType, objectId }) => {
+  const settings = useSettings();
+  const objectQuery = useObjectQuery(objectType as ObjectType, objectId, settings.mainLanguage);
+  const updateImagePromptMutation = useUpdateImagePromptMutation();
 
-function extractPromptTextFromData(data: Record<string, { contentParts?: Array<{ type: 'content'; text: string }> }>): string {
-    const entry = Object.values(data)[0];
-    if (!entry) return '';
-    return (entry.contentParts ?? [])
-        .filter((part) => part.type === 'content')
-        .map((part) => part.text)
-        .join('');
-}
+  const [prompts, setPrompts] = useState<StoredImagePrompts>(createEmptyStoredImagePrompts);
+  const [activeFormat, setActiveFormat] = useState<PromptFormat>('natural');
+  const [showPromptBuilder, setShowPromptBuilder] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
+  const [streamingFormat, setStreamingFormat] = useState<PromptFormat | null>(null);
+  const [streamingError, setStreamingError] = useState<string | null>(null);
 
-function extractFinalPromptFromThread(threadId: string): string {
-    const messages = getMergedThreadMessages(threadId);
-    const lastAssistantMsg = [...messages].reverse().find((message) => message.role === 'assistant');
-    if (!lastAssistantMsg) return '';
+  const object = objectQuery.data ?? null;
+  const objectKind = object?.type === 'story_entity' ? object.kind : undefined;
+  const savedPrompts = useMemo(
+    () => normalizeStoredImagePrompts(object?.metadata?.image_prompts),
+    [object?.metadata?.image_prompts],
+  );
+  const savedPromptsFingerprint = JSON.stringify(savedPrompts);
+  const promptsFingerprint = JSON.stringify(prompts);
+  const hasChanges = promptsFingerprint !== savedPromptsFingerprint;
 
-    const finalText = extractPromptTextFromData(lastAssistantMsg.data);
-    if (finalText) return finalText;
+  useEffect(() => {
+    setPrompts(savedPrompts);
+  }, [object?.id, savedPrompts]);
 
-    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
-    for (const toolCall of toolCalls) {
-        const promptFromArguments = readPromptValue((toolCall.arguments as Record<string, unknown> | undefined)?.prompt);
-        if (promptFromArguments) return promptFromArguments;
-        const promptFromResult = readPromptValue((toolCall.result as Record<string, unknown> | null | undefined)?.prompt);
-        if (promptFromResult) return promptFromResult;
+  const objectName = useMemo(() => {
+    if (!object) return 'Loading...';
+    const data = object.data && typeof object.data === 'object' && !Array.isArray(object.data)
+      ? object.data as Record<string, unknown>
+      : {};
+    const name = objectType === 'basic_info' ? data.title : data.name;
+    return typeof name === 'string' && name ? name : 'Unnamed';
+  }, [object, objectType]);
+
+  const journeyThreadId = useJourneyStore((state) => (
+    streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
+  ));
+  const liveView = useThreadLiveViewState(journeyThreadId ?? null);
+  const isSuppressedStreaming = Boolean(streamingSessionId && liveView?.deliveryMode === 'suppressed');
+
+  const applyGeneratedPrompt = (result: ImagePromptResult) => {
+    setPrompts((current) => {
+      if (result.promptFormat === 'natural') {
+        return { ...current, natural: { prompt: result.prompt } };
+      }
+      if (result.promptFormat === 'positive_negative') {
+        return {
+          ...current,
+          positive_negative: { positive: result.positive, negative: result.negative },
+        };
+      }
+      return {
+        ...current,
+        novelai: {
+          positive: result.positive,
+          negative: result.negative,
+          characters: result.characters,
+        },
+      };
+    });
+    setStreamingSessionId(null);
+    setStreamingFormat(null);
+  };
+
+  const clearFormat = (promptFormat: PromptFormat) => {
+    setPrompts((current) => {
+      if (promptFormat === 'natural') return { ...current, natural: { prompt: '' } };
+      if (promptFormat === 'positive_negative') {
+        return { ...current, positive_negative: { positive: '', negative: '' } };
+      }
+      return { ...current, novelai: { positive: '', negative: '', characters: [] } };
+    });
+  };
+
+  const formatHasContent = (promptFormat: PromptFormat): boolean => {
+    if (promptFormat === 'natural') return Boolean(prompts.natural.prompt);
+    if (promptFormat === 'positive_negative') {
+      return Boolean(prompts.positive_negative.positive || prompts.positive_negative.negative);
     }
+    return Boolean(prompts.novelai.positive || prompts.novelai.negative || prompts.novelai.characters.length);
+  };
 
-    return '';
-}
-
-const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
-    objectType,
-    objectId,
-}) => {
-    const settings = useSettings();
-    const objectQuery = useObjectQuery(objectType as ObjectType, objectId, settings.mainLanguage);
-    const updateImagePromptMutation = useUpdateImagePromptMutation();
-
-    // Local state for editing
-    const [naturalPrompt, setNaturalPrompt] = useState('');
-    const [positivePrompt, setPositivePrompt] = useState('');
-    const [negativePrompt, setNegativePrompt] = useState('');
-    const [activeTab, setActiveTab] = useState<PromptTabType>('natural');
-    const [showPromptBuilder, setShowPromptBuilder] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [hasChanges, setHasChanges] = useState(false);
-    const [saveSuccess, setSaveSuccess] = useState(false);
-
-    // Streaming state for AI Assist
-    const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
-    const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
-    const [streamingError, setStreamingError] = useState<string | null>(null);
-    const previousStreamingStatusRef = useRef<'running' | 'done' | 'halted' | null>(null);
-
-    const journeyThreadId = useJourneyStore((state) =>
-        streamingSessionId ? state.journeys[streamingSessionId]?.threadId : undefined
-    );
-    const streamingThreadStatus = useThreadStreamStore((state) =>
-        journeyThreadId ? state.threadsById[journeyThreadId]?.status : undefined
-    );
-    const streamingThreadError = useThreadStreamStore((state) =>
-        journeyThreadId ? state.threadsById[journeyThreadId]?.lastError : undefined
-    );
-    const liveView = useThreadLiveViewState(journeyThreadId ?? null);
-    const streamingStatus = useMemo(() => {
-        if (!streamingSessionId) return null;
-        return isPausedLikeThreadStatus(streamingThreadStatus)
-            ? 'halted'
-            : (streamingThreadStatus === 'done' || streamingThreadStatus === 'canceled')
-                ? 'done'
-                : 'running';
-    }, [streamingSessionId, streamingThreadStatus]);
-    const streamingDeliveryMode = liveView?.deliveryMode ?? 'live';
-    const streamingReasoningDetail = liveView?.reasoningDetail;
-    const streamedText = useMemo(
-        () => (liveView?.contentParts ?? []).map((part) => part.text).join(''),
-        [liveView?.contentParts],
-    );
-    const streamedToolPrompt = useMemo(() => {
-        const firstToolCall = liveView?.streamingToolCalls[0];
-        return readPromptValue((firstToolCall?.arguments as Record<string, unknown> | undefined)?.prompt);
-    }, [liveView?.streamingToolCalls]);
-    const effectivePrompt = useMemo(
-        () => streamedToolPrompt || streamedText,
-        [streamedToolPrompt, streamedText],
-    );
-    const streamThreadId = journeyThreadId ?? null;
-    const streamingErrorMessage = streamingStatus === 'halted'
-        ? (
-            streamingThreadStatus === 'paused'
-                ? 'Prompt generation paused.'
-                : (streamingThreadError ?? 'Failed to generate prompt')
-        )
-        : null;
-    const isSuppressedStreaming = streamingStatus === 'running' && streamingDeliveryMode === 'suppressed';
-    const isStreamingRunning = streamingStatus === 'running';
-
-    const applyPromptForMode = useCallback((mode: PromptMode, nextPrompt: string) => {
-        switch (mode) {
-            case 'natural':
-                setNaturalPrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-            case 'positive':
-                setPositivePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-            case 'negative':
-                setNegativePrompt((prev) => (prev === nextPrompt ? prev : nextPrompt));
-                break;
-        }
-    }, []);
-
-    // Get object from query
-    const object = objectQuery.data ?? null;
-    const objectKind = object?.type === 'story_entity' ? object.kind : undefined;
-    const objectMetadata = object?.metadata;
-
-    // Get object name for display (use title for basic_info, name for others)
-    const objectName = useMemo(() => {
-        if (!object) return 'Loading...';
-        const data = object.data && typeof object.data === 'object' && !Array.isArray(object.data)
-            ? object.data as Record<string, any>
-            : {};
-        return (objectType === 'basic_info' ? data.title : data.name) || 'Unnamed';
-    }, [object, objectType, settings.mainLanguage]);
-
-    // Load initial values from object metadata
-    useEffect(() => {
-        if (objectMetadata) {
-            const newNatural = objectMetadata.image_prompt || '';
-            const newPositive = objectMetadata.image_prompt_positive || '';
-            const newNegative = objectMetadata.image_prompt_negative || '';
-
-            setNaturalPrompt(newNatural);
-            setPositivePrompt(newPositive);
-            setNegativePrompt(newNegative);
-            setHasChanges(false);
-        }
-    }, [object?.id, objectMetadata]);
-
-    // Track changes
-    useEffect(() => {
-        if (!objectMetadata) return;
-
-        const origNatural = objectMetadata.image_prompt || '';
-        const origPositive = objectMetadata.image_prompt_positive || '';
-        const origNegative = objectMetadata.image_prompt_negative || '';
-
-        const changed =
-            naturalPrompt !== origNatural ||
-            positivePrompt !== origPositive ||
-            negativePrompt !== origNegative;
-
-        setHasChanges(changed);
-    }, [naturalPrompt, positivePrompt, negativePrompt, objectMetadata]);
-
-    // Reflect incremental streaming updates without re-setting identical prompt text.
-    useEffect(() => {
-        if (!streamingSessionId || !streamingMode) return;
-        if (streamingStatus !== 'running') return;
-        if (!effectivePrompt) return;
-        applyPromptForMode(streamingMode, effectivePrompt);
-    }, [streamingSessionId, streamingMode, streamingStatus, effectivePrompt, applyPromptForMode]);
-
-    // Finalize or fail the streaming session exactly once per terminal transition.
-    useEffect(() => {
-        if (!streamingSessionId || !streamingMode || !streamingStatus) {
-            previousStreamingStatusRef.current = null;
-            return;
-        }
-
-        if (streamingStatus === 'running') {
-            previousStreamingStatusRef.current = 'running';
-            return;
-        }
-
-        if (previousStreamingStatusRef.current === streamingStatus) return;
-        previousStreamingStatusRef.current = streamingStatus;
-
-        if (streamingStatus === 'halted') {
-            setStreamingError(streamingErrorMessage ?? 'Failed to generate prompt');
-            setStreamingSessionId(null);
-            setStreamingMode(null);
-            return;
-        }
-
-        if (streamThreadId) {
-            const finalPrompt = extractFinalPromptFromThread(streamThreadId);
-            if (finalPrompt) {
-                applyPromptForMode(streamingMode, finalPrompt);
-            }
-        }
-
-        setStreamingSessionId(null);
-        setStreamingMode(null);
-    }, [
-        streamingSessionId,
-        streamingMode,
-        streamingStatus,
-        streamingErrorMessage,
-        streamThreadId,
-        applyPromptForMode,
-    ]);
-
-    const handleSave = async () => {
-        setIsSaving(true);
-        setSaveSuccess(false);
-        try {
-            await updateImagePromptMutation.mutateAsync({
-                type: objectType as ObjectType,
-                id: objectId,
-                prompts: {
-                    image_prompt: naturalPrompt,
-                    image_prompt_positive: positivePrompt,
-                    image_prompt_negative: negativePrompt,
-                },
-            });
-            setHasChanges(false);
-            setSaveSuccess(true);
-            // Clear success message after 2 seconds
-            setTimeout(() => setSaveSuccess(false), 2000);
-        } catch (err) {
-            console.error('Failed to save image prompts:', err);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleAIAssist = () => {
-        setShowPromptBuilder(true);
-    };
-
-    // Handler for when streaming starts
-    const handleStreamingStart = useCallback((sessionId: string, mode: PromptMode) => {
-        previousStreamingStatusRef.current = null;
-        setStreamingSessionId(sessionId);
-        setStreamingMode(mode);
-        setStreamingError(null);
-        // Clear target prompt to show streaming from scratch
-        applyPromptForMode(mode, '');
-    }, [applyPromptForMode]);
-
-    // Handler for streaming errors
-    const handleStreamingError = useCallback((error: string) => {
-        previousStreamingStatusRef.current = null;
-        setStreamingError(error);
-        setStreamingSessionId(null);
-        setStreamingMode(null);
-    }, []);
-
-    const handlePromptGenerated = (result: { prompt: string; mode: PromptMode }) => {
-        applyPromptForMode(result.mode, result.prompt);
-    };
-
-    const handleClear = (tab: PromptTabType) => {
-        if (tab === 'natural') {
-            setNaturalPrompt('');
-        } else if (tab === 'positive') {
-            setPositivePrompt('');
-        } else if (tab === 'negative') {
-            setNegativePrompt('');
-        }
-    };
-
-    // Compute streaming states for UI
-    const isStreamingNatural = streamingSessionId !== null && streamingMode === 'natural';
-    const isStreamingPositive = streamingSessionId !== null && streamingMode === 'positive';
-    const isStreamingNegative = streamingSessionId !== null && streamingMode === 'negative';
-    const isStreaming = streamingSessionId !== null;
-
-    const isLoading = objectQuery.isLoading;
-    const error = objectQuery.error ? (objectQuery.error.message || 'Failed to fetch object') : null;
-
-    if (!object && isLoading) {
-        return <div className="image-prompt-manager loading">Loading...</div>;
+  const handleSave = async () => {
+    setSaveSuccess(false);
+    try {
+      await updateImagePromptMutation.mutateAsync({
+        type: objectType as ObjectType,
+        id: objectId,
+        prompts,
+      });
+      setSaveSuccess(true);
+      window.setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (error) {
+      console.error('Failed to save image prompts:', error);
     }
+  };
 
-    return (
-        <div className="image-prompt-manager">
-            <div className="prompt-manager-header">
-                <h3>Image Prompts for {objectName}</h3>
-                <p className="prompt-manager-description">
-                    Save reusable prompts for generating images of this {objectType}.
-                    Natural language prompts work with OpenAI, Gemini, and xAI.
-                    Tag-based prompts work with NovelAI.
-                </p>
-            </div>
+  const isLoading = objectQuery.isLoading;
+  const queryError = objectQuery.error ? (objectQuery.error.message || 'Failed to fetch object') : null;
+  const isStreamingActiveFormat = streamingSessionId !== null && streamingFormat === activeFormat;
 
-            {error && (
-                <div className="error-banner">
-                    {error}
-                </div>
-            )}
+  if (!object && isLoading) {
+    return <div className="image-prompt-manager loading">Loading...</div>;
+  }
 
-            <div className="prompt-tabs">
-                <button
-                    className={`prompt-tab ${activeTab === 'natural' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('natural')}
-                >
-                    Natural Language
-                    {naturalPrompt && <span className="tab-indicator">*</span>}
-                </button>
-                <button
-                    className={`prompt-tab ${activeTab === 'positive' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('positive')}
-                >
-                    Positive Tags
-                    {positivePrompt && <span className="tab-indicator">*</span>}
-                </button>
-                <button
-                    className={`prompt-tab ${activeTab === 'negative' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('negative')}
-                >
-                    Negative Tags
-                    {negativePrompt && <span className="tab-indicator">*</span>}
-                </button>
-            </div>
+  return (
+    <div className="image-prompt-manager">
+      <div className="prompt-manager-header">
+        <h3>Image Prompts for {objectName}</h3>
+        <p className="prompt-manager-description">
+          Save reusable prompts for natural-language, positive/negative, and NovelAI image models.
+        </p>
+      </div>
 
-            <div className="prompt-content">
-                {activeTab === 'natural' && (
-                    <div className="prompt-section">
-                        <div className="prompt-section-header">
-                            <label>Natural Language Prompt</label>
-                            <div className="prompt-actions">
-                                <TextButton
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={handleAIAssist}
-                                    title="Generate prompt with AI assistance"
-                                    disabled={isStreaming}
-                                >
-                                    {isStreamingNatural ? 'Generating...' : 'AI Assist'}
-                                </TextButton>
-                                {naturalPrompt && !isStreamingNatural && (
-                                    <TextButton
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleClear('natural')}
-                                        title="Clear prompt"
-                                    >
-                                        Clear
-                                    </TextButton>
-                                )}
-                            </div>
-                        </div>
-                        {/* Thinking display during streaming */}
-                        {isStreamingNatural && streamingStatus && (
-                            isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice />
-                            ) : (
-                                <ThinkingDisplay
-                                    messageId={streamingSessionId!}
-                                    reasoningDetail={streamingReasoningDetail}
-                                    isStreaming={isStreamingRunning}
-                                />
-                            )
-                        )}
-                        <textarea
-                            value={naturalPrompt}
-                            onChange={(e) => !isStreamingNatural && setNaturalPrompt(e.target.value)}
-                            placeholder="Describe the image in natural language. This works with OpenAI, Gemini, and xAI (Grok)..."
-                            rows={6}
-                            className={`prompt-textarea ${isStreamingNatural ? 'streaming' : ''}`}
-                            readOnly={isStreamingNatural}
-                        />
-                        <p className="prompt-hint">
-                            Example: "A detailed portrait with dramatic lighting, looking determined, wearing formal attire"
-                        </p>
-                    </div>
-                )}
+      {queryError ? <div className="error-banner">{queryError}</div> : null}
+      {streamingError ? <div className="error-banner">{streamingError}</div> : null}
 
-                {activeTab === 'positive' && (
-                    <div className="prompt-section">
-                        <div className="prompt-section-header">
-                            <label>Positive Tags (NovelAI)</label>
-                            <div className="prompt-actions">
-                                <TextButton
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={handleAIAssist}
-                                    title="Generate prompt with AI assistance"
-                                    disabled={isStreaming}
-                                >
-                                    {isStreamingPositive ? 'Generating...' : 'AI Assist'}
-                                </TextButton>
-                                {positivePrompt && !isStreamingPositive && (
-                                    <TextButton
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleClear('positive')}
-                                        title="Clear prompt"
-                                    >
-                                        Clear
-                                    </TextButton>
-                                )}
-                            </div>
-                        </div>
-                        {/* Thinking display during streaming */}
-                        {isStreamingPositive && streamingStatus && (
-                            isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice />
-                            ) : (
-                                <ThinkingDisplay
-                                    messageId={streamingSessionId!}
-                                    reasoningDetail={streamingReasoningDetail}
-                                    isStreaming={isStreamingRunning}
-                                />
-                            )
-                        )}
-                        <textarea
-                            value={positivePrompt}
-                            onChange={(e) => !isStreamingPositive && setPositivePrompt(e.target.value)}
-                            placeholder="Enter comma-separated tags for NovelAI. These describe what you want in the image..."
-                            rows={6}
-                            className={`prompt-textarea ${isStreamingPositive ? 'streaming' : ''}`}
-                            readOnly={isStreamingPositive}
-                        />
-                        <p className="prompt-hint">
-                            Example: "1girl, solo, long hair, blue eyes, formal dress, detailed face, masterpiece, best quality"
-                        </p>
-                    </div>
-                )}
+      <div className="prompt-tabs">
+        {(Object.keys(FORMAT_LABELS) as PromptFormat[]).map((promptFormat) => (
+          <button
+            key={promptFormat}
+            className={`prompt-tab ${activeFormat === promptFormat ? 'active' : ''}`}
+            onClick={() => setActiveFormat(promptFormat)}
+          >
+            {FORMAT_LABELS[promptFormat]}
+            {formatHasContent(promptFormat) ? <span className="tab-indicator">*</span> : null}
+          </button>
+        ))}
+      </div>
 
-                {activeTab === 'negative' && (
-                    <div className="prompt-section">
-                        <div className="prompt-section-header">
-                            <label>Negative Tags (NovelAI)</label>
-                            <div className="prompt-actions">
-                                <TextButton
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={handleAIAssist}
-                                    title="Generate prompt with AI assistance"
-                                    disabled={isStreaming}
-                                >
-                                    {isStreamingNegative ? 'Generating...' : 'AI Assist'}
-                                </TextButton>
-                                {negativePrompt && !isStreamingNegative && (
-                                    <TextButton
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleClear('negative')}
-                                        title="Clear prompt"
-                                    >
-                                        Clear
-                                    </TextButton>
-                                )}
-                            </div>
-                        </div>
-                        {/* Thinking display during streaming */}
-                        {isStreamingNegative && streamingStatus && (
-                            isSuppressedStreaming ? (
-                                <PreexistingLiveRunNotice />
-                            ) : (
-                                <ThinkingDisplay
-                                    messageId={streamingSessionId!}
-                                    reasoningDetail={streamingReasoningDetail}
-                                    isStreaming={isStreamingRunning}
-                                />
-                            )
-                        )}
-                        <textarea
-                            value={negativePrompt}
-                            onChange={(e) => !isStreamingNegative && setNegativePrompt(e.target.value)}
-                            placeholder="Enter comma-separated tags for things to avoid in the image..."
-                            rows={6}
-                            className={`prompt-textarea ${isStreamingNegative ? 'streaming' : ''}`}
-                            readOnly={isStreamingNegative}
-                        />
-                        <p className="prompt-hint">
-                            Example: "lowres, bad anatomy, bad hands, missing fingers, extra digits, blurry"
-                        </p>
-                    </div>
-                )}
-            </div>
-
-            <div className="prompt-manager-footer">
-                <div className="status-area">
-                    {hasChanges && <span className="unsaved-indicator">Unsaved changes</span>}
-                    {saveSuccess && <span className="save-success">Saved!</span>}
-                </div>
-                <TextButton
-                    variant="primary"
-                    onClick={handleSave}
-                    disabled={isSaving || !hasChanges}
-                    loading={isSaving}
-                >
-                    Save Prompts
+      <div className="prompt-content">
+        <div className="prompt-section">
+          <div className="prompt-section-header">
+            <label>{FORMAT_LABELS[activeFormat]} Prompt</label>
+            <div className="prompt-actions">
+              <TextButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowPromptBuilder(true)}
+                title="Generate this complete prompt format with AI assistance"
+                disabled={streamingSessionId !== null}
+              >
+                {isStreamingActiveFormat ? 'Generating...' : 'AI Assist'}
+              </TextButton>
+              {formatHasContent(activeFormat) && !isStreamingActiveFormat ? (
+                <TextButton variant="ghost" size="sm" onClick={() => clearFormat(activeFormat)}>
+                  Clear
                 </TextButton>
+              ) : null}
             </div>
+          </div>
 
-            {/* Streaming error display */}
-            {streamingError && (
-                <div className="error-banner">
-                    {streamingError}
-                </div>
-            )}
+          {isStreamingActiveFormat ? (
+            isSuppressedStreaming ? (
+              <PreexistingLiveRunNotice />
+            ) : (
+              <ThinkingDisplay
+                messageId={streamingSessionId!}
+                reasoningDetail={liveView?.reasoningDetail}
+                isStreaming
+              />
+            )
+          ) : null}
 
-            {/* AI Prompt Builder Modal */}
-            <UnifiedImagePromptModal
-                isOpen={showPromptBuilder}
-                onClose={() => setShowPromptBuilder(false)}
-                onPromptGenerated={handlePromptGenerated}
-                onStreamingStart={handleStreamingStart}
-                onStreamingError={handleStreamingError}
-                contextType="object"
-                objectType={objectType as 'basic_info' | 'story_entity'}
-                objectKind={objectKind as StoryEntityKind | undefined}
-                objectId={objectId}
-                promptMode={activeTab}
+          {activeFormat === 'natural' ? (
+            <textarea
+              value={prompts.natural.prompt}
+              onChange={(event) => setPrompts((current) => ({
+                ...current,
+                natural: { prompt: event.target.value },
+              }))}
+              placeholder="Describe the image in natural language..."
+              rows={6}
+              className="prompt-textarea"
+              disabled={isStreamingActiveFormat}
             />
+          ) : null}
+
+          {activeFormat === 'positive_negative' ? (
+            <div className="prompt-pair-fields">
+              <label>
+                <span>Positive Prompt</span>
+                <textarea
+                  value={prompts.positive_negative.positive}
+                  onChange={(event) => setPrompts((current) => ({
+                    ...current,
+                    positive_negative: { ...current.positive_negative, positive: event.target.value },
+                  }))}
+                  placeholder="What the image should include..."
+                  rows={6}
+                  className="prompt-textarea"
+                  disabled={isStreamingActiveFormat}
+                />
+              </label>
+              <label>
+                <span>Negative Prompt</span>
+                <textarea
+                  value={prompts.positive_negative.negative}
+                  onChange={(event) => setPrompts((current) => ({
+                    ...current,
+                    positive_negative: { ...current.positive_negative, negative: event.target.value },
+                  }))}
+                  placeholder="What the image should avoid..."
+                  rows={6}
+                  className="prompt-textarea"
+                  disabled={isStreamingActiveFormat}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {activeFormat === 'novelai' ? (
+            <>
+              <div className="prompt-pair-fields">
+                <label>
+                  <span>Base Positive Prompt</span>
+                  <textarea
+                    value={prompts.novelai.positive}
+                    onChange={(event) => setPrompts((current) => ({
+                      ...current,
+                      novelai: { ...current.novelai, positive: event.target.value },
+                    }))}
+                    placeholder="Base scene and quality tags..."
+                    rows={5}
+                    className="prompt-textarea"
+                    disabled={isStreamingActiveFormat}
+                  />
+                </label>
+                <label>
+                  <span>Base Negative Prompt</span>
+                  <textarea
+                    value={prompts.novelai.negative}
+                    onChange={(event) => setPrompts((current) => ({
+                      ...current,
+                      novelai: { ...current.novelai, negative: event.target.value },
+                    }))}
+                    placeholder="Base undesired content..."
+                    rows={5}
+                    className="prompt-textarea"
+                    disabled={isStreamingActiveFormat}
+                  />
+                </label>
+              </div>
+              <NovelAICharacterPromptCards
+                characters={prompts.novelai.characters}
+                onChange={(characters) => setPrompts((current) => ({
+                  ...current,
+                  novelai: { ...current.novelai, characters },
+                }))}
+                disabled={isStreamingActiveFormat}
+              />
+            </>
+          ) : null}
         </div>
-    );
+      </div>
+
+      <div className="prompt-manager-footer">
+        <div className="status-area">
+          {hasChanges ? <span className="unsaved-indicator">Unsaved changes</span> : null}
+          {saveSuccess ? <span className="save-success">Saved!</span> : null}
+        </div>
+        <TextButton
+          variant="primary"
+          onClick={handleSave}
+          disabled={updateImagePromptMutation.isPending || !hasChanges}
+          loading={updateImagePromptMutation.isPending}
+        >
+          Save Prompts
+        </TextButton>
+      </div>
+
+      <UnifiedImagePromptModal
+        isOpen={showPromptBuilder}
+        onClose={() => setShowPromptBuilder(false)}
+        onPromptGenerated={applyGeneratedPrompt}
+        onStreamingStart={(sessionId, promptFormat) => {
+          setStreamingSessionId(sessionId);
+          setStreamingFormat(promptFormat);
+          setStreamingError(null);
+        }}
+        onStreamingError={(error) => {
+          setStreamingError(error);
+          setStreamingSessionId(null);
+          setStreamingFormat(null);
+        }}
+        contextType="object"
+        objectType={objectType as 'basic_info' | 'story_entity'}
+        objectKind={objectKind as StoryEntityKind | undefined}
+        objectId={objectId}
+        promptFormat={activeFormat}
+      />
+    </div>
+  );
 };
 
 export default ImagePromptManager;

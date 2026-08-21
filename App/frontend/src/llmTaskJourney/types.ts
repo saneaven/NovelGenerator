@@ -19,25 +19,21 @@ export type EditingTargets =
       kind: 'imagePrompt';
       projectId: string;
       contextType: 'object' | 'scene';
-      promptMode: string;
+      promptFormat: 'natural' | 'positive_negative' | 'novelai';
       objectType?: string;
       objectId?: string;
       manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
       selectedContextIds?: string[];
-      /** @deprecated Legacy alias retained for persisted journeys. */
-      selectedEntityIds?: string[];
     }
   | {
       kind: 'sceneImagePrompt';
       projectId: string;
       contextType: 'scene';
-      promptMode: string;
+      promptFormat: 'natural' | 'positive_negative' | 'novelai';
       manuscriptId?: string;
       sceneContext?: { preContext: string; postContext: string };
       selectedContextIds?: string[];
-      /** @deprecated Legacy alias retained for persisted journeys. */
-      selectedEntityIds?: string[];
     }
   | {
       kind: 'messageTranslation';

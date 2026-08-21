@@ -29,7 +29,6 @@ from ..schemas.assets import (
     ImageCleanupPolicy, ImageCleanupPreviewResponse, ImageCleanupPreviewItem,
     ImageCleanupExecuteRequest, ImageCleanupExecuteResponse, ImageCleanupExecuteSkipped, ImageCleanupExecuteError,
     RebuildRichTextImageRefsResponse,
-    StyledPrompt
 )
 from ..services.asset_change_events import (
     queue_project_assets_change,
@@ -148,17 +147,6 @@ def _queue_scene_asset_updates(
             manuscript_id=manuscript_id,
             action=action,
         )
-
-
-def _jsonb_to_styled_prompt(data: Optional[Dict[str, Any]]) -> Optional[StyledPrompt]:
-    """Convert JSONB dict to StyledPrompt object"""
-    if data is None:
-        return None
-    return StyledPrompt(
-        prefix=data.get('prefix', ''),
-        content=data.get('content', ''),
-        postfix=data.get('postfix', '')
-    )
 
 
 def _latest_version_display_name(
@@ -358,9 +346,8 @@ def _asset_to_response(asset: Asset, *, usages: Optional[List[AssetUsage]] = Non
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
         manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
-        generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
-        generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
-        generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
+        generation_prompt_format=cast(Optional[str], asset.generation_prompt_format),
+        generation_prompt_data=cast(Optional[Dict[str, Any]], asset.generation_prompt_data),
         generation_provider=cast(Optional[str], asset.generation_provider),
         generation_model=cast(Optional[str], asset.generation_model),
         generation_style_id=cast(Optional[str], asset.generation_style_id),
@@ -391,9 +378,8 @@ def _asset_to_scene_response(asset: Asset, usages: List[AssetUsage]) -> SceneAss
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
         manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
-        generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
-        generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
-        generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
+        generation_prompt_format=cast(Optional[str], asset.generation_prompt_format),
+        generation_prompt_data=cast(Optional[Dict[str, Any]], asset.generation_prompt_data),
         generation_provider=cast(Optional[str], asset.generation_provider),
         generation_model=cast(Optional[str], asset.generation_model),
         generation_style_id=cast(Optional[str], asset.generation_style_id),
@@ -430,7 +416,7 @@ async def list_image_providers():
             ImageProviderInfo(
                 name=spec.id,
                 display_name=spec.ui.display_name_key,
-                prompt_type=spec.image.prompt_type,
+                prompt_format=spec.image.prompt_format,
                 settings_schema=None,
                 supports_image_input=spec.image.supports_image_input,
             )

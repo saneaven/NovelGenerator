@@ -19,7 +19,6 @@ describe('image prompt preview context IDs', () => {
 
     expect(ids.contextObjectIds).toEqual(['live-project-object-id']);
     expect(ids.selectedContextIds).not.toContain('live-project-object-id');
-    expect(ids.selectedContextIds).toEqual(ids.selectedEntityIds);
     expect(ids.selectedContextIds).toEqual(expect.arrayContaining([
       '[ placeholder-story-entity-id-2 ]',
       '[ placeholder-chapter-id ]',
@@ -29,10 +28,9 @@ describe('image prompt preview context IDs', () => {
     ]));
   });
 
-  it('keeps both image context aliases empty when filtered IDs are disabled', () => {
+  it('keeps image context IDs empty when filtered IDs are disabled', () => {
     const ids = buildFilteredIds('project-1', false);
 
     expect(ids.selectedContextIds).toEqual([]);
-    expect(ids.selectedEntityIds).toEqual([]);
   });
 });

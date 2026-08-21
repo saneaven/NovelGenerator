@@ -3,6 +3,7 @@
  */
 
 import apiClient from './client';
+import type { NovelAICharacterPrompt, PromptFormat } from '../domain/imagePrompt';
 
 // Helper to format StyledPrompt for display
 export function formatStyledPrompt(prompt: StyledPrompt | null): string {
@@ -18,6 +19,11 @@ export interface StyledPrompt {
     content: string;
     postfix: string;
 }
+
+export type ImagePromptData =
+    | { prompt: StyledPrompt }
+    | { positive: StyledPrompt; negative: StyledPrompt }
+    | { positive: StyledPrompt; negative: StyledPrompt; characters: NovelAICharacterPrompt[] };
 
 // Types
 // Reference object stored in asset metadata
@@ -37,10 +43,8 @@ export interface Asset {
     file_path: string;
     mime_type: string;
     asset_type: AssetType;  // 'scene', 'object', or null
-    // Prompts stored separately by provider type (StyledPrompt with prefix/content/postfix)
-    generation_prompt: StyledPrompt | null;  // Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt: StyledPrompt | null;  // Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt: StyledPrompt | null;  // Negative prompt for tag-based (NovelAI)
+    generation_prompt_format: PromptFormat | null;
+    generation_prompt_data: ImagePromptData | null;
     generation_provider: string | null;
     generation_model: string | null;
     generation_style_id: string | null;
@@ -155,12 +159,10 @@ export interface RebuildRichTextImageRefsResponse {
     refs_inserted: number;
 }
 
-export type PromptType = 'natural' | 'tag_based';
-
 export interface ImageProvider {
     name: string;
     display_name: string;
-    prompt_type: PromptType;
+    prompt_format: PromptFormat;
     settings_schema: Record<string, any> | null;
     supports_image_input: boolean;  // Whether provider supports image-to-image generation
 }
@@ -174,7 +176,7 @@ export interface ImageModelInfo {
     icon_url?: string | null;
     tags?: string[] | null;
     category?: string | null;
-    prompt_type: PromptType;
+    prompt_format: PromptFormat;
     supports_image_input: boolean;
     supports_mask_input: boolean;
     supports_multi_image_input: boolean;
@@ -213,15 +215,13 @@ export type ImageRunStatus = 'queued' | 'running' | 'review' | 'applying' | 'app
 export type ImageRunStage = 'preparing' | 'generating' | 'saving' | 'binding' | null;
 
 export interface ImageRunRecipeRequest {
-    prompt_type: 'natural' | 'tag_based';
+    prompt_format: PromptFormat;
+    prompt_data: ImagePromptData;
     provider: string;
     model: string;
     requested_aspect_ratio: string;
     requested_image_size: string;
     style_id?: string | null;
-    prompt?: StyledPrompt;
-    positive_prompt?: StyledPrompt;
-    negative_prompt?: StyledPrompt;
     provider_settings?: Record<string, unknown>;
     reference_images?: ReferenceImage[];
     mask_image?: MaskImage;

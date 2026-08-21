@@ -11,6 +11,7 @@ from ..shared.image.contracts import (
     PreparedImageRequest,
     ResolvedGeometry,
 )
+from ...schemas.assets import NaturalPromptData
 
 
 OPENAI_GPT_IMAGE_2_SIZE_GRANULARITY = 16
@@ -34,12 +35,13 @@ class OpenAIImageAdapter:
                 error="OpenAI client not initialized. Check API key.",
             )
 
-        prompt = request.prompt_payload.prompt
-        if prompt is None:
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NaturalPromptData):
             return ImageGenerationOutput(
                 success=False,
-                error="Prompt is required for OpenAI image generation.",
+                error="Natural prompt data is required for OpenAI image generation.",
             )
+        prompt = prompt_data.prompt
 
         settings = request.provider_settings
         output_format = str(settings.get("output_format") or "png")

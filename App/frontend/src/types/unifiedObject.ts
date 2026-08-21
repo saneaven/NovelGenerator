@@ -7,6 +7,7 @@
  */
 
 import type { TipTapDoc } from './tiptap';
+import type { StoredImagePrompts } from '../domain/imagePrompt';
 
 // ============================================================================
 // CORE TYPES
@@ -81,10 +82,7 @@ export interface ObjectMetadata {
   folder_id?: string | null;
   position?: number;
   display_order?: number; // For story entities and folders
-  // Image prompts (for objects: character, location, organization, lorebook)
-  image_prompt?: string | null;  // Natural language prompt
-  image_prompt_positive?: string | null;  // Tag-based positive (NovelAI)
-  image_prompt_negative?: string | null;  // Tag-based negative (NovelAI)
+  image_prompts?: StoredImagePrompts | null;
   // Cover image (for basic_info only) - URL resolved at runtime using getAssetUrl utility
   cover_image_id?: string | null;
   timeline_id?: string;

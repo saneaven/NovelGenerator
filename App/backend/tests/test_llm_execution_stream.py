@@ -511,3 +511,85 @@ def test_execute_stream_keeps_raw_request_out_of_frontend_event(monkeypatch: pyt
         }
     ]
     assert "raw_request" not in emitted_payloads[0]
+
+
+def test_run_ending_tool_offer_sends_required_tool_choice(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, thread, assistant_message = _make_run_thread_message()
+    captured_request: dict[str, object] = {}
+
+    class FakeRequestSession:
+        def __init__(self, **_kwargs) -> None:
+            self.retry_count = 0
+
+        def on_request(self, _raw_request) -> None:  # noqa: ANN001
+            return None
+
+        def on_retry(self, _message, _status) -> None:  # noqa: ANN001
+            return None
+
+        def fail(self, _message, *, content_parts, merged_meta) -> None:  # noqa: ANN001
+            _ = content_parts, merged_meta
+
+        def complete(self, _raw_output, _merged_meta) -> None:  # noqa: ANN001
+            return None
+
+    class ToolProvider:
+        def stream_chat(self, **kwargs):
+            captured_request.update(kwargs)
+
+            async def _gen():
+                yield ProviderEvent(
+                    kind="delta",
+                    delta=DeltaPayload(
+                        tool_call_deltas=[
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "function": {
+                                    "name": "submit_image_prompt",
+                                    "arguments": '{"prompt":"moonlit castle"}',
+                                },
+                            }
+                        ]
+                    ),
+                )
+
+            return _gen()
+
+    async def _emit(**_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(stream_module, "LLMRequestSession", FakeRequestSession)
+    prepared = _make_prepared(ToolProvider())
+    prepared.tool_offer = SimpleNamespace(
+        provider_tools=[
+            {
+                "name": "submit_image_prompt",
+                "description": "Submit image prompt.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"prompt": {"type": "string"}},
+                    "required": ["prompt"],
+                },
+            }
+        ],
+        specs_by_name={"submit_image_prompt": SimpleNamespace(ends_run=True)},
+    )
+
+    result = asyncio.run(
+        stream_module.execute_stream(
+            SimpleNamespace(
+                run=run,
+                thread=thread,
+                settings=SimpleNamespace(llm_logging_enabled=False),
+            ),
+            SimpleNamespace(emit_fn=_emit),
+            prepared,
+            assistant_message=assistant_message,
+            request_id="req_test",
+        )
+    )
+
+    assert captured_request["tool_choice"] == "required"
+    assert captured_request["tools"] == prepared.tool_offer.provider_tools
+    assert result.final_snapshot.tool_calls[0].tool_name == "submit_image_prompt"

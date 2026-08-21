@@ -26,6 +26,7 @@ fake_image_run_service.IMAGE_OBJECT_TOOL = "generate_object_image"
 fake_image_run_service.IMAGE_SCENE_TOOL = "generate_scene_image"
 fake_image_run_service.image_run_service = SimpleNamespace(create_tool_preview_run=None)
 fake_image_run_service.resolve_explicit_object_target = lambda *_args, **_kwargs: None
+fake_image_run_service.resolve_prompt_format = lambda _provider, _model: "natural"
 
 
 async def _validate_scene_anchor(*_args, **_kwargs):
@@ -62,17 +63,17 @@ def _make_ctx() -> ToolModuleContext:
         status="running",
         language="English",
         run_mode="agentMode",
-        input_payload={},
+        input_payload={"promptFormat": "natural"},
     )
     return ToolModuleContext(
         db=SimpleNamespace(),
         thread=thread,
         run=run,
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(image_gen_config={"provider": "openai", "model": "gpt-image-1"}),
         preset_id=uuid4(),
         user_id=thread.user_id,
         project_id=thread.project_id,
-        input_payload={},
+        input_payload={"promptFormat": "natural"},
         vector_storage_enabled=False,
         invocation_mode="agentMode",
     )
@@ -123,9 +124,8 @@ def test_read_image_records_asset_id_and_metadata() -> None:
     asset = SimpleNamespace(
         id=asset_id,
         mime_type="image/png",
-        generation_prompt={"prefix": "sunset", "content": "over the sea", "postfix": ""},
-        generation_positive_prompt=None,
-        generation_negative_prompt=None,
+        generation_prompt_format="natural",
+        generation_prompt_data={"prompt": {"prefix": "sunset", "content": "over the sea", "postfix": ""}},
         generation_provider="openai",
         generation_model="gpt-image-1",
         name="scene",

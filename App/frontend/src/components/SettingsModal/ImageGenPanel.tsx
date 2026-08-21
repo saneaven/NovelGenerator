@@ -29,7 +29,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     loading,
     error: modelError,
     selectedModel,
-    isTagBased,
+    currentPromptFormat,
     providerSettingsSpec,
     providerSettingsFlags,
     isNativeExact,
@@ -64,9 +64,23 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     label: t(provider.ui.display_name_key),
   }));
 
-  const currentStyles = isTagBased ? config.tagBasedStyles : config.naturalStyles;
-  const selectedStyleId = isTagBased ? config.selectedTagBasedStyleId : config.selectedNaturalStyleId;
-  const styleKey = isTagBased ? 'settings.imageGen.tagBasedStyles' : 'settings.imageGen.naturalStyles';
+  const currentStyles = currentPromptFormat === 'natural'
+    ? config.naturalStyles
+    : currentPromptFormat === 'positive_negative'
+      ? config.positiveNegativeStyles
+      : config.novelAIStyles;
+  const selectedStyleId = currentPromptFormat === 'natural'
+    ? config.selectedNaturalStyleId
+    : currentPromptFormat === 'positive_negative'
+      ? config.selectedPositiveNegativeStyleId
+      : config.selectedNovelAIStyleId;
+  const styleKey = `settings.imageGen.${
+    currentPromptFormat === 'natural'
+      ? 'naturalStyles'
+      : currentPromptFormat === 'positive_negative'
+        ? 'positiveNegativeStyles'
+        : 'novelAIStyles'
+  }`;
   const providerSettings = getStoredProviderSettings(config as Record<string, unknown>, config.provider);
 
   return (
@@ -263,8 +277,11 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             value={selectedStyleId ?? ''}
             onChange={(value) => onChange({
               ...config,
-              selectedNaturalStyleId: isTagBased ? config.selectedNaturalStyleId : (value || null),
-              selectedTagBasedStyleId: isTagBased ? (value || null) : config.selectedTagBasedStyleId,
+              ...(currentPromptFormat === 'natural'
+                ? { selectedNaturalStyleId: value || null }
+                : currentPromptFormat === 'positive_negative'
+                  ? { selectedPositiveNegativeStyleId: value || null }
+                  : { selectedNovelAIStyleId: value || null }),
             })}
             options={[
               { value: '', label: t(`${styleKey}.none`) },
@@ -278,20 +295,25 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             <h5 className="style-editor-meta-title">{t('settings.imageGen.styleEditor.title')}</h5>
             <p className="style-editor-meta-description">{t('settings.imageGen.styleEditor.subtitle')}</p>
           </div>
-          {isTagBased ? (
-            <ImageStyleEditorModal
-              mode="tag_based"
-              styles={config.tagBasedStyles}
-              onChange={(styles) => onChange({ ...config, tagBasedStyles: styles })}
-            />
-          ) : null}
-          {!isTagBased ? (
+          {currentPromptFormat === 'natural' ? (
             <ImageStyleEditorModal
               mode="natural"
               styles={config.naturalStyles}
               onChange={(styles) => onChange({ ...config, naturalStyles: styles })}
             />
-          ) : null}
+          ) : currentPromptFormat === 'positive_negative' ? (
+            <ImageStyleEditorModal
+              mode="positive_negative"
+              styles={config.positiveNegativeStyles}
+              onChange={(styles) => onChange({ ...config, positiveNegativeStyles: styles })}
+            />
+          ) : (
+            <ImageStyleEditorModal
+              mode="novelai"
+              styles={config.novelAIStyles}
+              onChange={(styles) => onChange({ ...config, novelAIStyles: styles })}
+            />
+          )}
         </div>
       </div>
     </div>

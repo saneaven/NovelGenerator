@@ -287,7 +287,7 @@ SPEC = ProviderSpec(
                 "fallback_resolutions": ("1024x1024",),
             },
         ),
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=True,
         catalog_cache_policy="session",
         allow_missing_credentials_for_model_listing=True,

@@ -40,9 +40,6 @@ async def apply_raw_output(
     if not text:
         raise RuntimeError("Raw output mode requires non-empty content text")
 
-    if journey_kind in {"imagePrompt", "sceneImagePrompt"}:
-        return
-
     if journey_kind == "messageTranslation":
         translation_payload = as_dict(input_payload.get("translation"))
         source_thread_id = UUID(str(translation_payload.get("sourceThreadId") or ""))

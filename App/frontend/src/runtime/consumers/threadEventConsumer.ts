@@ -36,6 +36,12 @@ import { toMessageAttachment, revokeMessageAttachmentObjectUrls } from '../../ut
 
 type AutoApproveConfig = Record<string, boolean>;
 
+export function hasTerminalImagePromptCall(
+  toolCalls: ReadonlyArray<Pick<ThreadToolCall, 'toolName'>>,
+): boolean {
+  return toolCalls.some((toolCall) => toolCall.toolName === 'submit_image_prompt');
+}
+
 function getToolCategory(toolCall: ThreadToolCall): string | null {
   const meta = toolCall.extraContent?.__tool_meta;
   if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
@@ -770,6 +776,11 @@ export class ThreadEventConsumer {
       const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(latestAssistant.id);
       if (toolCalls.length === 0) {
         console.debug('[AutoContinue] Skipped: no tool calls for assistant', { threadId, assistantId: latestAssistant.id });
+        return;
+      }
+
+      if (hasTerminalImagePromptCall(toolCalls)) {
+        console.debug('[AutoContinue] Skipped: submit_image_prompt is terminal', { threadId, assistantId: latestAssistant.id });
         return;
       }
 

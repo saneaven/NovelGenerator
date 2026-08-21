@@ -7,6 +7,7 @@ from google import genai
 from google.genai import errors, types
 
 from ..shared.image.contracts import ImageGenerationOutput, PreparedImageRequest
+from ...schemas.assets import NaturalPromptData
 
 
 class GeminiImageAdapter:
@@ -18,9 +19,13 @@ class GeminiImageAdapter:
         if self._client is None:
             return ImageGenerationOutput(success=False, error="Gemini client not initialized. Check API key.")
 
-        prompt = request.prompt_payload.prompt
-        if prompt is None:
-            return ImageGenerationOutput(success=False, error="Prompt is required for Gemini image generation.")
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NaturalPromptData):
+            return ImageGenerationOutput(
+                success=False,
+                error="Natural prompt data is required for Gemini image generation.",
+            )
+        prompt = prompt_data.prompt
 
         image_config = types.ImageConfig(
             aspect_ratio=request.resolved_geometry.resolved_aspect_ratio,

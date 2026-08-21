@@ -25,36 +25,49 @@ export function recipeFromAsset(asset: Asset): ImageGenerationRecipe | null {
   const maskImage = mapMaskImage(asset);
   const styleId = asset.generation_style_id ?? null;
 
-  if (asset.generation_positive_prompt) {
+  const promptFormat = asset.generation_prompt_format;
+  const promptData = asset.generation_prompt_data;
+  if (!promptFormat || !promptData) return null;
+
+  const common = {
+    provider,
+    model,
+    aspectRatio,
+    imageSize,
+    providerSettings,
+    styleId,
+    referenceImages,
+    maskImage,
+  };
+  if (promptFormat === 'natural' && 'prompt' in promptData) {
+    return { ...common, promptFormat, promptData: { prompt: promptData.prompt } };
+  }
+  if (
+    promptFormat === 'positive_negative'
+    && 'positive' in promptData
+    && 'negative' in promptData
+  ) {
     return {
-      promptType: 'tag_based',
-      provider,
-      model,
-      aspectRatio,
-      imageSize,
-      positive: asset.generation_positive_prompt,
-      negative: asset.generation_negative_prompt ?? undefined,
-      providerSettings,
-      styleId,
-      referenceImages,
-      maskImage,
+      ...common,
+      promptFormat,
+      promptData: { positive: promptData.positive, negative: promptData.negative },
     };
   }
-
-  if (asset.generation_prompt) {
+  if (
+    promptFormat === 'novelai'
+    && 'positive' in promptData
+    && 'negative' in promptData
+    && 'characters' in promptData
+  ) {
     return {
-      promptType: 'natural',
-      provider,
-      model,
-      aspectRatio,
-      imageSize,
-      prompt: asset.generation_prompt,
-      providerSettings,
-      styleId,
-      referenceImages,
-      maskImage,
+      ...common,
+      promptFormat,
+      promptData: {
+        positive: promptData.positive,
+        negative: promptData.negative,
+        characters: promptData.characters,
+      },
     };
   }
-
   return null;
 }

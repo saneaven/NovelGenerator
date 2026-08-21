@@ -17,7 +17,15 @@ import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import AuthenticatedImage from '../common/AuthenticatedImage';
-import { assetService, formatStyledPrompt, type Asset, type SceneAsset, type ObjectAssetLink } from '../../api/assetService';
+import {
+    assetService,
+    formatStyledPrompt,
+    type Asset,
+    type ImagePromptData,
+    type SceneAsset,
+    type ObjectAssetLink,
+} from '../../api/assetService';
+import type { PromptFormat } from '../../domain/imagePrompt';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
@@ -40,9 +48,8 @@ type AssetLike = {
     created_at: string;
     generation_provider?: string | null;
     generation_model?: string | null;
-    generation_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
-    generation_positive_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
-    generation_negative_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
+    generation_prompt_format?: PromptFormat | null;
+    generation_prompt_data?: ImagePromptData | null;
     generation_settings?: Record<string, unknown> | null;
 };
 
@@ -920,31 +927,49 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                             </div>
                                         )}
 
-                                        {detailAsset.generation_prompt && (
+                                        {detailAsset.generation_prompt_format === 'natural'
+                                            && detailAsset.generation_prompt_data
+                                            && 'prompt' in detailAsset.generation_prompt_data && (
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Prompt</span>
                                                 <div className="detail-prompt-box">
-                                                    {formatStyledPrompt(detailAsset.generation_prompt)}
+                                                    {formatStyledPrompt(detailAsset.generation_prompt_data.prompt)}
                                                 </div>
                                             </div>
                                         )}
 
-                                        {detailAsset.generation_positive_prompt && (
+                                        {detailAsset.generation_prompt_format !== 'natural'
+                                            && detailAsset.generation_prompt_data
+                                            && 'positive' in detailAsset.generation_prompt_data && (
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Positive Prompt</span>
                                                 <div className="detail-prompt-box positive">
-                                                    {formatStyledPrompt(detailAsset.generation_positive_prompt)}
+                                                    {formatStyledPrompt(detailAsset.generation_prompt_data.positive)}
                                                 </div>
                                             </div>
                                         )}
-                                        {detailAsset.generation_negative_prompt && (
+                                        {detailAsset.generation_prompt_format !== 'natural'
+                                            && detailAsset.generation_prompt_data
+                                            && 'negative' in detailAsset.generation_prompt_data && (
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Negative Prompt</span>
                                                 <div className="detail-prompt-box negative">
-                                                    {formatStyledPrompt(detailAsset.generation_negative_prompt)}
+                                                    {formatStyledPrompt(detailAsset.generation_prompt_data.negative)}
                                                 </div>
                                             </div>
                                         )}
+                                        {detailAsset.generation_prompt_format === 'novelai'
+                                            && detailAsset.generation_prompt_data
+                                            && 'characters' in detailAsset.generation_prompt_data
+                                            && detailAsset.generation_prompt_data.characters.map((character, index) => (
+                                                <div className="detail-row vertical" key={index}>
+                                                    <span className="detail-label">Character {index + 1}</span>
+                                                    <div className="detail-prompt-box positive">{character.positive}</div>
+                                                    {character.negative ? (
+                                                        <div className="detail-prompt-box negative">{character.negative}</div>
+                                                    ) : null}
+                                                </div>
+                                            ))}
 
                                         {detailAsset.generation_settings && Object.keys(detailAsset.generation_settings).length > 0 && (
                                             <div className="detail-row vertical">

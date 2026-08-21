@@ -566,7 +566,7 @@ async def update_image_prompt(
     """
     Update image prompts for a project object.
     These are stored directly on the object (not versioned).
-    Supports both natural language prompts and tag-based prompts (NovelAI).
+    Stores natural, positive/negative, and NovelAI character prompts together.
     """
     project_id = resolve_project_id_for_object(
         db,
@@ -582,9 +582,7 @@ async def update_image_prompt(
             object_type=object_type,
             object_id=object_id,
             user_id=current_user.id,
-            image_prompt=request.image_prompt,
-            image_prompt_positive=request.image_prompt_positive,
-            image_prompt_negative=request.image_prompt_negative,
+            image_prompts=request.image_prompts.model_dump(),
         )
         db.commit()
         return result
@@ -597,4 +595,3 @@ async def update_image_prompt(
         if "not found" in message.lower():
             raise HTTPException(status_code=404, detail=message)
         raise HTTPException(status_code=400, detail=message)
-

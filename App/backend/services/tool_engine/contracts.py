@@ -9,6 +9,7 @@ from .grant_catalog import FeatureKey, ToolCategory
 
 
 AutoApproveCategory = str
+ToolExecutionPolicy = Literal["approval", "immediate"]
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,8 @@ class ToolSpec:
     description: str
     parameters: dict[str, Any]
     auto_approve_category: AutoApproveCategory | None = None
+    execution_policy: ToolExecutionPolicy = "approval"
+    ends_run: bool = False
 
 
 @dataclass(frozen=True)

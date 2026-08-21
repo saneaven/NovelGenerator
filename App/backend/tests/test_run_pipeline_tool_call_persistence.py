@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -271,3 +272,95 @@ def test_persist_tool_calls_with_mixed_id_index_deltas_does_not_create_unknown_t
     }
     assert rows[0].status == "pending"
     assert rows[0].reason is None
+
+
+def test_persist_tool_calls_executes_immediate_binding_without_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakePersistSession()
+    stack = build_runtime_stack(lambda: None)
+    thread = Thread(
+        id=uuid4(),
+        project_id=uuid4(),
+        user_id=uuid4(),
+        thread_type="journey",
+        status="running",
+        next_message_seq=1,
+    )
+    arguments = {"positive": "hero at sunset", "negative": ""}
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        project_id=thread.project_id,
+        status="running",
+        language="English",
+        next_message_seq=1,
+        input_payload={"promptFormat": "positive_negative"},
+    )
+    assistant_message = persistence_module.RunMessageModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        run_id=run.id,
+        role="assistant",
+        seq=0,
+        seq_in_thread=0,
+        data={},
+    )
+    spec = SimpleNamespace(execution_policy="immediate", ends_run=True)
+    binding = SimpleNamespace(spec=spec)
+    offer = SimpleNamespace(
+        specs_by_name={"submit_image_prompt": spec},
+        bindings_by_name={"submit_image_prompt": binding},
+        provider_tools=[],
+    )
+    executed: list[dict[str, object]] = []
+
+    async def _validate_tool_call(**_kwargs):
+        return valid_result()
+
+    async def _execute_immediate_tool_call(*, row, args, **_kwargs):
+        executed.append(dict(args))
+        row.status = "applied"
+        row.reason = None
+        row.result = None
+        return SimpleNamespace(tool_call_id=row.id, status=row.status)
+
+    monkeypatch.setattr(persistence_module.tool_engine, "validate_tool_call", _validate_tool_call)
+    monkeypatch.setattr(
+        persistence_module.tool_engine,
+        "execute_immediate_tool_call",
+        _execute_immediate_tool_call,
+        raising=False,
+    )
+    monkeypatch.setattr(persistence_module, "apply_project_usage_deltas", lambda *_args, **_kwargs: None)
+
+    rows = asyncio.run(
+        stack.tool_call_persistence.persist_tool_calls(
+            db,  # type: ignore[arg-type]
+            thread=thread,
+            run=run,
+            assistant_message=assistant_message,
+            tool_calls=[
+                FinalToolCall(
+                    id="call_1",
+                    tool_name="submit_image_prompt",
+                    raw_arguments='{"positive":"hero at sunset","negative":""}',
+                    arguments=arguments,
+                )
+            ],
+            offer=offer,
+            preset_id=None,
+        )
+    )
+
+    assert executed == [arguments]
+    assert rows[0].arguments == arguments
+    assert rows[0].status == "applied"
+    assert rows[0].result is None
+    status_events = [
+        event["data"]["status"]
+        for event in stack.dispatcher.events
+        if event["event_name"] == "tool_call:status"
+    ]
+    assert status_events == ["applied"]

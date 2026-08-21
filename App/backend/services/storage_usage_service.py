@@ -223,9 +223,7 @@ def measure_project_row(project: Project | object) -> int:
 
 def measure_story_core_row(row: object) -> int:
     return _sum_values(
-        getattr(row, "image_prompt", None),
-        getattr(row, "image_prompt_positive", None),
-        getattr(row, "image_prompt_negative", None),
+        getattr(row, "image_prompts", None),
         getattr(row, "calendar", None),
         getattr(row, "color", None),
         getattr(row, "start_date", None),
@@ -336,9 +334,8 @@ def measure_image_run_row(row: ImageRunModel | object) -> int:
 def measure_asset_row(row: Asset | object) -> int:
     return int(getattr(row, "file_size", 0) or 0) + _sum_values(
         getattr(row, "name", None),
-        getattr(row, "generation_prompt", None),
-        getattr(row, "generation_positive_prompt", None),
-        getattr(row, "generation_negative_prompt", None),
+        getattr(row, "generation_prompt_format", None),
+        getattr(row, "generation_prompt_data", None),
         getattr(row, "generation_requested_aspect_ratio", None),
         getattr(row, "generation_requested_image_size", None),
         getattr(row, "generation_settings", None),
@@ -366,9 +363,7 @@ def snapshot_project_row(row: Project | object | None) -> object | None:
 def snapshot_story_core_row(row: object | None) -> object | None:
     return _snapshot_row(
         row,
-        "image_prompt",
-        "image_prompt_positive",
-        "image_prompt_negative",
+        "image_prompts",
         "calendar",
         "color",
         "start_date",
@@ -443,9 +438,8 @@ def snapshot_asset_row(row: Asset | object | None) -> object | None:
         row,
         "file_size",
         "name",
-        "generation_prompt",
-        "generation_positive_prompt",
-        "generation_negative_prompt",
+        "generation_prompt_format",
+        "generation_prompt_data",
         "generation_requested_aspect_ratio",
         "generation_requested_image_size",
         "generation_settings",
@@ -990,7 +984,7 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     # ---- story_bytes -------------------------------------------------------
     # Mirror measure_story_core_row's getattr-with-default semantics by only
     # summing columns that actually exist on each story-core table:
-    #   BasicInfo / StoryEntity:  image_prompt(_positive|_negative)  (Text)
+    #   BasicInfo / StoryEntity:  image_prompts  (JSONB)
     #   Guidelines:               (no measured columns)
     #   Outline:                  (no measured columns)
     #   Timeline:                 calendar  (JSONB)
@@ -998,15 +992,11 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
     #   TimelineEvent:            start_date / end_date / tags  (JSONB)
     basic_info_bytes = _sum_text_cols(
         db.query(BasicInfo).filter(BasicInfo.project_id == project_id),
-        BasicInfo.image_prompt,
-        BasicInfo.image_prompt_positive,
-        BasicInfo.image_prompt_negative,
+        BasicInfo.image_prompts,
     )
     story_entity_bytes = _sum_text_cols(
         db.query(StoryEntity).filter(StoryEntity.project_id == project_id),
-        StoryEntity.image_prompt,
-        StoryEntity.image_prompt_positive,
-        StoryEntity.image_prompt_negative,
+        StoryEntity.image_prompts,
     )
     timeline_bytes = _sum_text_cols(
         db.query(Timeline).filter(Timeline.project_id == project_id),
@@ -1195,9 +1185,8 @@ def _calculate_project_usage_breakdown(db: Session, *, project_id: UUID) -> Stor
                 func.sum(
                     _coalesce_int(Asset.file_size)
                     + _octet_text(Asset.name)
-                    + _octet_text(Asset.generation_prompt)
-                    + _octet_text(Asset.generation_positive_prompt)
-                    + _octet_text(Asset.generation_negative_prompt)
+                    + _octet_text(Asset.generation_prompt_format)
+                    + _octet_text(Asset.generation_prompt_data)
                     + _octet_text(Asset.generation_requested_aspect_ratio)
                     + _octet_text(Asset.generation_requested_image_size)
                     + _octet_text(Asset.generation_settings)

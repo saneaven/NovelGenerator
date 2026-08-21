@@ -11,8 +11,8 @@ import { useObjectQuery } from '../../data/objects/useObjectQuery';
 import { useProjectObjectsMapState } from '../../data/objects/useProjectObjectsMap';
 import { useJourneyStore } from '../../store/journeyStore';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
-import { getMergedThreadMessages, getMergedThreadView } from '../../data/threads';
 import { getJourneySpec } from '../../llmTaskJourney/journeySpecs';
+import { extractImagePromptResultFromThread } from '../../llmTaskJourney/imagePromptResult';
 import { journeyService } from '../../api/journeyService';
 import { isPausedLikeThreadStatus } from '../../types/thread';
 import type { ObjectType } from '../../types/unifiedObject';
@@ -23,14 +23,10 @@ import {
   useSharedObjectPickerSelection,
 } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
+import type { ImagePromptResult, PromptFormat } from '../../domain/imagePrompt';
 
-export type PromptMode = 'natural' | 'positive' | 'negative';
+export type { ImagePromptResult, PromptFormat } from '../../domain/imagePrompt';
 export type ContextType = 'object' | 'scene';
-
-export interface PromptResult {
-  prompt: string;
-  mode: PromptMode;
-}
 
 interface SceneContext {
   preContext: string;
@@ -40,10 +36,10 @@ interface SceneContext {
 interface UnifiedImagePromptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPromptGenerated: (result: PromptResult) => void;
-  onStreamingStart?: (sessionId: string, mode: PromptMode) => void;
-  onStreamingError?: (error: string, mode: PromptMode) => void;
-  promptMode: PromptMode;
+  onPromptGenerated: (result: ImagePromptResult) => void;
+  onStreamingStart?: (sessionId: string, promptFormat: PromptFormat) => void;
+  onStreamingError?: (error: string, promptFormat: PromptFormat) => void;
+  promptFormat: PromptFormat;
 
   // Context type determines which UI/LLM mode to use
   contextType: ContextType;
@@ -67,7 +63,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   onPromptGenerated,
   onStreamingStart,
   onStreamingError,
-  promptMode,
+  promptFormat,
   contextType,
   objectType,
   objectKind,
@@ -148,7 +144,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
 
     // Pre-threadId dispatch error
     if (journeyError) {
-      onStreamingError?.(journeyError, promptMode);
+      onStreamingError?.(journeyError, promptFormat);
       setActiveJourneyId(null);
       return;
     }
@@ -163,46 +159,23 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         threadStatus === 'paused'
           ? 'Prompt generation paused.'
           : (threadError || 'Failed to generate prompt.'),
-        promptMode,
+        promptFormat,
       );
       setActiveJourneyId(null);
       return;
     }
 
-    // Completed (done) — extract prompt from last assistant message
+    // Completed (done) — the terminal ToolEngine call is the only result source.
     if (threadStatus === 'done') {
-      const messages = getMergedThreadMessages(journeyThreadId);
-      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
-
-      if (lastAssistantMsg) {
-        const data = lastAssistantMsg.data;
-        const entry = data[Object.keys(data)[0]];
-        const promptText = entry?.contentParts
-          ?.filter((p) => p.type === 'content')
-          .map((p) => p.text)
-          .join('') || '';
-
-        if (promptText) {
-          onPromptGenerated({ prompt: promptText, mode: promptMode });
-        } else {
-          // Try extracting from tool call arguments
-          const toolCalls = getMergedThreadView(journeyThreadId).getToolCallsForAssistantMessage(lastAssistantMsg.id);
-          const promptFromTool = toolCalls
-            .map(tc => (tc.arguments as Record<string, unknown>)?.prompt || (tc.result as Record<string, unknown> | null)?.prompt)
-            .find(Boolean) as string | undefined;
-
-          if (promptFromTool) {
-            onPromptGenerated({ prompt: promptFromTool, mode: promptMode });
-          } else {
-            onStreamingError?.('AI did not generate a prompt.', promptMode);
-          }
-        }
+      const result = extractImagePromptResultFromThread(journeyThreadId, promptFormat);
+      if (result) {
+        onPromptGenerated(result);
       } else {
-        onStreamingError?.('No response received.', promptMode);
+        onStreamingError?.('AI did not submit a valid image prompt.', promptFormat);
       }
       setActiveJourneyId(null);
     }
-  }, [activeJourneyId, journeyThreadId, journeyError, threadStatus, threadError, isStreamActive, onPromptGenerated, onStreamingError, promptMode]);
+  }, [activeJourneyId, journeyThreadId, journeyError, threadStatus, threadError, isStreamActive, onPromptGenerated, onStreamingError, promptFormat]);
 
   const getModalTitle = (): string => {
     switch (contextType) {
@@ -222,11 +195,11 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     return '';
   };
 
-  const getPromptModeLabel = (): string => {
-    switch (promptMode) {
+  const getPromptFormatLabel = (): string => {
+    switch (promptFormat) {
       case 'natural': return 'Natural Language';
-      case 'positive': return 'Positive Tags';
-      case 'negative': return 'Negative Tags';
+      case 'positive_negative': return 'Positive / Negative';
+      case 'novelai': return 'NovelAI';
     }
   };
 
@@ -244,7 +217,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     const journeyKind = contextType === 'scene' ? 'sceneImagePrompt' : 'imagePrompt';
     const inputPayload = {
       projectId: currentProjectId,
-      promptMode,
+      promptFormat,
       contextType,
       userRequest: userRequest.trim(),
       objectType,
@@ -253,8 +226,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       manuscriptId,
       sceneContext,
       selectedContextIds: contextType === 'scene' ? selectedContextIds : [],
-      rawMode: true,
-      outputMode: 'raw_output' as const,
     };
     useJourneyStore.getState().createJourney({
       id: journeyId,
@@ -266,7 +237,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       updatedAt: Date.now(),
     });
     setActiveJourneyId(journeyId);
-    onStreamingStart?.(journeyId, promptMode);
+    onStreamingStart?.(journeyId, promptFormat);
 
     try {
       const created = await journeyService.create(currentProjectId, {
@@ -281,7 +252,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     } catch (error: any) {
       const message = error?.message ?? 'Failed to start image prompt journey.';
       useJourneyStore.getState().updateJourney(journeyId, { error: message });
-      onStreamingError?.(message, promptMode);
+      onStreamingError?.(message, promptFormat);
       setActiveJourneyId(null);
     }
 
@@ -290,7 +261,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     currentProjectId,
     contextType,
     isContextObjectsLoading,
-    promptMode,
+    promptFormat,
     userRequest,
     objectType,
     objectKind,
@@ -301,7 +272,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     onStreamingStart,
     onStreamingError,
     onClose,
-    promptMode,
   ]);
 
   const showObjectPicker = contextType === 'scene';
@@ -332,7 +302,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         {contextType === 'scene' && (
           <div className="prompt-mode-indicator">
             <span className="mode-label">Generating:</span>
-            <span className="mode-value">{getPromptModeLabel()}</span>
+            <span className="mode-value">{getPromptFormatLabel()}</span>
           </div>
         )}
 

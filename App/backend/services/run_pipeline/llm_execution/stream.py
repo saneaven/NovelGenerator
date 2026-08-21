@@ -46,12 +46,18 @@ async def execute_stream(
         else:
             tools_wire = prepared.tool_offer.provider_tools
 
+        specs_by_name = getattr(prepared.tool_offer, "specs_by_name", {})
+        requires_tool_call = (
+            isinstance(specs_by_name, dict)
+            and any(bool(getattr(spec, "ends_run", False)) for spec in specs_by_name.values())
+        )
+
         return provider.stream_chat(
             messages=prepared.provider_messages,
             model=task_config.model,
             temperature=float(task_config.temperature),
             tools=tools_wire,
-            tool_choice="auto" if tools_wire else None,
+            tool_choice=("required" if requires_tool_call else "auto") if tools_wire else None,
             max_tokens=task_config.max_output_tokens,
             provider_preference=getattr(task_config, "provider_preference", None),
             thinking_config=prepared.effective_thinking_config,

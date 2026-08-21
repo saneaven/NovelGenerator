@@ -7,6 +7,7 @@ import httpx
 
 from ..shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from ..shared.image.contracts import ImageGenerationOutput, PreparedImageRequest
+from ...schemas.assets import NaturalPromptData
 from ...utils.outbound_http import filter_additional_headers
 
 
@@ -81,9 +82,13 @@ class OpenRouterImageAdapter:
         if not self._api_key:
             return ImageGenerationOutput(success=False, error="OpenRouter client not initialized. Check API key.")
 
-        prompt = request.prompt_payload.prompt
-        if prompt is None:
-            return ImageGenerationOutput(success=False, error="Prompt is required for OpenRouter image generation.")
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NaturalPromptData):
+            return ImageGenerationOutput(
+                success=False,
+                error="Natural prompt data is required for OpenRouter image generation.",
+            )
+        prompt = prompt_data.prompt
 
         try:
             message_content: list[dict[str, Any]] = [
@@ -283,7 +288,7 @@ async def list_models(
                 name=str(raw_model.get("name") or model_id),
                 description=str(raw_model.get("description") or "").strip() or None,
                 canonical_slug=str(raw_model.get("canonical_slug") or raw_model.get("slug") or model_id),
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input="image" in input_modalities,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=supported_aspect_ratios,

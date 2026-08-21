@@ -31,8 +31,9 @@ export function useImageGenerationForm(options: UseImageGenerationFormOptions) {
     return providers;
   }, [providerSpecs]);
 
-  const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
-  const isTagBased = currentPromptType === 'tag_based';
+  const currentPromptFormat = selectedModel?.prompt_format ?? providerSpec?.image?.prompt_format ?? 'natural';
+  const isNaturalPrompt = currentPromptFormat === 'natural';
+  const isNovelAIPrompt = currentPromptFormat === 'novelai';
   const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
   const providerSettingsFlags = useMemo(
     () => ({
@@ -95,8 +96,9 @@ export function useImageGenerationForm(options: UseImageGenerationFormOptions) {
     loading,
     error,
     selectedModel: selectedModel as ImageModelInfo | null,
-    currentPromptType,
-    isTagBased,
+    currentPromptFormat,
+    isNaturalPrompt,
+    isNovelAIPrompt,
     providerSettingsSpec,
     normalizedProviderSettings,
     providerSettingsFlags,

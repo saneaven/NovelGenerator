@@ -1,5 +1,5 @@
 """Pydantic schemas for asset management"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
@@ -10,9 +10,52 @@ from datetime import datetime
 
 class StyledPrompt(BaseModel):
     """Structured prompt with style components"""
+    model_config = ConfigDict(extra="forbid")
+
     prefix: str = ""
     content: str = ""
     postfix: str = ""
+
+
+PromptFormat = Literal["natural", "positive_negative", "novelai"]
+
+
+class NaturalPromptData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: StyledPrompt
+
+
+class PositiveNegativePromptData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    positive: StyledPrompt
+    negative: StyledPrompt
+
+
+class NovelAICharacterPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    positive: str
+    negative: str
+
+    @field_validator("positive")
+    @classmethod
+    def validate_positive_prompt(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("NovelAI character positive prompt must not be blank")
+        return value
+
+
+class NovelAIPromptData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    positive: StyledPrompt
+    negative: StyledPrompt
+    characters: List[NovelAICharacterPrompt]
+
+
+ImagePromptData = NaturalPromptData | PositiveNegativePromptData | NovelAIPromptData
 
 
 class ReferenceImage(BaseModel):
@@ -34,19 +77,40 @@ class ReferenceObject(BaseModel):
 
 
 class ImageRunRecipe(BaseModel):
-    prompt_type: Literal["natural", "tag_based"]
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_format: PromptFormat
+    prompt_data: ImagePromptData
     provider: str
     model: str
     requested_aspect_ratio: str
     requested_image_size: str
     style_id: Optional[str] = None
-    prompt: Optional[StyledPrompt] = None
-    positive_prompt: Optional[StyledPrompt] = None
-    negative_prompt: Optional[StyledPrompt] = None
     provider_settings: Optional[Dict[str, Any]] = None
     reference_images: Optional[List[ReferenceImage]] = None
     mask_image: Optional[MaskImage] = None
     reference_objects: Optional[List[ReferenceObject]] = None
+
+    @model_validator(mode="after")
+    def validate_prompt_data_format(self) -> "ImageRunRecipe":
+        expected_type = {
+            "natural": NaturalPromptData,
+            "positive_negative": PositiveNegativePromptData,
+            "novelai": NovelAIPromptData,
+        }[self.prompt_format]
+        if not isinstance(self.prompt_data, expected_type):
+            raise ValueError(
+                f"prompt_data does not match prompt_format '{self.prompt_format}'"
+            )
+        if isinstance(self.prompt_data, NaturalPromptData):
+            prompt = self.prompt_data.prompt
+            if not f"{prompt.prefix}{prompt.content}{prompt.postfix}".strip():
+                raise ValueError("Natural prompt must not be blank")
+        else:
+            positive = self.prompt_data.positive
+            if not f"{positive.prefix}{positive.content}{positive.postfix}".strip():
+                raise ValueError("Base positive prompt must not be blank")
+        return self
 
 
 class ImageRunTarget(BaseModel):
@@ -105,7 +169,7 @@ class ImageProviderInfo(BaseModel):
     """Information about an image provider"""
     name: str
     display_name: str
-    prompt_type: str = "natural"  # 'natural' or 'tag_based'
+    prompt_format: PromptFormat = "natural"
     settings_schema: Optional[Dict[str, Any]] = None  # Provider-specific settings schema
     supports_image_input: bool = False  # Whether provider supports image-to-image generation
 
@@ -124,7 +188,7 @@ class ImageModelInfo(BaseModel):
     icon_url: Optional[str] = None
     tags: Optional[List[str]] = None
     category: Optional[str] = None
-    prompt_type: Literal["natural", "tag_based"]
+    prompt_format: PromptFormat
     supports_image_input: bool = False
     supports_mask_input: bool = False
     supports_multi_image_input: bool = False
@@ -161,7 +225,6 @@ class AssetUsage(BaseModel):
 class AssetBase(BaseModel):
     """Base asset schema"""
     name: str
-    generation_prompt: Optional[str] = None
 
 
 class AssetCreate(AssetBase):
@@ -178,10 +241,8 @@ class AssetResponse(BaseModel):
     mime_type: str
     asset_type: Optional[str] = None  # 'scene', 'object', or null
     manuscript_id: Optional[str] = None  # Ownership for scene assets
-    # Structured prompts (StyledPrompt with prefix/content/postfix)
-    generation_prompt: Optional[StyledPrompt] = None  # Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt: Optional[StyledPrompt] = None  # Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt: Optional[StyledPrompt] = None  # Negative prompt for tag-based (NovelAI)
+    generation_prompt_format: Optional[PromptFormat] = None
+    generation_prompt_data: Optional[ImagePromptData] = None
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_style_id: Optional[str] = None
@@ -267,10 +328,8 @@ class SceneAssetResponse(BaseModel):
     mime_type: str
     asset_type: Optional[str] = None
     manuscript_id: Optional[str] = None  # Ownership - which manuscript this belongs to
-    # Structured prompts (StyledPrompt with prefix/content/postfix)
-    generation_prompt: Optional[StyledPrompt] = None
-    generation_positive_prompt: Optional[StyledPrompt] = None
-    generation_negative_prompt: Optional[StyledPrompt] = None
+    generation_prompt_format: Optional[PromptFormat] = None
+    generation_prompt_data: Optional[ImagePromptData] = None
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_style_id: Optional[str] = None

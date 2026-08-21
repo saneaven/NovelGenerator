@@ -5,6 +5,7 @@ from typing import Any
 from openai import AsyncOpenAI, OpenAIError
 
 from ..shared.image.contracts import ImageGenerationOutput, PreparedImageRequest
+from ...schemas.assets import NaturalPromptData
 
 
 class XAIImageAdapter:
@@ -25,12 +26,13 @@ class XAIImageAdapter:
                 error="xAI client not initialized. Check API key.",
             )
 
-        prompt = request.prompt_payload.prompt
-        if prompt is None:
+        prompt_data = request.prompt_payload.prompt_data
+        if not isinstance(prompt_data, NaturalPromptData):
             return ImageGenerationOutput(
                 success=False,
-                error="Prompt is required for xAI image generation.",
+                error="Natural prompt data is required for xAI image generation.",
             )
+        prompt = prompt_data.prompt
 
         try:
             response = await self._client.images.generate(

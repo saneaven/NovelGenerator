@@ -1,3 +1,5 @@
+import type { StoredImagePrompts } from '../domain/imagePrompt';
+
 export type PromptProjectStoryEntityKind =
   | 'character'
   | 'organization'
@@ -12,6 +14,7 @@ export interface PromptProjectBasicInfo {
   logline: string;
   genres: string[];
   tags: string[];
+  imagePrompts?: StoredImagePrompts;
 }
 
 export interface PromptProjectStoryEntity {
@@ -24,9 +27,7 @@ export interface PromptProjectStoryEntity {
   folderId: string | null;
   folderPath: string[];
   displayOrder: number;
-  imagePrompt?: string | null;
-  imagePromptPositive?: string | null;
-  imagePromptNegative?: string | null;
+  imagePrompts?: StoredImagePrompts;
 }
 
 export type PromptStoryEntityTreeNode =
@@ -211,9 +212,7 @@ function buildStoryEntities(ids: PromptProjectSkeletonIds): PromptProjectStoryEn
       folderId: '[ placeholder-folder-main-cast-id ]',
       folderPath: ['Characters', 'Main Cast'],
       displayOrder: 0,
-      imagePrompt: '[ Placeholder for nested saved natural language prompt ]',
-      imagePromptPositive: '[ Placeholder for nested saved positive tags ]',
-      imagePromptNegative: '[ Placeholder for nested saved negative tags ]',
+      imagePrompts: placeholderImagePrompts('nested'),
     },
     {
       type: 'story_entity',
@@ -225,9 +224,7 @@ function buildStoryEntities(ids: PromptProjectSkeletonIds): PromptProjectStoryEn
       folderId: '[ placeholder-folder-characters-id ]',
       folderPath: ['Characters'],
       displayOrder: 1,
-      imagePrompt: '[ Placeholder for saved natural language prompt ]',
-      imagePromptPositive: '[ Placeholder for saved positive tags ]',
-      imagePromptNegative: '[ Placeholder for saved negative tags ]',
+      imagePrompts: placeholderImagePrompts('saved'),
     },
     {
       type: 'story_entity',
@@ -239,11 +236,27 @@ function buildStoryEntities(ids: PromptProjectSkeletonIds): PromptProjectStoryEn
       folderId: null,
       folderPath: [],
       displayOrder: 1,
-      imagePrompt: '[ Placeholder for root location natural language prompt ]',
-      imagePromptPositive: '[ Placeholder for root location positive tags ]',
-      imagePromptNegative: '[ Placeholder for root location negative tags ]',
+      imagePrompts: placeholderImagePrompts('root location'),
     },
   ];
+}
+
+function placeholderImagePrompts(label: string): StoredImagePrompts {
+  return {
+    natural: { prompt: `[ Placeholder for ${label} natural prompt ]` },
+    positive_negative: {
+      positive: `[ Placeholder for ${label} positive prompt ]`,
+      negative: `[ Placeholder for ${label} negative prompt ]`,
+    },
+    novelai: {
+      positive: `[ Placeholder for ${label} NovelAI positive prompt ]`,
+      negative: `[ Placeholder for ${label} NovelAI negative prompt ]`,
+      characters: [{
+        positive: `[ Placeholder for ${label} NovelAI character prompt ]`,
+        negative: `[ Placeholder for ${label} NovelAI character negative prompt ]`,
+      }],
+    },
+  };
 }
 
 function buildStoryEntityTree(ids: PromptProjectSkeletonIds): PromptStoryEntityTreeNode[] {

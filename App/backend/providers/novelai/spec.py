@@ -58,7 +58,7 @@ V5_MODELS = (
     ImageModelDescriptor(
         id="nai-diffusion-5-curated",
         name="NAI Diffusion V5 Curated",
-        prompt_type="tag_based",
+        prompt_format="novelai",
         supports_image_input=True,
         supports_mask_input=False,
         supports_multi_image_input=False,
@@ -71,7 +71,7 @@ V5_MODELS = (
     ImageModelDescriptor(
         id="nai-diffusion-5-full",
         name="NAI Diffusion V5 Full",
-        prompt_type="tag_based",
+        prompt_format="novelai",
         supports_image_input=True,
         supports_mask_input=False,
         supports_multi_image_input=False,
@@ -105,7 +105,7 @@ SPEC = ProviderSpec(
     }),
     image=ImageSpec(
         runtime=RuntimeSpec(adapter="default"),
-        prompt_type="tag_based",
+        prompt_format="novelai",
         supports_image_input=True,
         catalog_cache_policy="static",
         settings_title_key="settings.imageGen.novelaiSettings.title",
@@ -274,7 +274,7 @@ SPEC = ProviderSpec(
             ImageModelDescriptor(
                 id="nai-diffusion-4-5-full",
                 name="NAI Diffusion V4.5 Full",
-                prompt_type="tag_based",
+                prompt_format="novelai",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=("1:1", "13:19", "19:13", "2:3", "3:2", "5:12", "12:5"),
@@ -296,7 +296,7 @@ SPEC = ProviderSpec(
             ImageModelDescriptor(
                 id="nai-diffusion-4-5-curated",
                 name="NAI Diffusion V4.5 Curated",
-                prompt_type="tag_based",
+                prompt_format="novelai",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=("1:1", "13:19", "19:13", "2:3", "3:2", "5:12", "12:5"),

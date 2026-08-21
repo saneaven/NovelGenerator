@@ -202,6 +202,44 @@ class FakeTimelineLinkSession(FakeTimelineSession):
             self.links.remove(obj)
 
 
+def test_update_image_prompt_preserves_all_formats_and_character_order(monkeypatch) -> None:
+    project_id = uuid4()
+    object_id = uuid4()
+    user_id = uuid4()
+    row = SimpleNamespace(image_prompts={}, updated_at=None)
+    db = SimpleNamespace(flush=lambda: None)
+    image_prompts = {
+        "natural": {"prompt": "Two rivals on a rooftop"},
+        "positive_negative": {"positive": "two rivals, rooftop", "negative": "blurry"},
+        "novelai": {
+            "positive": "1girl, 1boy, rooftop",
+            "negative": "lowres",
+            "characters": [
+                {"positive": "girl, red hair", "negative": "blue hair"},
+                {"positive": "boy, blue coat", "negative": "red coat"},
+            ],
+        },
+    }
+
+    monkeypatch.setattr(object_service_module, "_load_owned_object", lambda *_args, **_kwargs: row)
+    monkeypatch.setattr(object_service_module, "snapshot_story_core_row", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(object_service_module, "queue_object_change", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "apply_project_usage_delta", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(object_service_module, "build_story_core_delta", lambda *_args, **_kwargs: {})
+
+    result = object_service_module.object_service.update_image_prompt(
+        db,
+        project_id=project_id,
+        object_type="story_entity",
+        object_id=object_id,
+        user_id=user_id,
+        image_prompts=image_prompts,
+    )
+
+    assert row.image_prompts == image_prompts
+    assert result["image_prompts"]["novelai"]["characters"] == image_prompts["novelai"]["characters"]
+
+
 def test_update_object_manuscript_path_uses_rich_text_image_refs(monkeypatch) -> None:
     db = FakeSession()
     project_id = uuid4()

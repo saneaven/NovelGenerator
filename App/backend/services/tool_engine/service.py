@@ -21,6 +21,7 @@ from .contracts import (
     PersistedToolMeta,
     ToolDecisionGroup,
     ToolDecisionItem,
+    ToolBinding,
     ToolExecutionOutcome,
     ToolExecutionResult,
     ToolOffer,
@@ -481,6 +482,61 @@ class ToolEngineService:
                 f"Validator returned invalid type for tool {tool_name}",
             )
         return outcome if not outcome.valid else valid_result()
+
+    async def execute_immediate_tool_call(
+        self,
+        *,
+        db: Session,
+        thread: Thread,
+        run: RunModel,
+        settings: UserSettings,
+        row: RunToolCallModel,
+        binding: ToolBinding,
+        args: dict[str, Any],
+        user_id: UUID,
+        project_id: UUID,
+        language: str,
+        preset_id: UUID | None,
+        input_payload: dict[str, Any],
+        vector_storage_enabled: bool,
+    ) -> AppliedToolCallResult:
+        """Execute an already-validated immediate binding in the caller's transaction."""
+        now = datetime.utcnow()
+        row.status = "processing"
+        row.reason = None
+        row.accepted_at = row.accepted_at or now
+        row.updated_at = now
+        try:
+            effective_language = tool_language_for_args(binding, args, language, settings)
+            exec_ctx = self._build_execution_context(
+                db=db,
+                thread=thread,
+                run=run,
+                settings=settings,
+                tool_call_row=row,
+                user_id=user_id,
+                project_id=project_id,
+                language=effective_language,
+                preset_id=preset_id,
+                input_payload=input_payload,
+                vector_storage_enabled=vector_storage_enabled,
+            )
+            outcome = await binding.execute(args, exec_ctx)
+            if not isinstance(outcome, ToolExecutionOutcome):
+                raise ValueError(f"Invalid execution outcome for {binding.spec.name}")
+            if binding.spec.ends_run and outcome.lifecycle == "working":
+                raise ValueError(f"Run-ending tool {binding.spec.name} must finish immediately")
+            self._apply_execution_outcome(row, outcome)
+            return AppliedToolCallResult(
+                tool_call_id=row.id,
+                status=row.status,
+                child_thread_id=outcome.child_thread_id,
+                child_input_text=outcome.child_input_text,
+                image_run_id=outcome.image_run_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._mark_failed(row, str(exc))
+            return AppliedToolCallResult(tool_call_id=row.id, status=row.status)
 
     async def _execute_immediate_item(
         self,

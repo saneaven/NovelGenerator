@@ -198,8 +198,8 @@ class NaturalImageStyle(BaseModel):
     postfix: str = ""
 
 
-class TagBasedImageStyle(BaseModel):
-    """Custom image style for tag-based providers (prefix/postfix for positive and negative prompts)"""
+class PositiveNegativeImageStyle(BaseModel):
+    """Prompt style with independent positive and negative affixes."""
     id: str
     name: str
     positivePrefix: str = ""
@@ -217,9 +217,11 @@ class ImageGenConfig(BaseModel):
     aspect_ratio: str = "1:1"
     image_size: str = "1K"
     naturalStyles: List[NaturalImageStyle] = []
-    tagBasedStyles: List[TagBasedImageStyle] = []
+    positiveNegativeStyles: List[PositiveNegativeImageStyle] = []
+    novelAIStyles: List[PositiveNegativeImageStyle] = []
     selectedNaturalStyleId: Optional[str] = None
-    selectedTagBasedStyleId: Optional[str] = None
+    selectedPositiveNegativeStyleId: Optional[str] = None
+    selectedNovelAIStyleId: Optional[str] = None
     providerSettings: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 

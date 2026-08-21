@@ -240,7 +240,7 @@
 }
 
 /* ========================================
-   PROMPT TABS (for tag-based providers)
+   POSITIVE / NEGATIVE PROMPT TABS
    ======================================== */
 
 .image-generation-modal .prompt-tabs {
@@ -357,10 +357,10 @@
 }
 
 /* ========================================
-   TAG-BASED STYLE PREVIEW
+   POSITIVE / NEGATIVE STYLE PREVIEW
    ======================================== */
 
-.image-generation-modal .style-preview-box.tag-based {
+.image-generation-modal .style-preview-box.positive-negative {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);

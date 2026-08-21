@@ -14,7 +14,7 @@ from App.backend.providers.shared.image.contracts import (
 )
 from App.backend.providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from App.backend.providers.novelai import image as novelai_image_module
-from App.backend.schemas.assets import StyledPrompt
+from App.backend.schemas.assets import NovelAICharacterPrompt, NovelAIPromptData, StyledPrompt
 
 
 NovelAIImageAdapter = novelai_image_module.NovelAIImageAdapter
@@ -79,13 +79,14 @@ def _build_request(
     provider_settings: dict | None = None,
     reference_images: tuple[PreparedReferenceImage, ...] = (),
     model_id: str = "nai-diffusion-4-5-full",
+    characters: list[dict[str, str]] | None = None,
 ) -> PreparedImageRequest:
     return PreparedImageRequest(
         provider="novelai",
         model_descriptor=ImageModelDescriptor(
             id=model_id,
             name=model_id,
-            prompt_type="tag_based",
+            prompt_format="novelai",
             supports_image_input=True,
             geometry=ImageModelGeometrySpec(
                 supported_aspect_ratios=("1:1",),
@@ -97,12 +98,18 @@ def _build_request(
             ),
         ),
         prompt_payload=ImagePromptPayload(
-            prompt_type="tag_based",
-            positive_prompt=StyledPrompt(prefix="", content=positive_prompt, postfix=""),
-            negative_prompt=(
-                StyledPrompt(prefix="", content=negative_prompt, postfix="")
-                if negative_prompt is not None
-                else None
+            prompt_format="novelai",
+            prompt_data=NovelAIPromptData(
+                positive=StyledPrompt(prefix="", content=positive_prompt, postfix=""),
+                negative=StyledPrompt(
+                    prefix="",
+                    content=negative_prompt or "",
+                    postfix="",
+                ),
+                characters=[
+                    NovelAICharacterPrompt.model_validate(character)
+                    for character in characters or []
+                ],
             ),
         ),
         resolved_geometry=ResolvedGeometry(
@@ -193,6 +200,47 @@ def test_generate_image_preserves_style_composed_prompts_and_reference_settings(
     assert parameters["image"] == "cmVmLWltYWdl"
     assert parameters["strength"] == 0.45
     assert parameters["noise"] == 0.2
+
+
+def test_v4_and_v5_preserve_paired_character_caption_order(monkeypatch) -> None:
+    client = _RecordingAsyncClient()
+    monkeypatch.setattr(novelai_image_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
+    adapter = NovelAIImageAdapter({"api_key": "test-token"})
+    characters = [
+        {"positive": "1girl, red hair", "negative": "red hair, bad hands"},
+        {"positive": "1boy, blue coat", "negative": "blue coat, blurry"},
+    ]
+
+    for model_id in ("nai-diffusion-4-5-full", "nai-diffusion-5-curated"):
+        result = asyncio.run(
+            adapter.generate(
+                _build_request(
+                    positive_prompt="city street",
+                    negative_prompt="lowres",
+                    model_id=model_id,
+                    characters=characters,
+                )
+            )
+        )
+        assert result.success is True
+
+    expected_positive = [
+        {"char_caption": "1girl, red hair", "centers": []},
+        {"char_caption": "1boy, blue coat", "centers": []},
+    ]
+    expected_negative = [
+        {"char_caption": "red hair, bad hands", "centers": []},
+        {"char_caption": "blue coat, blurry", "centers": []},
+    ]
+    for payload in client.payloads:
+        positive = payload["parameters"]["v4_prompt"]
+        negative = payload["parameters"]["v4_negative_prompt"]
+        assert positive["caption"]["char_captions"] == expected_positive
+        assert negative["caption"]["char_captions"] == expected_negative
+        assert positive["use_coords"] is False
+        assert negative["use_coords"] is False
+        assert positive["use_order"] is True
+        assert negative["use_order"] is True
 
 
 def test_v4_payload_regression_is_unchanged(monkeypatch) -> None:

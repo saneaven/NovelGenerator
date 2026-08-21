@@ -13,12 +13,24 @@ vi.mock('../../api/client', () => {
   return { ApiError };
 });
 
-vi.mock('../../api/threadService', () => ({ threadService: {} }));
+const { resumeRunMock } = vi.hoisted(() => ({
+  resumeRunMock: vi.fn(),
+}));
 
-import { ThreadEventConsumer } from './threadEventConsumer';
+vi.mock('../../api/threadService', () => ({
+  threadService: {
+    resumeRun: resumeRunMock,
+  },
+}));
+
+import { hasTerminalImagePromptCall, ThreadEventConsumer } from './threadEventConsumer';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import { queryClient } from '../../data/queryClient';
-import { readThreadSnapshotFromCache } from '../../data/threads';
+import {
+  readThreadSnapshotFromCache,
+  upsertSnapshotMessage,
+  upsertSnapshotToolCall,
+} from '../../data/threads';
 
 const threadId = 'thread-1';
 const runId = 'run-1';
@@ -40,6 +52,7 @@ function seedThread() {
 }
 
 afterEach(() => {
+  resumeRunMock.mockReset();
   queryClient.clear();
   useThreadStreamStore.getState().clearAll();
 });
@@ -121,6 +134,57 @@ describe('ThreadEventConsumer streaming lifecycle (single cache source)', () => 
     expect(toolCalls).toHaveLength(1); // temp removed, real added — not both
     expect(toolCalls[0].id).toBe('real-tc-0');
 
+    consumer.dispose();
+  });
+});
+
+describe('image prompt terminal tool call', () => {
+  it('suppresses parent auto-continue only for submit_image_prompt', () => {
+    expect(hasTerminalImagePromptCall([{ toolName: 'submit_image_prompt' }])).toBe(true);
+    expect(hasTerminalImagePromptCall([{ toolName: 'generate_image' }])).toBe(false);
+    expect(hasTerminalImagePromptCall([])).toBe(false);
+  });
+
+  it('does not resume a done thread after the terminal call is applied', async () => {
+    const consumer = new ThreadEventConsumer();
+    useThreadStreamStore.getState().upsertThread({
+      id: threadId,
+      projectId: 'p-1',
+      threadType: 'journey',
+      status: 'done',
+      latestRunId: runId,
+      unresolvedToolCallCount: 0,
+    });
+    upsertSnapshotMessage({
+      id: messageId,
+      threadId,
+      runId,
+      seq: 1,
+      seqInThread: 1,
+      role: 'assistant',
+      data: {},
+      attachments: [],
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    upsertSnapshotToolCall({
+      id: 'prompt-call-1',
+      threadId,
+      runId,
+      messageId: 'tool-message-1',
+      assistantMessageId: messageId,
+      callSeq: 0,
+      llmCallId: 'llm-call-1',
+      toolName: 'submit_image_prompt',
+      arguments: { prompt: 'A stormy lighthouse.' },
+      status: 'applied',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+
+    await (consumer as unknown as { checkAutoContinue: (id: string) => Promise<void> })
+      .checkAutoContinue(threadId);
+
+    expect(resumeRunMock).not.toHaveBeenCalled();
     consumer.dispose();
   });
 });

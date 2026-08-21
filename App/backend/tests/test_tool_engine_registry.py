@@ -388,6 +388,110 @@ def test_feature_apply_group_rejects_non_outcome_result() -> None:
         asyncio.run(module.apply_group(group=group, ctx=ctx))
 
 
+@pytest.mark.parametrize("raises", [False, True])
+def test_execute_immediate_tool_call_applies_or_fails_terminal_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    raises: bool,
+) -> None:
+    service = ToolEngineService(ToolRegistry())
+    row = RunToolCallModel(
+        id=uuid4(),
+        status="validating",
+        tool_name="submit_image_prompt",
+        arguments={"prompt": "moonlit castle"},
+    )
+
+    async def _execute(args, execution_ctx):
+        assert args == row.arguments
+        assert execution_ctx.tool_call_row is row
+        if raises:
+            raise ValueError("submission failed")
+        return ToolExecutionOutcome(
+            lifecycle="applied",
+            result={"success": True, "message": "Image prompt submitted."},
+        )
+
+    spec = ToolSpec(
+        name="submit_image_prompt",
+        description="Submit image prompt.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"prompt": {"type": "string"}},
+            "required": ["prompt"],
+        },
+        execution_policy="immediate",
+        ends_run=True,
+    )
+    binding = ToolBinding(
+        spec=spec,
+        meta=ToolBindingMeta(
+            feature_key="image",
+            category="generate",
+            op="generate",
+            target_kind="object_image",
+        ),
+        validate=lambda _args, _ctx: valid_result(),
+        execute=_execute,
+        build_persisted_meta=lambda _ctx, _args: PersistedToolMeta(
+            feature_key="image",
+            category="generate",
+            op="generate",
+            target_kind="object_image",
+            target_id=None,
+            merge_key=None,
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_build_execution_context",
+        lambda **kwargs: SimpleNamespace(tool_call_row=kwargs["tool_call_row"]),
+    )
+    user_id = uuid4()
+    project_id = uuid4()
+    thread = Thread(
+        id=uuid4(),
+        project_id=project_id,
+        user_id=user_id,
+        thread_type="journey",
+        status="running",
+    )
+    run = RunModel(
+        id=uuid4(),
+        thread_id=thread.id,
+        user_id=user_id,
+        project_id=project_id,
+        status="running",
+        language="English",
+    )
+
+    result = asyncio.run(
+        service.execute_immediate_tool_call(
+            db=SimpleNamespace(),
+            thread=thread,
+            run=run,
+            settings=SimpleNamespace(),
+            row=row,
+            binding=binding,
+            args=row.arguments,
+            user_id=user_id,
+            project_id=project_id,
+            language="English",
+            preset_id=uuid4(),
+            input_payload={"promptFormat": "natural"},
+            vector_storage_enabled=False,
+        )
+    )
+
+    assert row.accepted_at is not None
+    assert result.status == ("failed" if raises else "applied")
+    assert row.status == result.status
+    if raises:
+        assert row.reason == "submission failed"
+    else:
+        assert row.result == {"success": True, "message": "Image prompt submitted."}
+
+
 class _GroupResultQuery:
     def __init__(self, db: "_GroupResultDb") -> None:
         self._db = db

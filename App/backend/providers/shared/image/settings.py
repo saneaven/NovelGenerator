@@ -57,9 +57,11 @@ def default_image_gen_config() -> dict[str, Any]:
         "aspect_ratio": default_model.geometry.default_aspect_ratio,
         "image_size": default_model.geometry.default_resolution,
         "naturalStyles": [],
-        "tagBasedStyles": [],
+        "positiveNegativeStyles": [],
+        "novelAIStyles": [],
         "selectedNaturalStyleId": None,
-        "selectedTagBasedStyleId": None,
+        "selectedPositiveNegativeStyleId": None,
+        "selectedNovelAIStyleId": None,
         "providerSettings": provider_settings,
     }
 

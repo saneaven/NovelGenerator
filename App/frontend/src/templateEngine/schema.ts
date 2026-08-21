@@ -21,6 +21,7 @@ import {
   type PromptProjectTimeline,
   type PromptStoryEntityTreeNode,
 } from './projectShape';
+import type { PromptFormat, StoredImagePrompts } from '../domain/imagePrompt';
 
 // Helper type for variable metadata
 type VariableDef<T> = {
@@ -169,6 +170,7 @@ export const UNIFIED_SCHEMA = {
         basicInfo: null,
         guidelines: null,
         storyEntity: {
+          type: "story_entity",
           id: "story-entity-1",
           kind: "character",
           name: "Ari",
@@ -177,9 +179,11 @@ export const UNIFIED_SCHEMA = {
           folderId: "folder-1",
           folderPath: ["Characters", "Main"],
           displayOrder: 0,
-          imagePrompt: "cinematic portrait, neon city, scar over one eye",
-          imagePromptPositive: "portrait, neon, cyberpunk",
-          imagePromptNegative: "blurry, low quality",
+          imagePrompts: {
+            natural: { prompt: "cinematic portrait, neon city, scar over one eye" },
+            positive_negative: { positive: "portrait, neon, cyberpunk", negative: "blurry, low quality" },
+            novelai: { positive: "portrait, neon, cyberpunk", negative: "blurry, low quality", characters: [] },
+          },
         },
       } as {
         contextIds?: string[];
@@ -236,7 +240,7 @@ export const UNIFIED_SCHEMA = {
   },
 
   imagePrompt: {
-    promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
+    promptFormat: { desc: "Image prompt format", example: "natural" as PromptFormat },
     currentTarget: {
       desc: "Current typed target context for image prompt generation",
       example: {
@@ -247,18 +251,25 @@ export const UNIFIED_SCHEMA = {
           name: "Uhtred of Bebbanburg",
           description: "A Saxon lord raised by Danes...",
           content: "Tall, battle-scarred warrior. Wears worn leather and a wolfskin cloak...",
-          image_prompt: "A rugged warrior with long dark hair, battle-worn leather armor...",
-          image_prompt_positive: "warrior, long hair, leather armor, wolfskin cloak",
-          image_prompt_negative: "blurry, low quality, deformed",
+          imagePrompts: {
+            natural: { prompt: "A rugged warrior with long dark hair, battle-worn leather armor..." },
+            positive_negative: {
+              positive: "warrior, long hair, leather armor, wolfskin cloak",
+              negative: "blurry, low quality, deformed",
+            },
+            novelai: {
+              positive: "warrior, long hair, leather armor, wolfskin cloak",
+              negative: "blurry, low quality, deformed",
+              characters: [],
+            },
+          },
         },
       } as {
         basicInfo: {
           id: string;
           title: string;
           logline: string;
-          image_prompt: string | null;
-          image_prompt_positive: string | null;
-          image_prompt_negative: string | null;
+          imagePrompts: StoredImagePrompts;
         } | null;
         storyEntity: {
           id: string;
@@ -266,9 +277,7 @@ export const UNIFIED_SCHEMA = {
           name: string;
           description: string;
           content: string;
-          image_prompt: string | null;
-          image_prompt_positive: string | null;
-          image_prompt_negative: string | null;
+          imagePrompts: StoredImagePrompts;
         } | null;
       }
     },
@@ -292,10 +301,6 @@ export const UNIFIED_SCHEMA = {
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedContextIds: {
       desc: "IDs of selected context objects",
-      example: ["story-entity-1", "chapter-1", "manuscript-1", "timeline-event-1"] as string[],
-    },
-    selectedEntityIds: {
-      desc: "Deprecated alias of selectedContextIds for legacy templates",
       example: ["story-entity-1", "chapter-1", "manuscript-1", "timeline-event-1"] as string[],
     },
   },
@@ -346,7 +351,7 @@ export type AgentModeData = ExtractProps<typeof UNIFIED_SCHEMA['agent']>;
 export type MemoryData = ExtractProps<typeof UNIFIED_SCHEMA['memory']>;
 export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssistant']>;
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
-export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
+export type ImagePromptData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
 export type MemorySummaryData = ExtractProps<typeof UNIFIED_SCHEMA['memorySummary']>;
 
 // Variables data type
@@ -362,7 +367,7 @@ export interface PromptData {
   memorySummary?: MemorySummaryData;
   editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;
-  imagePrompt?: ImagePromptModeData;
+  imagePrompt?: ImagePromptData;
   variables?: VariablesData;
 }
 

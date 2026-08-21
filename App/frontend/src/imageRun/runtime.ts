@@ -34,7 +34,8 @@ function buildCreateImageRunRequest(input: ImageRunInput, clientRequestId: strin
       };
 
   const baseRecipe = {
-    prompt_type: input.recipe.promptType,
+    prompt_format: input.recipe.promptFormat,
+    prompt_data: input.recipe.promptData,
     provider: input.recipe.provider,
     model: input.recipe.model,
     requested_aspect_ratio: input.recipe.aspectRatio,
@@ -49,20 +50,9 @@ function buildCreateImageRunRequest(input: ImageRunInput, clientRequestId: strin
     reference_objects: undefined,
   };
 
-  const recipe = input.recipe.promptType === 'natural'
-    ? {
-        ...baseRecipe,
-        prompt: input.recipe.prompt,
-      }
-    : {
-        ...baseRecipe,
-        positive_prompt: input.recipe.positive,
-        negative_prompt: input.recipe.negative,
-      };
-
   return {
     client_request_id: clientRequestId,
-    recipe,
+    recipe: baseRecipe,
     target,
   };
 }

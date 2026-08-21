@@ -10,6 +10,7 @@
  */
 
 import { apiClient } from './client';
+import type { StoredImagePrompts } from '../domain/imagePrompt';
 import type {
   UnifiedObject,
   ObjectType,
@@ -274,23 +275,15 @@ export const unifiedObjectService = {
   async updateImagePrompt(
     type: ObjectType,
     id: string,
-    prompts: {
-      image_prompt?: string;
-      image_prompt_positive?: string;
-      image_prompt_negative?: string;
-    }
+    imagePrompts: StoredImagePrompts,
   ): Promise<{
     success: boolean;
-    image_prompt: string | null;
-    image_prompt_positive: string | null;
-    image_prompt_negative: string | null;
+    image_prompts: StoredImagePrompts;
   }> {
     return apiClient.patch<{
       success: boolean;
-      image_prompt: string | null;
-      image_prompt_positive: string | null;
-      image_prompt_negative: string | null;
-    }>(`/api/v1/objects/${type}/${id}/image-prompt`, prompts);
+      image_prompts: StoredImagePrompts;
+    }>(`/api/v1/objects/${type}/${id}/image-prompt`, { image_prompts: imagePrompts });
   },
 
   async getStoryEntityTree(

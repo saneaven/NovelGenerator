@@ -102,14 +102,14 @@ SPEC = ProviderSpec(
     ),
     image=ImageSpec(
         runtime=RuntimeSpec(adapter="default"),
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=False,
         catalog_cache_policy="static",
         models=(
             ImageModelDescriptor(
                 id="grok-2-image",
                 name="Grok 2 Image",
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input=False,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=("1:1", "4:7", "7:4"),
@@ -123,7 +123,7 @@ SPEC = ProviderSpec(
             ImageModelDescriptor(
                 id="grok-2-image-1212",
                 name="Grok 2 Image 1212",
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input=False,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=("1:1", "4:7", "7:4"),

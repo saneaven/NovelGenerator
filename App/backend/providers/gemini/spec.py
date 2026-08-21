@@ -209,14 +209,14 @@ SPEC = ProviderSpec(
     ),
     image=ImageSpec(
         runtime=RuntimeSpec(adapter="default"),
-        prompt_type="natural",
+        prompt_format="natural",
         supports_image_input=True,
         catalog_cache_policy="static",
         models=(
             ImageModelDescriptor(
                 id="gemini-3.1-flash-image-preview",
                 name="Gemini 3.1 Flash Image Preview",
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=GEMINI_FLASH_IMAGE_ASPECT_RATIOS,
@@ -229,7 +229,7 @@ SPEC = ProviderSpec(
             ImageModelDescriptor(
                 id="gemini-3-pro-image-preview",
                 name="Gemini 3 Pro Image Preview",
-                prompt_type="natural",
+                prompt_format="natural",
                 supports_image_input=True,
                 geometry=ImageModelGeometrySpec(
                     supported_aspect_ratios=GEMINI_PRO_IMAGE_ASPECT_RATIOS,

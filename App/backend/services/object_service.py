@@ -164,9 +164,7 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         )
         if main_link:
             metadata["cover_image_id"] = str(main_link.asset_id)
-        metadata["image_prompt"] = getattr(obj, "image_prompt", None)
-        metadata["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
-        metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
+        metadata["image_prompts"] = getattr(obj, "image_prompts", None)
     elif object_type == "guidelines":
         metadata["project_id"] = str(obj.project_id)
     elif object_type == STORY_ENTITY_FOLDER_TYPE:
@@ -177,9 +175,7 @@ def _get_metadata(db: Session, obj: Any, object_type: str) -> dict[str, Any]:
         metadata["project_id"] = str(obj.project_id)
         metadata["folder_id"] = str(obj.folder_id) if getattr(obj, "folder_id", None) else None
         metadata["display_order"] = int(getattr(obj, "display_order", 0) or 0)
-        metadata["image_prompt"] = getattr(obj, "image_prompt", None)
-        metadata["image_prompt_positive"] = getattr(obj, "image_prompt_positive", None)
-        metadata["image_prompt_negative"] = getattr(obj, "image_prompt_negative", None)
+        metadata["image_prompts"] = getattr(obj, "image_prompts", None)
     elif object_type == "outline":
         metadata["project_id"] = str(obj.project_id)
         metadata["kind"] = str(getattr(obj, "kind", ""))
@@ -2069,9 +2065,7 @@ class ObjectService:
         object_type: str,
         object_id: UUID,
         user_id: UUID | None = None,
-        image_prompt: str | None = None,
-        image_prompt_positive: str | None = None,
-        image_prompt_negative: str | None = None,
+        image_prompts: dict[str, Any],
     ) -> dict[str, Any]:
         t = object_type
         allowed = {"basic_info", STORY_ENTITY_TYPE}
@@ -2083,12 +2077,7 @@ class ObjectService:
             raise ValueError(f"{t} not found")
         before = snapshot_story_core_row(obj)
 
-        if image_prompt is not None:
-            obj.image_prompt = image_prompt or None
-        if image_prompt_positive is not None:
-            obj.image_prompt_positive = image_prompt_positive or None
-        if image_prompt_negative is not None:
-            obj.image_prompt_negative = image_prompt_negative or None
+        obj.image_prompts = image_prompts
 
         obj.updated_at = datetime.utcnow()
         db.flush()
@@ -2111,9 +2100,7 @@ class ObjectService:
 
         return {
             "success": True,
-            "image_prompt": obj.image_prompt,
-            "image_prompt_positive": obj.image_prompt_positive,
-            "image_prompt_negative": obj.image_prompt_negative,
+            "image_prompts": obj.image_prompts,
         }
 
     def reorder_objects(

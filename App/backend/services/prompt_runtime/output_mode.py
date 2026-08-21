@@ -4,7 +4,8 @@ from typing import Any
 
 
 VALID_OUTPUT_MODES = {"tool_call", "native_tool_call", "raw_output"}
-FORCED_RAW_JOURNEY_KINDS = {"imagePrompt", "sceneImagePrompt", "messageTranslation"}
+FORCED_RAW_JOURNEY_KINDS = {"messageTranslation"}
+FORCED_TOOL_CALL_JOURNEY_KINDS = {"imagePrompt", "sceneImagePrompt"}
 
 
 def resolve_output_mode(
@@ -14,6 +15,8 @@ def resolve_output_mode(
     native_output_mode: bool,
 ) -> str:
     kind = str(journey_kind or "").strip()
+    if kind in FORCED_TOOL_CALL_JOURNEY_KINDS:
+        return "tool_call"
     if kind in FORCED_RAW_JOURNEY_KINDS:
         return "raw_output"
 
@@ -29,4 +32,3 @@ def resolve_output_mode(
         return "native_tool_call"
 
     return "tool_call"
-
