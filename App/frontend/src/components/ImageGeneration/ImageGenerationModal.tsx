@@ -748,6 +748,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 {isTagBased && (
                     <div className="form-field">
                         <label>Prompt</label>
+                        {provider === 'novelai' && /^nai-diffusion-5-(curated|full)$/.test(selectedModel?.id ?? '') ? (
+                            <p className="prompt-language-hint">
+                                {t('settings.imageGen.novelaiSettings.v5PromptHint')}
+                            </p>
+                        ) : null}
                         {/* Thinking display during streaming */}
                         {(isStreamingPositive || isStreamingNegative) && streamingStatus && (
                             isSuppressedStreaming ? (

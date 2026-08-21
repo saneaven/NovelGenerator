@@ -35,15 +35,18 @@ export function buildImageProviderSettingsDraft(
     ...stored,
     ...retry,
   };
-  return normalizeByPublicSpec(merged, spec, merged);
+  return normalizeByPublicSpec(merged, spec, merged, {
+    hasReferenceImages: (recipe?.referenceImages?.length ?? 0) > 0,
+  });
 }
 
 export function normalizeImageProviderSettingsDraft(
   providerId: string,
   providerSpecs: ProviderSpecMap,
   draft: Record<string, unknown>,
+  flags: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const spec = providerSpecs[providerId]?.image?.provider_settings;
   if (!spec) return {};
-  return normalizeByPublicSpec(draft, spec, draft);
+  return normalizeByPublicSpec(draft, spec, draft, flags);
 }

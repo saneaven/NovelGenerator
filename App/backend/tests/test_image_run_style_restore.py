@@ -52,6 +52,9 @@ def load_image_run_service(monkeypatch):
     monkeypatch.setitem(sys.modules, "App.backend.services.object_service", fake_object_service)
 
     fake_rich_text = types.ModuleType("App.backend.services.rich_text")
+    fake_rich_text.get_rich_text_fields = lambda *_args, **_kwargs: ()
+    fake_rich_text.normalize_tree = lambda value, *_args, **_kwargs: value
+    fake_rich_text.render_markdown_image = lambda *_args, **_kwargs: ""
     fake_rich_text.tree_to_markdown = lambda *_args, **_kwargs: ""
     monkeypatch.setitem(sys.modules, "App.backend.services.rich_text", fake_rich_text)
 

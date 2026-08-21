@@ -34,16 +34,26 @@ export function useImageGenerationForm(options: UseImageGenerationFormOptions) {
   const currentPromptType = selectedModel?.prompt_type ?? providerSpec?.image?.prompt_type ?? 'natural';
   const isTagBased = currentPromptType === 'tag_based';
   const providerSettingsSpec = providerSpec?.image?.provider_settings ?? null;
-  const normalizedProviderSettings = useMemo<Record<string, unknown>>(
-    () => normalizeImageProviderSettingsDraft(options.provider, providerSpecs, options.providerSettingsDraft),
-    [options.provider, options.providerSettingsDraft, providerSpecs],
-  );
   const providerSettingsFlags = useMemo(
     () => ({
       hasReferenceImages: (options.referenceImageCount ?? 0) > 0,
       kontext_model: /kontext/i.test(selectedModel?.id ?? options.model),
     }),
     [options.referenceImageCount, selectedModel, options.model],
+  );
+  const normalizedProviderSettings = useMemo<Record<string, unknown>>(
+    () => normalizeImageProviderSettingsDraft(
+      options.provider,
+      providerSpecs,
+      options.providerSettingsDraft,
+      providerSettingsFlags,
+    ),
+    [
+      options.provider,
+      options.providerSettingsDraft,
+      providerSettingsFlags,
+      providerSpecs,
+    ],
   );
 
   const supportsImageInput = selectedModel?.supports_image_input ?? false;

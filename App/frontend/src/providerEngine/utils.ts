@@ -224,17 +224,27 @@ function normalizeFieldValue(raw: unknown, spec: PublicFieldSpec): unknown {
   }
 }
 
-export function normalizeByPublicSpec(value: JsonObject, spec: PublicObjectSpec, rootValue?: JsonObject): JsonObject {
+export function normalizeByPublicSpec(
+  value: JsonObject,
+  spec: PublicObjectSpec,
+  rootValue?: JsonObject,
+  flags: Record<string, unknown> = {},
+): JsonObject {
   const source = isPlainObject(value) ? value : {};
   const evaluationRoot = rootValue ?? source;
   const out: JsonObject = {};
   const fields = isPlainObject(spec.fields) ? spec.fields : {};
 
   for (const [key, node] of Object.entries(fields)) {
-    if (!isNodeActive(node, evaluationRoot)) continue;
+    if (!isNodeActive(node, evaluationRoot, flags)) continue;
     const raw = source[key];
     if (isObjectSpec(node)) {
-      const child = normalizeByPublicSpec(isPlainObject(raw) ? raw : {}, node, evaluationRoot);
+      const child = normalizeByPublicSpec(
+        isPlainObject(raw) ? raw : {},
+        node,
+        evaluationRoot,
+        flags,
+      );
       if (Object.keys(child).length > 0) out[key] = child;
       continue;
     }

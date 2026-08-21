@@ -636,9 +636,23 @@
         "steps": "스텝",
         "stepsHint": "샘플링 스텝 수 (1-50)",
         "cfgScale": "CFG 스케일",
-        "cfgScaleHint": "프롬프트 안내 강도 (1-20)",
+        "cfgScaleHint": "프롬프트 안내 강도 (V5: 1-10, V4.5: 1-20)",
         "noiseSchedule": "노이즈 스케줄",
         "noiseScheduleHint": "노이즈 스케줄링 방식",
+        "qualityPreset": "품질 프리셋",
+        "qualityPresetHint": "V5 긍정 프롬프트 뒤에 선택적으로 품질 태그를 추가합니다",
+        "qualityPresetOptions": {
+          "off": "끔",
+          "standard": "표준",
+          "light": "라이트"
+        },
+        "ucPreset": "비선호 콘텐츠 프리셋",
+        "ucPresetHint": "V5 부정 프롬프트 앞에 선택적으로 비선호 콘텐츠 태그를 추가합니다",
+        "ucPresetOptions": {
+          "off": "끔",
+          "heavy": "강하게"
+        },
+        "v5PromptHint": "NAI V5는 태그 또는 영어·일본어 자연어를 지원합니다. 한국어 프롬프트는 기존 AI Assist 흐름에서 영어로 변환한 뒤 사용하세요.",
         "referenceMode": "참조 모드",
         "referenceModeHint": "첨부된 참조 이미지를 NovelAI가 어떻게 해석할지 선택합니다",
         "referenceModeOptions": {

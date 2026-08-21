@@ -14,6 +14,76 @@ from ..shared.contracts import (
 )
 
 
+V5_SUPPORTED_SAMPLERS = (
+    "k_euler_ancestral",
+    "k_euler",
+    "k_dpmpp_2s_ancestral",
+    "k_dpmpp_2m_sde",
+    "k_dpmpp_2m",
+    "k_dpmpp_sde",
+)
+
+V5_SUPPORTED_SIZES = (
+    "512x768",
+    "768x512",
+    "640x640",
+    "832x1216",
+    "1216x832",
+    "1024x1024",
+    "1024x1536",
+    "1536x1024",
+    "1472x1472",
+    "1088x1920",
+    "1920x1088",
+)
+
+V5_GEOMETRY = ImageModelGeometrySpec(
+    supported_aspect_ratios=("2:3", "3:2", "1:1", "13:19", "19:13", "17:30", "30:17"),
+    supported_resolutions=V5_SUPPORTED_SIZES,
+    default_aspect_ratio="13:19",
+    default_resolution="832x1216",
+    resolution_mode="native_exact",
+    supported_geometry_pairs={
+        "2:3": ("512x768", "1024x1536"),
+        "3:2": ("768x512", "1536x1024"),
+        "1:1": ("640x640", "1024x1024", "1472x1472"),
+        "13:19": ("832x1216",),
+        "19:13": ("1216x832",),
+        "17:30": ("1088x1920",),
+        "30:17": ("1920x1088",),
+    },
+)
+
+V5_MODELS = (
+    ImageModelDescriptor(
+        id="nai-diffusion-5-curated",
+        name="NAI Diffusion V5 Curated",
+        prompt_type="tag_based",
+        supports_image_input=True,
+        supports_mask_input=False,
+        supports_multi_image_input=False,
+        geometry=V5_GEOMETRY,
+        description=(
+            "Supports tag prompts and English or Japanese natural-language prompts, "
+            "plus single-image img2img."
+        ),
+    ),
+    ImageModelDescriptor(
+        id="nai-diffusion-5-full",
+        name="NAI Diffusion V5 Full",
+        prompt_type="tag_based",
+        supports_image_input=True,
+        supports_mask_input=False,
+        supports_multi_image_input=False,
+        geometry=V5_GEOMETRY,
+        description=(
+            "Supports tag prompts and English or Japanese natural-language prompts, "
+            "plus single-image img2img."
+        ),
+    ),
+)
+
+
 SPEC = ProviderSpec(
     id="novelai",
     ui=ProviderUI(
@@ -44,7 +114,15 @@ SPEC = ProviderSpec(
             "sampler": FieldSpec(
                 kind="enum",
                 default="k_euler_ancestral",
-                options=("k_euler_ancestral", "k_euler", "k_dpmpp_2s_ancestral", "k_dpmpp_2m", "k_dpmpp_sde", "ddim_v3"),
+                options=(
+                    "k_euler_ancestral",
+                    "k_euler",
+                    "k_dpmpp_2s_ancestral",
+                    "k_dpmpp_2m_sde",
+                    "k_dpmpp_2m",
+                    "k_dpmpp_sde",
+                    "ddim_v3",
+                ),
                 ui=UIHint(
                     widget="select",
                     label_key="settings.imageGen.novelaiSettings.sampler",
@@ -162,8 +240,37 @@ SPEC = ProviderSpec(
                     order=90,
                 ),
             ),
+            "qualityPreset": FieldSpec(
+                kind="enum",
+                default="off",
+                options=("off", "standard", "light"),
+                ui=UIHint(
+                    widget="select",
+                    label_key="settings.imageGen.novelaiSettings.qualityPreset",
+                    help_key="settings.imageGen.novelaiSettings.qualityPresetHint",
+                    option_label_prefix=(
+                        "settings.imageGen.novelaiSettings.qualityPresetOptions"
+                    ),
+                    order=100,
+                ),
+            ),
+            "ucPreset": FieldSpec(
+                kind="enum",
+                default="off",
+                options=("off", "heavy"),
+                ui=UIHint(
+                    widget="select",
+                    label_key="settings.imageGen.novelaiSettings.ucPreset",
+                    help_key="settings.imageGen.novelaiSettings.ucPresetHint",
+                    option_label_prefix=(
+                        "settings.imageGen.novelaiSettings.ucPresetOptions"
+                    ),
+                    order=110,
+                ),
+            ),
         }),
         models=(
+            *V5_MODELS,
             ImageModelDescriptor(
                 id="nai-diffusion-4-5-full",
                 name="NAI Diffusion V4.5 Full",

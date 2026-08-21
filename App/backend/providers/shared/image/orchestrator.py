@@ -76,7 +76,7 @@ async def prepare_image_request(
         reference_images.append(
             PreparedReferenceImage(
                 image_data=image_bytes,
-                strength=float(ref.strength or 0.7),
+                strength=float(0.7 if ref.strength is None else ref.strength),
             )
         )
 

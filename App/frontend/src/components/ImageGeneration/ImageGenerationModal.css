@@ -84,6 +84,13 @@
     gap: var(--spacing-sm);
 }
 
+.image-generation-modal .prompt-language-hint {
+    margin: 0 0 var(--spacing-sm);
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+    line-height: 1.45;
+}
+
 .image-generation-modal .prompt-input {
     width: 100%;
     padding: var(--spacing-md);

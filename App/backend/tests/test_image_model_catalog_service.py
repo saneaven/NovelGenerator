@@ -4,6 +4,8 @@ import asyncio
 
 import pytest
 
+from App.backend.providers.shared.image import orchestrator as image_orchestrator
+from App.backend.providers.shared.image.contracts import ResolvedGeometry
 from App.backend.providers.shared.image.request_validation import validate_canonical_recipe
 from App.backend.providers.shared.image.settings import validate_image_gen_config
 from App.backend.providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
@@ -56,6 +58,101 @@ def test_sanitize_generation_settings_drops_geometry_keys_and_unknown_values() -
         "output_compression": 90,
         "moderation": "auto",
     }
+
+
+def test_canonical_recipe_preserves_conditional_reference_settings() -> None:
+    normalized = validate_canonical_recipe({
+        "prompt_type": "tag_based",
+        "provider": "novelai",
+        "model": "nai-diffusion-5-curated",
+        "requested_aspect_ratio": "13:19",
+        "requested_image_size": "832x1216",
+        "positive_prompt": {"content": "1girl"},
+        "reference_images": [{"asset_id": "ref", "strength": 0}],
+        "provider_settings": {
+            "referenceMode": "i2i",
+            "strength": 0,
+            "i2iNoise": 0,
+        },
+    })
+
+    assert normalized["provider_settings"]["referenceMode"] == "i2i"
+    assert normalized["provider_settings"]["strength"] == 0
+    assert normalized["provider_settings"]["i2iNoise"] == 0
+
+
+def test_prepare_image_request_preserves_zero_reference_strength(monkeypatch) -> None:
+    descriptor = ImageModelDescriptor(
+        id="test-image-model",
+        name="Test image model",
+        prompt_type="natural",
+        supports_image_input=True,
+        geometry=ImageModelGeometrySpec(
+            supported_aspect_ratios=("1:1",),
+            supported_resolutions=("1K",),
+            default_aspect_ratio="1:1",
+            default_resolution="1K",
+            resolution_mode="translated_fixed",
+            native_size_by_ratio={"1:1": "1024x1024"},
+        ),
+    )
+
+    async def _get_descriptor(**_kwargs):
+        return descriptor
+
+    async def _resolve_geometry(**_kwargs):
+        return ResolvedGeometry(
+            requested_aspect_ratio="1:1",
+            requested_image_size="1K",
+            resolved_aspect_ratio="1:1",
+            resolved_image_size="1K",
+            resolved_native_size="1024x1024",
+        )
+
+    monkeypatch.setattr(
+        image_orchestrator.credential_service,
+        "get_provider_config",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        image_orchestrator.image_model_catalog_service,
+        "get_descriptor",
+        _get_descriptor,
+    )
+    monkeypatch.setattr(
+        image_orchestrator.image_model_catalog_service,
+        "resolve_geometry",
+        _resolve_geometry,
+    )
+    monkeypatch.setattr(
+        image_orchestrator,
+        "_load_asset_bytes",
+        lambda *_args, **_kwargs: b"png",
+    )
+    monkeypatch.setattr(
+        image_orchestrator,
+        "create_image_adapter",
+        lambda *_args, **_kwargs: object(),
+    )
+
+    _, prepared, _ = asyncio.run(
+        image_orchestrator.prepare_image_request(
+            object(),
+            user_id="user",
+            project_id="project",
+            raw_recipe={
+                "prompt_type": "natural",
+                "provider": "openai",
+                "model": "test-image-model",
+                "requested_aspect_ratio": "1:1",
+                "requested_image_size": "1K",
+                "prompt": {"content": "castle"},
+                "reference_images": [{"asset_id": "ref", "strength": 0}],
+            },
+        )
+    )
+
+    assert prepared.reference_images[0].strength == 0
 
 
 def test_resolve_geometry_translates_openai_tier_to_native_size() -> None:

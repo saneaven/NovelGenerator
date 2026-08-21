@@ -214,13 +214,18 @@ async def embed_many(
     )
 
 
-def sanitize_image_settings(provider_id: str, settings: Any) -> dict[str, Any] | None:
+def sanitize_image_settings(
+    provider_id: str,
+    settings: Any,
+    *,
+    flags: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     provider = require_spec(provider_id)
     image = provider.image
     if image is None or image.provider_settings is None:
         return None
     raw = settings if isinstance(settings, dict) else {}
-    normalized = normalize_by_spec(raw, image.provider_settings)
+    normalized = normalize_by_spec(raw, image.provider_settings, flags=flags)
     return normalized or None
 
 

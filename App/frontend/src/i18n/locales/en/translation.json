@@ -636,9 +636,23 @@
         "steps": "Steps",
         "stepsHint": "Number of sampling steps (1-50)",
         "cfgScale": "CFG Scale",
-        "cfgScaleHint": "Prompt guidance strength (1-20)",
+        "cfgScaleHint": "Prompt guidance strength (V5: 1-10; V4.5: 1-20)",
         "noiseSchedule": "Noise Schedule",
         "noiseScheduleHint": "Noise scheduling method",
+        "qualityPreset": "Quality Preset",
+        "qualityPresetHint": "Optional V5 quality tags appended to the positive prompt",
+        "qualityPresetOptions": {
+          "off": "Off",
+          "standard": "Standard",
+          "light": "Light"
+        },
+        "ucPreset": "Undesired Content Preset",
+        "ucPresetHint": "Optional V5 undesired-content tags prepended to the negative prompt",
+        "ucPresetOptions": {
+          "off": "Off",
+          "heavy": "Heavy"
+        },
+        "v5PromptHint": "NAI V5 accepts tags or English/Japanese prose. For Korean prompts, use the existing AI Assist flow to translate them to English first.",
         "referenceMode": "Reference Mode",
         "referenceModeHint": "How NovelAI should interpret attached reference images",
         "referenceModeOptions": {

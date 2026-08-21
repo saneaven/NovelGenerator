@@ -12,12 +12,20 @@ def _joined_prompt_text(*parts: str | None) -> str:
     return "".join(part or "" for part in parts).strip()
 
 
+def _provider_setting_flags(recipe: ImageRunRecipe) -> dict[str, bool]:
+    return {
+        "hasReferenceImages": bool(recipe.reference_images),
+        "kontext_model": "kontext" in recipe.model.lower(),
+    }
+
+
 def validate_canonical_recipe(raw: Any) -> dict[str, Any]:
     recipe = ImageRunRecipe.model_validate(raw)
     normalized = recipe.model_dump()
     normalized["provider_settings"] = sanitize_image_settings(
         recipe.provider,
         recipe.provider_settings,
+        flags=_provider_setting_flags(recipe),
     )
     return normalized
 
@@ -72,5 +80,9 @@ def build_image_selection(recipe: ImageRunRecipe) -> ImageSelection:
         model=recipe.model,
         requested_aspect_ratio=recipe.requested_aspect_ratio,
         requested_image_size=recipe.requested_image_size,
-        provider_settings=sanitize_image_settings(recipe.provider, recipe.provider_settings) or {},
+        provider_settings=sanitize_image_settings(
+            recipe.provider,
+            recipe.provider_settings,
+            flags=_provider_setting_flags(recipe),
+        ) or {},
     )
