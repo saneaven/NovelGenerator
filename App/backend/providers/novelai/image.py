@@ -159,7 +159,7 @@ class NovelAIImageAdapter:
                 "char_captions": [
                     {
                         "char_caption": character_caption,
-                        "centers": [],
+                        "centers": [{"x": 0.5, "y": 0.5}],
                     }
                     for character_caption in character_captions
                 ],

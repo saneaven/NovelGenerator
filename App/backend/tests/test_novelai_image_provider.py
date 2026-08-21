@@ -225,12 +225,12 @@ def test_v4_and_v5_preserve_paired_character_caption_order(monkeypatch) -> None:
         assert result.success is True
 
     expected_positive = [
-        {"char_caption": "1girl, red hair", "centers": []},
-        {"char_caption": "1boy, blue coat", "centers": []},
+        {"char_caption": "1girl, red hair", "centers": [{"x": 0.5, "y": 0.5}]},
+        {"char_caption": "1boy, blue coat", "centers": [{"x": 0.5, "y": 0.5}]},
     ]
     expected_negative = [
-        {"char_caption": "red hair, bad hands", "centers": []},
-        {"char_caption": "blue coat, blurry", "centers": []},
+        {"char_caption": "red hair, bad hands", "centers": [{"x": 0.5, "y": 0.5}]},
+        {"char_caption": "blue coat, blurry", "centers": [{"x": 0.5, "y": 0.5}]},
     ]
     for payload in client.payloads:
         positive = payload["parameters"]["v4_prompt"]
