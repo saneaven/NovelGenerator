@@ -8,7 +8,7 @@ export interface ImageSelectionState {
 
 export function resolveCatalogSelection(models: ImageModelInfo[], currentModel: string): ImageModelInfo | null {
   if (models.length === 0) return null;
-  return models.find((model) => model.id === currentModel) ?? models[0];
+  return models.find((model) => model.id === currentModel) ?? null;
 }
 
 export function resolveAspectRatio(model: ImageModelInfo | null, currentValue: string): string {
