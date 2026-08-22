@@ -378,6 +378,16 @@ class ScenarioManager:
             preset_id=preset_id,
         )
 
+        image_prompt_data = (
+            self._build_image_prompt_data(
+                payload=payload,
+                project_data=project_data,
+                context_object_ids=context_object_ids,
+            )
+            if task_type == "imagePrompt"
+            else {}
+        )
+
         template_data: dict[str, Any] = {
             "config": {
                 "mainLanguage": language,
@@ -414,11 +424,7 @@ class ScenarioManager:
                 journey_target_ids=journey_target_ids,
                 language=language,
             ),
-            "imagePrompt": self._build_image_prompt_data(
-                payload=payload,
-                project_data=project_data,
-                context_object_ids=context_object_ids,
-            ),
+            "imagePrompt": image_prompt_data,
             "memory": {
                 "summaries": [],
                 "historyChats": [],

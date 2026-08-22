@@ -8,6 +8,80 @@ from App.backend.services.prompt_runtime import scenario_manager as scenario_man
 from App.backend.services.prompt_runtime.scenario_manager import ScenarioManager
 
 
+def _patch_template_data_dependencies(monkeypatch, *, journey_kind: str | None = None) -> None:
+    monkeypatch.setattr(
+        scenario_manager_module,
+        "resolve_parent",
+        lambda _db, _thread: SimpleNamespace(
+            journey_kind=journey_kind,
+            sub_agent_definition=None,
+        ),
+    )
+    monkeypatch.setattr(
+        scenario_manager_module.settings_service,
+        "get_task_config",
+        lambda *_args, **_kwargs: SimpleNamespace(advanced={}),
+    )
+    monkeypatch.setattr(
+        scenario_manager_module.settings_service,
+        "_get_settings",
+        lambda *_args, **_kwargs: SimpleNamespace(native_output_mode=False),
+    )
+    monkeypatch.setattr(
+        scenario_manager_module.variable_service,
+        "get_variables_for_template",
+        lambda *_args, **_kwargs: {},
+    )
+
+
+@pytest.mark.parametrize("task_type", ["agent", "subAgent", "editAssistant", "translation"])
+def test_non_image_tasks_do_not_require_image_prompt_format(monkeypatch, task_type: str) -> None:
+    _patch_template_data_dependencies(monkeypatch)
+
+    data = ScenarioManager().build_template_data(
+        None,
+        user_id="user-id",
+        preset_id="preset-id",
+        task_type=task_type,
+        thread=SimpleNamespace(),
+        run=SimpleNamespace(
+            language="English",
+            context_object_ids=[],
+            journey_target_ids=[],
+            run_mode="agentMode",
+            surface="story-entity",
+        ),
+        project_data={},
+        input_text="Continue the story",
+        input_payload={},
+    )
+
+    assert data["imagePrompt"] == {}
+
+
+def test_image_prompt_task_still_requires_prompt_format(monkeypatch) -> None:
+    _patch_template_data_dependencies(monkeypatch, journey_kind="imagePrompt")
+
+    with pytest.raises(ValueError, match="require a valid promptFormat"):
+        ScenarioManager().build_template_data(
+            None,
+            user_id="user-id",
+            preset_id="preset-id",
+            task_type="imagePrompt",
+            thread=SimpleNamespace(),
+            run=SimpleNamespace(
+                language="English",
+                context_object_ids=[],
+                journey_target_ids=[],
+                run_mode="agentMode",
+                surface="story-entity",
+            ),
+            project_data={},
+            input_text="Create an image prompt",
+            input_payload={},
+        )
+
+
 @pytest.mark.parametrize(
     ("journey_kind", "expected_subtype"),
     [

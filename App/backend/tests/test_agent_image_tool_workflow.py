@@ -63,7 +63,7 @@ def _make_ctx() -> ToolModuleContext:
         status="running",
         language="English",
         run_mode="agentMode",
-        input_payload={"promptFormat": "natural"},
+        input_payload={},
     )
     return ToolModuleContext(
         db=SimpleNamespace(),
@@ -73,7 +73,7 @@ def _make_ctx() -> ToolModuleContext:
         preset_id=uuid4(),
         user_id=thread.user_id,
         project_id=thread.project_id,
-        input_payload={"promptFormat": "natural"},
+        input_payload={},
         vector_storage_enabled=False,
         invocation_mode="agentMode",
     )
