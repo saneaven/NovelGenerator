@@ -1615,6 +1615,12 @@
       "translate": "Translate",
       "versions": "Versions"
     },
+    "copy": {
+      "withImages": "Copy with images",
+      "withoutImages": "Copy without images",
+      "copyFailedTitle": "Copy failed",
+      "copyFailedMessage": "Could not copy the manuscript. Please try again."
+    },
     "overlay": {
       "noContentIn": "No content in {{language}}",
       "noContentYet": "This chapter doesn't have content in {{language}} yet.",

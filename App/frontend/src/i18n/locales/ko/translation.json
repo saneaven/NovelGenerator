@@ -1615,6 +1615,12 @@
       "translate": "번역",
       "versions": "버전"
     },
+    "copy": {
+      "withImages": "이미지 포함 복사",
+      "withoutImages": "이미지 제외 복사",
+      "copyFailedTitle": "복사 실패",
+      "copyFailedMessage": "원고를 복사하지 못했습니다. 다시 시도해주세요."
+    },
     "overlay": {
       "noContentIn": "{{language}}에 내용 없음",
       "noContentYet": "이 챕터에는 아직 {{language}} 내용이 없습니다.",

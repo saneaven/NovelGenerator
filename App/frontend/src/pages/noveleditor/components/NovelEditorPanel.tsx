@@ -38,16 +38,21 @@ import TranslationModal from '../../../components/Modal/TranslationModal';
 import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import { UnifiedImageModal } from '../../../components/AssetManager';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
+import apiClient, { API_BASE_URL } from '../../../api/client';
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject, UnifiedObject } from '../../../types/unifiedObject';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/richtext/doc';
+import {
+  writeManuscriptToClipboard,
+  type ManuscriptClipboardMode,
+} from '../../../editor/richtext/manuscriptClipboard';
 import type { ImageGenerationRecipe } from '../../../imageRun';
 import { recipeFromAsset } from '../../../imageRun';
 import ChapterSidebar from './ChapterSidebar';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { useContentReloadKey } from '../../../components/RichTextEditor/useContentReloadKey';
-import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
+import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock, Copy, Image } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { Skeleton, SkeletonText } from '../../../components/common/Skeleton';
@@ -124,6 +129,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [aiEditSessionId, setAiEditSessionId] = useState<string | null>(null);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [isCopyingManuscript, setIsCopyingManuscript] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [showVersionsModal, setShowVersionsModal] = useState(false);
@@ -431,6 +437,37 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     },
     [languageState.createNewVersion, languageState.requestedLanguage, manuscript, manuscriptId, markSaved, setIsSaving, updateObjectMutation]
   );
+
+  const handleCopyManuscript = useCallback(async (mode: ManuscriptClipboardMode) => {
+    if (isCopyingManuscript) return;
+
+    const currentDoc = editorRef.current?.getDoc();
+    if (!currentDoc) {
+      showAlert({
+        title: t('novelEditor.copy.copyFailedTitle'),
+        message: t('novelEditor.copy.copyFailedMessage'),
+      });
+      return;
+    }
+
+    setIsCopyingManuscript(true);
+    try {
+      await writeManuscriptToClipboard({
+        doc: currentDoc,
+        mode,
+        authToken: apiClient.getAuthToken(),
+        apiBaseUrl: API_BASE_URL,
+      });
+    } catch (err) {
+      console.error('Failed to copy manuscript:', err);
+      showAlert({
+        title: t('novelEditor.copy.copyFailedTitle'),
+        message: t('novelEditor.copy.copyFailedMessage'),
+      });
+    } finally {
+      setIsCopyingManuscript(false);
+    }
+  }, [isCopyingManuscript, t]);
 
   // ============================================================================
   // EVENT HANDLERS
@@ -816,6 +853,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                         />
                       )
                     )}
+                    <DropdownItem
+                      icon={<Image size="sm" />}
+                      label={t('novelEditor.copy.withImages')}
+                      onClick={() => { void handleCopyManuscript('with-images'); }}
+                      disabled={isCopyingManuscript || isSaving || isMissingTranslation}
+                    />
+                    <DropdownItem
+                      icon={<Copy size="sm" />}
+                      label={t('novelEditor.copy.withoutImages')}
+                      onClick={() => { void handleCopyManuscript('without-images'); }}
+                      disabled={isCopyingManuscript || isSaving || isMissingTranslation}
+                    />
                     {/* Versions */}
                     <DropdownItem
                       icon={<Clock size="sm" />}
