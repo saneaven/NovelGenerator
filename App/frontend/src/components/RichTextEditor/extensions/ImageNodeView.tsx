@@ -1,6 +1,6 @@
 /**
  * ImageNodeView - Custom TipTap NodeView for images with overlay
- * Shows action buttons on hover: Change, Regenerate, Delete
+ * Shows action buttons on hover: Change, Regenerate, Copy, Delete
  */
 
 import { useCallback, useEffect, useState, useRef } from 'react';
@@ -8,7 +8,7 @@ import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { Shuffle, Trash, Refresh } from '../../icons';
+import { Check, Copy, Shuffle, Trash, Refresh } from '../../icons';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
 import './ImageNodeView.css';
 
@@ -31,6 +31,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
     const [showOverlay, setShowOverlay] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isTouchDevice, setIsTouchDevice] = useState(false);
+    const [copied, setCopied] = useState(false);
     const imageRef = useRef<HTMLImageElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -84,6 +85,46 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
         callbacks.onRegenerateImage(src, bounds);
         setShowOverlay(false);
     }, [src, callbacks]);
+
+    const handleCopyImage = useCallback(async () => {
+        const image = imageRef.current;
+        if (!image || !image.naturalWidth || !image.naturalHeight) return;
+
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Could not create canvas context');
+
+            context.drawImage(image, 0, 0);
+
+            const pngBlob = new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Could not convert image to PNG'));
+                    }
+                }, 'image/png');
+            });
+
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': pngBlob }),
+            ]);
+            setCopied(true);
+        } catch (error) {
+            console.error('Failed to copy image', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!copied) return;
+
+        const timeoutId = window.setTimeout(() => setCopied(false), 1500);
+        return () => window.clearTimeout(timeoutId);
+    }, [copied]);
 
     // Handle delete (show confirmation)
     const handleDelete = useCallback(() => {
@@ -154,6 +195,13 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                                 size="sm"
                             />
                         )}
+                        <IconButton
+                            icon={copied ? <Check size="md" /> : <Copy size="md" />}
+                            onClick={() => void handleCopyImage()}
+                            title={copied ? 'Image copied' : 'Copy image'}
+                            size="sm"
+                            isActive={copied}
+                        />
                     </div>
 
                     {/* Delete - separated from other buttons */}
