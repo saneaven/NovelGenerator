@@ -44,6 +44,7 @@ interface ManuscriptClipboardDependencies {
   serializeText?: DocumentSerializer;
   locationOrigin?: string;
   blobToDataUrl?: (blob: Blob) => Promise<string>;
+  convertImageToPng?: ImageToPngConverter;
 }
 
 export interface PrepareManuscriptClipboardOptions extends ManuscriptClipboardDependencies {
@@ -56,6 +57,7 @@ export interface PrepareManuscriptClipboardOptions extends ManuscriptClipboardDe
 export type WriteManuscriptClipboardOptions = PrepareManuscriptClipboardOptions;
 
 const PROTECTED_ASSET_PREFIX = '/storage/assets/';
+export const MANUSCRIPT_CLIPBOARD_MAX_IMAGE_DIMENSION = 2048;
 const UUID_PATTERN = /^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$/i;
 const INTERNAL_HTML_ATTRIBUTE_PATTERN = /\s(?:class|data-asset-id)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
 
@@ -69,6 +71,13 @@ type ImageReference = {
 type ResolvedImageRequest = {
   url: string;
   authenticated: boolean;
+};
+
+export type ImageToPngConverter = (blob: Blob, maxDimension: number) => Promise<Blob>;
+
+export type ConstrainedImageDimensions = {
+  width: number;
+  height: number;
 };
 
 export class ManuscriptClipboardWriteError extends Error {
@@ -224,12 +233,121 @@ async function defaultBlobToDataUrl(blob: Blob): Promise<string> {
   return `data:${blob.type};base64,${bytesToBase64(bytes)}`;
 }
 
-async function fetchImageAsDataUrl(
+function percentEncodedDataToBytes(payload: string): Uint8Array {
+  const bytes: number[] = [];
+  for (let index = 0; index < payload.length;) {
+    if (payload[index] === '%' && /^[0-9a-f]{2}$/i.test(payload.slice(index + 1, index + 3))) {
+      bytes.push(Number.parseInt(payload.slice(index + 1, index + 3), 16));
+      index += 3;
+      continue;
+    }
+
+    const codePoint = payload.codePointAt(index);
+    if (codePoint === undefined) break;
+    const character = String.fromCodePoint(codePoint);
+    bytes.push(...new TextEncoder().encode(character));
+    index += character.length;
+  }
+  return new Uint8Array(bytes);
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0 || !/^data:/i.test(dataUrl)) {
+    throw new Error('Image data URL is invalid');
+  }
+
+  const metadata = dataUrl.slice(5, commaIndex);
+  const metadataParts = metadata.split(';');
+  const mimeType = metadataParts[0]?.trim().toLowerCase() ?? '';
+  if (!mimeType.startsWith('image/')) {
+    throw new Error('Data URL is not an image');
+  }
+
+  const payload = dataUrl.slice(commaIndex + 1);
+  const isBase64 = metadataParts.some((part) => part.trim().toLowerCase() === 'base64');
+  if (!isBase64) {
+    return new Blob([percentEncodedDataToBytes(payload)], { type: mimeType });
+  }
+
+  const binary = atob(decodeURIComponent(payload).replace(/\s/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+export function constrainImageDimensions(
+  width: number,
+  height: number,
+  maxDimension = MANUSCRIPT_CLIPBOARD_MAX_IMAGE_DIMENSION,
+): ConstrainedImageDimensions {
+  if (![width, height, maxDimension].every((value) => Number.isFinite(value) && value > 0)) {
+    throw new Error('Image dimensions must be positive finite numbers');
+  }
+
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+async function defaultConvertImageToPng(blob: Blob, maxDimension: number): Promise<Blob> {
+  if (
+    typeof document === 'undefined'
+    || typeof Image === 'undefined'
+    || typeof URL.createObjectURL !== 'function'
+  ) {
+    throw new Error('Browser image conversion APIs are unavailable');
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Failed to decode image'));
+      image.src = objectUrl;
+    });
+
+    const dimensions = constrainImageDimensions(
+      image.naturalWidth,
+      image.naturalHeight,
+      maxDimension,
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Failed to create canvas context');
+    context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+
+    const pngBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((convertedBlob) => {
+        if (convertedBlob) {
+          resolve(convertedBlob);
+        } else {
+          reject(new Error('Failed to encode image as PNG'));
+        }
+      }, 'image/png');
+    });
+    if (pngBlob.type.toLowerCase() !== 'image/png') {
+      throw new Error('Canvas returned an unexpected image format');
+    }
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function fetchImageBlob(
   request: ResolvedImageRequest,
   authToken: string | null | undefined,
   fetchImpl: FetchImplementation,
-  blobToDataUrl: (blob: Blob) => Promise<string>,
-): Promise<string> {
+): Promise<Blob> {
   let init: RequestInit | undefined;
   if (request.authenticated) {
     if (!authToken) throw new Error('Authentication token is missing');
@@ -250,7 +368,26 @@ async function fetchImageAsDataUrl(
   if (!blob.type.toLowerCase().startsWith('image/')) {
     throw new Error('Fetched resource is not an image');
   }
-  return blobToDataUrl(blob);
+  return blob;
+}
+
+async function convertBlobToPngDataUrl(
+  blob: Blob,
+  convertImageToPng: ImageToPngConverter,
+  blobToDataUrl: (blob: Blob) => Promise<string>,
+): Promise<string> {
+  if (!blob.type.toLowerCase().startsWith('image/')) {
+    throw new Error('Source Blob is not an image');
+  }
+  const pngBlob = await convertImageToPng(blob, MANUSCRIPT_CLIPBOARD_MAX_IMAGE_DIMENSION);
+  if (pngBlob.type.toLowerCase() !== 'image/png') {
+    throw new Error('Image converter did not return PNG');
+  }
+  const dataUrl = await blobToDataUrl(pngBlob);
+  if (!/^data:image\/png;base64,/i.test(dataUrl)) {
+    throw new Error('PNG converter returned an invalid data URL');
+  }
+  return dataUrl;
 }
 
 function browserClipboard(): ManuscriptClipboardWriter | undefined {
@@ -276,6 +413,7 @@ export async function prepareManuscriptClipboard({
   serializeText = defaultSerializeText,
   locationOrigin,
   blobToDataUrl = defaultBlobToDataUrl,
+  convertImageToPng = defaultConvertImageToPng,
 }: PrepareManuscriptClipboardOptions): Promise<PreparedManuscriptClipboard> {
   const plain = replaceImagesWithPlaceholders(doc);
   const text = serializeText(plain.doc);
@@ -305,19 +443,25 @@ export async function prepareManuscriptClipboard({
       return;
     }
 
-    if (/^data:/i.test(src)) {
-      attrs.src = src;
-      image.node.attrs = attrs;
-      return;
-    }
-
     try {
-      if (!fetchImpl) throw new Error('Fetch API is unavailable');
-      const request = resolveImageRequest(src, apiBaseUrl, locationOrigin);
-      let dataUrlPromise = inflightImages.get(request.url);
+      const isDataUrl = /^data:/i.test(src);
+      const request = isDataUrl ? null : resolveImageRequest(src, apiBaseUrl, locationOrigin);
+      const cacheKey = isDataUrl ? src : request?.url;
+      if (!cacheKey) throw new Error('Image URL is invalid');
+
+      let dataUrlPromise = inflightImages.get(cacheKey);
       if (!dataUrlPromise) {
-        dataUrlPromise = fetchImageAsDataUrl(request, authToken, fetchImpl, blobToDataUrl);
-        inflightImages.set(request.url, dataUrlPromise);
+        dataUrlPromise = (async () => {
+          let blob: Blob;
+          if (isDataUrl) {
+            blob = dataUrlToBlob(src);
+          } else {
+            if (!fetchImpl || !request) throw new Error('Fetch API is unavailable');
+            blob = await fetchImageBlob(request, authToken, fetchImpl);
+          }
+          return convertBlobToPngDataUrl(blob, convertImageToPng, blobToDataUrl);
+        })();
+        inflightImages.set(cacheKey, dataUrlPromise);
       }
       attrs.src = await dataUrlPromise;
       image.node.attrs = attrs;

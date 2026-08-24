@@ -11,7 +11,9 @@ vi.hoisted(() => {
 
 import type { TipTapDoc } from '../../types/tiptap';
 import {
+  MANUSCRIPT_CLIPBOARD_MAX_IMAGE_DIMENSION,
   ManuscriptClipboardWriteError,
+  constrainImageDimensions,
   prepareManuscriptClipboard,
   writeManuscriptToClipboard,
   type ManuscriptClipboardItem,
@@ -92,6 +94,13 @@ function decodeDataUrl(dataUrl: string): { mimeType: string; bytes: number[] } {
   };
 }
 
+function pngConverter() {
+  return vi.fn(async (blob: Blob, _maxDimension: number) => new Blob([
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    await blob.arrayBuffer(),
+  ], { type: 'image/png' }));
+}
+
 class TestClipboardItem implements ManuscriptClipboardItem {
   readonly entries: Record<string, string | Blob | PromiseLike<string | Blob>>;
   readonly types: ReadonlyArray<string>;
@@ -131,7 +140,7 @@ describe('prepareManuscriptClipboard', () => {
     expect(doc).toEqual(original);
   });
 
-  it('embeds fetched blobs without changing MIME or bytes, deduplicates, and omits failed images', async () => {
+  it('converts fetched and existing data URL images to PNG, deduplicates, and omits failed images', async () => {
     const originalDataUrl = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
     const doc = imageDoc([
       { src: '/storage/assets/originals/a.avif', alt: 'first', 'data-asset-id': 'asset-a', class: 'private' },
@@ -149,6 +158,7 @@ describe('prepareManuscriptClipboard', () => {
       if (url.endsWith('/missing.avif')) return response([], 'image/avif', 404);
       throw new Error(`Unexpected URL ${url} (${String(init)})`);
     });
+    const convertImageToPng = pngConverter();
 
     const prepared = await prepareManuscriptClipboard({
       doc,
@@ -157,6 +167,7 @@ describe('prepareManuscriptClipboard', () => {
       apiBaseUrl: 'https://api.example.test',
       locationOrigin: 'https://app.example.test',
       fetchImpl,
+      convertImageToPng,
       serializeHTML,
       serializeText,
     });
@@ -164,22 +175,39 @@ describe('prepareManuscriptClipboard', () => {
     expect(prepared.includedImages).toBe(5);
     expect(prepared.omittedImages).toBe(1);
     expect(prepared.html).toContain('[Image: Missing image]');
-    expect(prepared.html).toContain(originalDataUrl);
+    expect(prepared.html).not.toContain(originalDataUrl);
     expect(prepared.html).not.toContain('/storage/assets/');
     expect(prepared.html).not.toContain('blob:');
     expect(prepared.html).not.toContain('data-asset-id');
     expect(prepared.html).not.toContain('class=');
-    expect(prepared.html).not.toContain('data:image/png');
+    expect(prepared.html).toContain('data:image/png');
 
     const embeddedSources = Array.from(prepared.html.matchAll(/src="([^"]+)"/g), (match) => match[1]);
     expect(decodeDataUrl(embeddedSources[0])).toEqual({
-      mimeType: 'image/avif',
-      bytes: [0, 1, 2, 253, 254, 255],
+      mimeType: 'image/png',
+      bytes: [0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 253, 254, 255],
     });
     expect(embeddedSources[1]).toBe(embeddedSources[0]);
-    expect(decodeDataUrl(embeddedSources[2])).toEqual({ mimeType: 'image/webp', bytes: [4, 5, 6] });
-    expect(decodeDataUrl(embeddedSources[3])).toEqual({ mimeType: 'image/jpeg', bytes: [7, 8, 9] });
-    expect(embeddedSources[4]).toBe(originalDataUrl);
+    expect(decodeDataUrl(embeddedSources[2])).toEqual({
+      mimeType: 'image/png',
+      bytes: [0x89, 0x50, 0x4e, 0x47, 4, 5, 6],
+    });
+    expect(decodeDataUrl(embeddedSources[3])).toEqual({
+      mimeType: 'image/png',
+      bytes: [0x89, 0x50, 0x4e, 0x47, 7, 8, 9],
+    });
+    expect(decodeDataUrl(embeddedSources[4]).mimeType).toBe('image/png');
+
+    expect(convertImageToPng).toHaveBeenCalledTimes(4);
+    expect(convertImageToPng.mock.calls.map(([blob]) => blob.type).sort()).toEqual([
+      'image/avif',
+      'image/gif',
+      'image/jpeg',
+      'image/webp',
+    ]);
+    expect(convertImageToPng.mock.calls.every(([, maxDimension]) => (
+      maxDimension === MANUSCRIPT_CLIPBOARD_MAX_IMAGE_DIMENSION
+    ))).toBe(true);
 
     const internalCalls = fetchImpl.mock.calls.filter(([input]) => String(input).endsWith('/originals/a.avif'));
     expect(internalCalls).toHaveLength(1);
@@ -199,6 +227,7 @@ describe('prepareManuscriptClipboard', () => {
       authToken: 'secret-token',
       apiBaseUrl: 'https://api.example.test',
       fetchImpl,
+      convertImageToPng: pngConverter(),
       serializeHTML,
       serializeText,
     });
@@ -210,10 +239,12 @@ describe('prepareManuscriptClipboard', () => {
   });
 
   it('uses a placeholder when a fetched resource has no image MIME type', async () => {
+    const convertImageToPng = pngConverter();
     const prepared = await prepareManuscriptClipboard({
       doc: imageDoc([{ src: 'https://cdn.example.test/not-an-image', title: 'Invalid' }]),
       mode: 'with-images',
       fetchImpl: async () => response([1, 2, 3], ''),
+      convertImageToPng,
       serializeHTML,
       serializeText,
     });
@@ -221,6 +252,13 @@ describe('prepareManuscriptClipboard', () => {
     expect(prepared.html).toBe('<p>[Image: Invalid]</p>');
     expect(prepared.includedImages).toBe(0);
     expect(prepared.omittedImages).toBe(1);
+    expect(convertImageToPng).not.toHaveBeenCalled();
+  });
+
+  it('limits the long edge to 2048px without upscaling and preserves aspect ratio', () => {
+    expect(constrainImageDimensions(4096, 2048)).toEqual({ width: 2048, height: 1024 });
+    expect(constrainImageDimensions(1000, 3000)).toEqual({ width: 683, height: 2048 });
+    expect(constrainImageDimensions(1024, 512)).toEqual({ width: 1024, height: 512 });
   });
 });
 
@@ -236,6 +274,7 @@ describe('writeManuscriptToClipboard', () => {
       await clipboardItem.entries['text/html'];
     });
     const writeText = vi.fn(async () => undefined);
+    const convertImageToPng = pngConverter();
 
     const pending = writeManuscriptToClipboard({
       doc: imageDoc([{ src: '/storage/assets/a.avif', title: 'Cover' }]),
@@ -243,6 +282,7 @@ describe('writeManuscriptToClipboard', () => {
       authToken: 'token',
       apiBaseUrl: 'https://api.example.test',
       fetchImpl,
+      convertImageToPng,
       clipboard: { write, writeText },
       ClipboardItemCtor: TestClipboardItem,
       serializeHTML,
@@ -265,7 +305,7 @@ describe('writeManuscriptToClipboard', () => {
     const plainBlob = await clipboardItem?.entries['text/plain'];
     expect(htmlBlob).toBeInstanceOf(Blob);
     expect((htmlBlob as Blob).type).toBe('text/html');
-    expect(await (htmlBlob as Blob).text()).toContain('data:image/avif;base64,CwwN');
+    expect(await (htmlBlob as Blob).text()).toContain('data:image/png;base64,iVBORwsMDQ==');
     expect(plainBlob).toBeInstanceOf(Blob);
     expect((plainBlob as Blob).type).toBe('text/plain');
     expect(await (plainBlob as Blob).text()).toBe('[Image: Cover]');
@@ -283,6 +323,7 @@ describe('writeManuscriptToClipboard', () => {
       mode: 'with-images',
       clipboard: { write, writeText },
       ClipboardItemCtor: TestClipboardItem,
+      convertImageToPng: pngConverter(),
       serializeHTML,
       serializeText,
     });
