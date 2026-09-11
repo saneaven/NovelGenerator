@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from App.backend.providers.sse_encoder import iter_sse_with_heartbeat
+from App.backend.providers.shared.transport.sse_encoder import iter_sse_with_heartbeat
 
 
 async def _idle_envelopes():

@@ -11,8 +11,6 @@ import type { LatestRunContext, ThreadInfo } from '../../types/thread';
 
 /** The persisted content cached under `threadKeys.messages(threadId)`. */
 export interface ThreadSnapshot {
-  generation?: number;
-  version?: number;
   messages: ThreadMessagesResponse['messages'];
   toolCalls: ThreadMessagesResponse['toolCalls'];
 }
@@ -21,7 +19,6 @@ const UNRESOLVED_TOOL_CALL_STATUSES = new Set(['streaming', 'validating', 'pendi
 
 export function toThreadSnapshot(response: ThreadMessagesResponse): ThreadSnapshot {
   return {
-    version: response.snapshotEventId,
     messages: response.messages,
     toolCalls: response.toolCalls,
   };

@@ -149,6 +149,4 @@ class InMemoryRunEventBus:
         return _generator()
 
 
-from .durable_run_event_bus import DurableRunEventBus
-
-run_event_bus = DurableRunEventBus()
+run_event_bus = InMemoryRunEventBus()

@@ -17,7 +17,6 @@ import {
 } from '../data/threads';
 import { nowIso, toThreadType, type LatestRunContext, type ThreadInfo, type ThreadStatus } from '../types/thread';
 import { isNonLiveThreadStatus } from './threadStreamLifecycle';
-import { threadRevision, runtimeTimestamp } from './threadReconciliation';
 import { revokeMessageAttachmentObjectUrls, toOptimisticMessageAttachment } from '../utils/threadAttachments';
 
 interface ThreadContextParams {
@@ -68,15 +67,11 @@ function upsertThreadStatus(params: {
   error: string | null;
   runId?: string | null;
   runStatus?: ThreadStatus | null;
-  runSeq?: number | null;
-  runUpdatedAt?: string | null;
 }): void {
   const store = useThreadStreamStore.getState();
   const existing = store.threadsById[params.threadId];
   const partial: Partial<ThreadInfo> = {
     status: params.status,
-    ...(params.runSeq != null ? { latestRunSeq: params.runSeq } : {}),
-    ...(params.runUpdatedAt ? { latestRunUpdatedAt: params.runUpdatedAt } : {}),
     lastError: params.error,
     updatedAt: nowIso(),
     latestRunId: params.runId ?? null,
@@ -84,9 +79,6 @@ function upsertThreadStatus(params: {
   };
 
   if (existing) {
-    if (params.runSeq != null && existing.latestRunSeq != null && params.runSeq < existing.latestRunSeq) return;
-    if (params.runId === existing.latestRunId && params.runUpdatedAt && existing.latestRunUpdatedAt
-      && runtimeTimestamp(params.runUpdatedAt) < runtimeTimestamp(existing.latestRunUpdatedAt)) return;
     // Guard against a stale command HTTP response regressing thread status.
     // startRun/resumeRun return the run-creation snapshot (running/processing).
     // If SSE has already advanced this same run to a settled state
@@ -228,8 +220,6 @@ export async function sendThreadMessage(params: SendThreadMessageParams): Promis
       error: null,
       runId: response.runId,
       runStatus: response.status,
-      runSeq: response.runSeq,
-      runUpdatedAt: response.runUpdatedAt,
     });
     if (params.request) {
       useThreadStreamStore.getState().setThreadRuntime(params.threadId, {
@@ -260,17 +250,13 @@ export async function resumeThread(params: ResumeThreadParams): Promise<boolean>
     error: null,
     runId: response.runId,
     runStatus: response.status,
-      runSeq: response.runSeq,
-      runUpdatedAt: response.runUpdatedAt,
   });
   return true;
 }
 
 export async function pauseThread(params: PauseThreadParams): Promise<void> {
   const store = useThreadStreamStore.getState();
-  const revision = threadRevision(params.threadId);
   await threadService.pauseThread(params.threadId);
-  if (threadRevision(params.threadId) !== revision) return;
   store.setThreadRuntime(params.threadId, {
     status: 'paused',
     latestRunStatus: 'paused',
@@ -281,9 +267,7 @@ export async function pauseThread(params: PauseThreadParams): Promise<void> {
 
 export async function cancelThread(params: CancelThreadParams): Promise<void> {
   const store = useThreadStreamStore.getState();
-  const revision = threadRevision(params.threadId);
   await threadService.cancelThread(params.threadId);
-  if (threadRevision(params.threadId) !== revision) return;
   store.setThreadRuntime(params.threadId, {
     status: 'canceled',
     latestRunStatus: 'canceled',
@@ -296,12 +280,11 @@ export async function cancelThread(params: CancelThreadParams): Promise<void> {
 }
 
 export async function decideToolCall(params: DecideToolCallParams): Promise<void> {
-  const revision = threadRevision(params.threadId);
   const response = await threadService.decideToolCall(params.threadId, params.toolCallId, {
     decision: params.decision,
     reason: params.reason,
   });
-  if (threadRevision(params.threadId) === revision) applyToolDecisionResponse(response);
+  applyToolDecisionResponse(response);
 }
 
 export async function decideToolCallsBatch(params: DecideToolCallsBatchParams): Promise<void> {
@@ -314,10 +297,9 @@ export async function decideToolCallsBatch(params: DecideToolCallsBatchParams): 
     }));
   if (decisions.length === 0) return;
 
-  const revision = threadRevision(params.threadId);
   const response = await threadService.decideToolCallsBatch(params.threadId, {
     decisions,
     pause_after_apply: params.pauseAfterApply ?? false,
   });
-  if (threadRevision(params.threadId) === revision) response.results.forEach((item) => applyToolDecisionResponse(item));
+  response.results.forEach((item) => applyToolDecisionResponse(item));
 }

@@ -47,6 +47,21 @@ class RunStatusTransitions:
             error=error,
         )
         db.commit()
+        for row in (sync_result.run, sync_result.thread, getattr(sync_result, "notification", None)):
+            if row is not None:
+                db.refresh(row)
+        await self.emit_status_transition(
+            sync_result, error=error, emit_error=emit_error,
+            emit_run_status=emit_run_status, extra_status_data=extra_status_data,
+            pre_emit_events=pre_emit_events,
+        )
+
+    async def emit_status_transition(
+        self, sync_result, *, error=None, emit_error=False, emit_run_status=True,
+        extra_status_data=None, pre_emit_events=None,
+    ) -> None:
+        # All scalar fields are loaded before the originating session closes.
+        run, thread = sync_result.run, sync_result.thread
         for event_name, payload in pre_emit_events or []:
             await self._runtime.emit(
                 user_id=run.user_id,
@@ -90,6 +105,16 @@ class RunStatusTransitions:
         extra_status_data: dict[str, Any] | None = None,
         pre_emit_events: list[tuple[str, dict[str, Any]]] | None = None,
     ) -> None:
+        result = self.persist_status_transition(db, run=run, thread=thread, status=status, error=error)
+        await self.emit_status_transition(
+            result, error=error, emit_error=emit_error,
+            emit_run_status=emit_run_status, extra_status_data=extra_status_data,
+            pre_emit_events=pre_emit_events,
+        )
+
+    def persist_status_transition(self, db: Session, *, run: RunModel, thread: Thread,
+                                  status: str, error: str | None):
+        """Commit in a DB worker, then emit separately on the API event loop."""
         run_before = snapshot_run_row(run)
         run.status = status
         run.error = error if status == "error" else None
@@ -102,13 +127,9 @@ class RunStatusTransitions:
             enforce_quota=False,
         )
         db.flush()
-        await self.sync_status_side_effects(
-            db,
-            run=run,
-            thread=thread,
-            error=error,
-            emit_error=emit_error,
-            emit_run_status=emit_run_status,
-            extra_status_data=extra_status_data,
-            pre_emit_events=pre_emit_events,
-        )
+        result = sync_explicit_run_thread_status(db, run=run, thread=thread, error=error)
+        db.commit()
+        for row in (result.run, result.thread, getattr(result, "notification", None)):
+            if row is not None:
+                db.refresh(row)
+        return result
