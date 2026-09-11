@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .runtime_version import run_event_version
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -116,6 +118,7 @@ async def emit_runtime_sync_events(
         if callable(emit_runtime_event) and user_id is not None and project_id is not None and thread_id is not None:
             payload = {
                 "run_id": str(result.run.id),
+                **run_event_version(result.run),
                 "status": result.run.status,
                 "error": result.run.error,
             }

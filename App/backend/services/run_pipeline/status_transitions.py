@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime_version import run_event_version
+
 from types import SimpleNamespace
 from typing import Any
 
@@ -61,6 +63,7 @@ class RunStatusTransitions:
                 event_name="run:error",
                 data={
                     "run_id": str(run.id),
+                    **run_event_version(run),
                     "error": error,
                 },
             )

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from .run_event_bus import InMemoryRunEventBus, run_event_bus
+from .run_event_bus import RunEventBus, run_event_bus
 
 
 def _to_str(value: Any) -> str | None:
@@ -17,7 +17,7 @@ def _to_str(value: Any) -> str | None:
 
 
 class RuntimeEventDispatcher:
-    def __init__(self, bus: InMemoryRunEventBus) -> None:
+    def __init__(self, bus: RunEventBus) -> None:
         self._bus = bus
 
     async def emit_runtime_event(

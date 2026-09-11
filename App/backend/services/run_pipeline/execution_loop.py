@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime_version import run_event_version
+
 import asyncio
 import logging
 from typing import Any, Callable
@@ -153,7 +155,7 @@ class RunPipelineExecutionLoop:
                 project_id=run.project_id,
                 thread_id=thread.id,
                 event_name="run:status",
-                data={"run_id": str(run.id), "status": "running", "thread_type": thread.thread_type},
+                data={"run_id": str(run.id), **run_event_version(run), "status": "running", "thread_type": thread.thread_type},
             )
 
             settings: UserSettings = settings_service._get_settings(db, run.user_id)  # pylint: disable=protected-access

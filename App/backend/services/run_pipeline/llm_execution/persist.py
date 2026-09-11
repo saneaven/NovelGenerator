@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....models.db_models import RunMessageModel, RunToolCallModel, ThreadPromptCache
+from ....models.db_models import RunContinuationModel, RunMessageModel, RunToolCallModel, ThreadPromptCache
 from ...reasoning.normalize import normalize_reasoning_detail
 from ...prompt_cache_service import touch_thread_prompt_cache, upsert_thread_prompt_cache
 from ...run_status_logic import derive_run_status
@@ -360,6 +360,13 @@ async def persist_execution(
             delta=assistant_message_delta,
             enforce_quota=True,
         )
+    if persisted_tools and run.status not in {"paused", "canceled", "error", "done"}:
+        db.add(RunContinuationModel(
+            thread_id=thread.id,
+            run_id=run.id,
+            assistant_message_id=assistant_message.id,
+        ))
+    assistant_message.is_streaming = False
     db.commit()
     request.checkpoint.finalized = True
 

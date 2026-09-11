@@ -169,6 +169,7 @@ def _install_import_stubs() -> None:
 _install_import_stubs()
 
 from App.backend.routes import thread_routes
+from App.backend.services import tool_decision_service
 
 
 class FakeJsonRequest:
@@ -437,6 +438,7 @@ def test_resume_thread_run_passes_request_to_resume_run(monkeypatch: pytest.Monk
         thread_routes.resume_thread_run(
             thread_id=thread_id,
             payload=thread_routes.ResumeRunRequest(
+                source="user",
                 run_mode="planMode",
                 surface="workspace",
                 context_object_ids=[context_object_id],
@@ -467,6 +469,9 @@ class FakeListThreadMessagesQuery:
 
     def order_by(self, *_args, **_kwargs) -> "FakeListThreadMessagesQuery":
         return self
+
+    def scalar(self):
+        return 0
 
     def all(self) -> list[object]:
         if self.target is thread_routes.RunMessageModel:
@@ -1385,18 +1390,18 @@ def test_finalize_applied_tool_calls_refreshes_thread_and_sync_results_before_em
     run = ExpiringRow(id=run_id, thread_id=thread_id, user_id=user_id, project_id=project_id, status="processing", error=None)
     tool_call = _make_expiring_tool_call(tool_call_id=tool_call_id, thread_id=thread_id, run_id=run_id, status="applied")
     session = FakeExpiringSession(
-        all_results={thread_routes.RunToolCallModel: [tool_call]},
+        all_results={tool_decision_service.RunToolCallModel: [tool_call]},
         tracked=[thread, run, tool_call],
     )
     emitted: list[str] = []
 
-    monkeypatch.setattr(thread_routes.asyncio, "to_thread", _run_immediately)
-    monkeypatch.setattr(thread_routes, "SessionLocal", lambda: session)
-    monkeypatch.setattr(thread_routes, "require_owned_thread", lambda *_args, **_kwargs: thread)
+    monkeypatch.setattr(tool_decision_service.asyncio, "to_thread", _run_immediately)
+    monkeypatch.setattr(tool_decision_service, "SessionLocal", lambda: session)
+    monkeypatch.setattr(tool_decision_service, "require_owned_thread", lambda *_args, **_kwargs: thread)
     monkeypatch.setattr(
-        thread_routes,
+        tool_decision_service,
         "sync_run_thread_status",
-        lambda _db, *, run_id: thread_routes.RuntimeSyncResult(
+        lambda _db, *, run_id: tool_decision_service.RuntimeSyncResult(
             run=run,
             thread=thread,
             notification=None,
@@ -1408,10 +1413,10 @@ def test_finalize_applied_tool_calls_refreshes_thread_and_sync_results_before_em
         emitted.append(event_name)
         return None
 
-    monkeypatch.setattr(thread_routes.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
+    monkeypatch.setattr(tool_decision_service.runtime_event_dispatcher, "emit_runtime_event", _fake_emit_runtime_event)
 
     result = asyncio.run(
-        thread_routes._finalize_applied_tool_calls(
+        tool_decision_service._finalize_applied_tool_calls(
             user_id=user_id,
             thread_id=thread_id,
             tool_call_ids=[tool_call_id],

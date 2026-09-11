@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ThreadMessagesResponse } from '../../api/threadService';
 import type { ThreadInfo, ThreadMessage } from '../../types/thread';
+import type { ThreadRuntimeEvent } from '../../api/sseClient';
+import { getThreadEventConsumer, disposeThreadEventConsumer } from '../../runtime/consumers/threadEventConsumer';
+import { resetThreadReconciliation } from '../../runtime/threadReconciliation';
 
 vi.mock('../../api/client', () => {
   class ApiError extends Error {
@@ -83,7 +86,7 @@ function makeResponse(overrides: Partial<ThreadMessagesResponse> = {}): ThreadMe
     thread: makeThread(),
     latestRun: {
       id: runId,
-      status: 'done',
+      status: overrides.thread?.latestRunStatus ?? 'done',
       runSeq: 1,
       language: 'English',
       runMode: 'agentMode',
@@ -102,13 +105,68 @@ function makeResponse(overrides: Partial<ThreadMessagesResponse> = {}): ThreadMe
 }
 
 afterEach(() => {
+  disposeThreadEventConsumer();
+  resetThreadReconciliation();
   listMessagesMock.mockReset();
   queryClient.clear();
   useThreadStreamStore.getState().clearAll();
 });
 
+function event(name: string, data: Record<string, unknown> = {}): ThreadRuntimeEvent {
+  return { event: name, data: { thread_id: threadId, run_id: runId, message_id: 'assistant-1',
+    request_id: 'request-1', project_id: projectId, ...data } } as ThreadRuntimeEvent;
+}
+
+describe('reconnect snapshot ordering', () => {
+  it('replaces a snapshot from a previous stream even when the new cursor is lower', async () => {
+    listMessagesMock.mockResolvedValueOnce(makeResponse({ snapshotEventId: 100, messages: [makeMessage()] }));
+    await refetchThreadSnapshot(threadId);
+    resetThreadReconciliation();
+    listMessagesMock.mockResolvedValueOnce(makeResponse({ snapshotEventId: 2, messages: [makeMessage({ id: 'new-message' })] }));
+    await refetchThreadSnapshot(threadId);
+    expect(readThreadSnapshotFromCache(threadId).version).toBe(2);
+    expect(readThreadSnapshotFromCache(threadId).messages.map((message) => message.id)).toEqual(['new-message']);
+  });
+
+  it('restores the missing stream prefix and applies only the buffered new tail', async () => {
+    let resolve!: (response: ThreadMessagesResponse) => void;
+    listMessagesMock.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    const loading = refetchThreadSnapshot(threadId);
+    await vi.waitFor(() => expect(listMessagesMock).toHaveBeenCalled());
+    const consumer = getThreadEventConsumer();
+    consumer.consume(event('content:delta', { event_id: 2, text: 'Hello' }));
+    consumer.consume(event('content:delta', { event_id: 3, text: ' world' }));
+    resolve(makeResponse({
+      thread: makeThread({ status: 'running', latestRunStatus: 'running' }),
+      snapshotEventId: 2,
+      messages: [makeMessage({ isStreaming: true })],
+      streamEvents: [event('message:start', { seq: 1, seq_in_thread: 1 }), event('content:delta', { text: 'Hello' })],
+    }));
+    await loading;
+    const snapshot = readThreadSnapshotFromCache(threadId);
+    expect(snapshot.messages).toHaveLength(1);
+    expect(snapshot.messages[0].streamingData?.contentParts).toEqual([{ type: 'content', text: 'Hello world' }]);
+    expect(snapshot.version).toBe(3);
+    consumer.consume(event('content:delta', { event_id: 3, text: ' world' }));
+    expect(readThreadSnapshotFromCache(threadId).messages[0].streamingData?.contentParts).toEqual([{ type: 'content', text: 'Hello world' }]);
+  });
+
+  it('does not let an older status or run clear the current stream', () => {
+    useThreadStreamStore.getState().upsertThread(makeThread({
+      status: 'running', latestRunStatus: 'running', latestRunSeq: 2,
+      latestRunUpdatedAt: '2026-06-24T00:00:02.000002',
+    }));
+    useThreadStreamStore.getState().setThreadStreamActive(threadId, true);
+    const consumer = getThreadEventConsumer();
+    consumer.consume(event('run:done', { event_id: 10, run_seq: 2, run_updated_at: '2026-06-24T00:00:02.000001', final_status: 'ready' }));
+    consumer.consume(event('run:done', { event_id: 11, run_id: 'old-run', run_seq: 1, final_status: 'done' }));
+    expect(useThreadStreamStore.getState().threadsById[threadId]?.status).toBe('running');
+    expect(useThreadStreamStore.getState().activeStreamByThread[threadId]).toBe(true);
+  });
+});
+
 describe('thread message snapshot side effects', () => {
-  it('does not overwrite an existing thread status from a message snapshot fetch', async () => {
+  it('restores existing thread status from the server snapshot', async () => {
     useThreadStreamStore.getState().upsertThread(makeThread({ status: 'running', latestRunStatus: 'running' }));
     listMessagesMock.mockResolvedValueOnce(makeResponse({
       thread: makeThread({ status: 'ready', latestRunStatus: 'ready' }),
@@ -116,11 +174,11 @@ describe('thread message snapshot side effects', () => {
 
     await refetchThreadSnapshot(threadId);
 
-    expect(useThreadStreamStore.getState().threadsById[threadId]?.status).toBe('running');
-    expect(useThreadStreamStore.getState().threadsById[threadId]?.latestRunStatus).toBe('running');
+    expect(useThreadStreamStore.getState().threadsById[threadId]?.status).toBe('ready');
+    expect(useThreadStreamStore.getState().threadsById[threadId]?.latestRunStatus).toBe('ready');
   });
 
-  it('hydrates latest run context for an existing thread without changing live status', async () => {
+  it('hydrates latest run context and server runtime together', async () => {
     useThreadStreamStore.getState().upsertThread(makeThread({
       status: 'running',
       latestRunStatus: 'running',
@@ -133,8 +191,8 @@ describe('thread message snapshot side effects', () => {
     await refetchThreadSnapshot(threadId);
 
     const thread = useThreadStreamStore.getState().threadsById[threadId];
-    expect(thread?.status).toBe('running');
-    expect(thread?.latestRunStatus).toBe('running');
+    expect(thread?.status).toBe('ready');
+    expect(thread?.latestRunStatus).toBe('ready');
     expect(thread?.latestRunContext).toEqual({
       inputPayload: { source: 'test' },
       contextObjectIds: ['object-1'],
@@ -161,7 +219,7 @@ describe('thread message snapshot side effects', () => {
     expect(healed?.isStreaming).toBe(false);
   });
 
-  it('does not clear stream-active state during a message snapshot fetch', async () => {
+  it('clears stale stream-active state when the server snapshot has completed', async () => {
     const store = useThreadStreamStore.getState();
     store.upsertThread(makeThread({ status: 'running', latestRunStatus: 'running' }));
     store.setThreadStreamActive(threadId, true);
@@ -169,7 +227,7 @@ describe('thread message snapshot side effects', () => {
 
     await refetchThreadSnapshot(threadId);
 
-    expect(useThreadStreamStore.getState().activeStreamByThread[threadId]).toBe(true);
+    expect(useThreadStreamStore.getState().activeStreamByThread[threadId]).toBe(false);
   });
 
   it('seeds thread metadata and latest run context when the thread is absent', async () => {

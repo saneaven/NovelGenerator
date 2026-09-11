@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ...models.db_models import RunMessageModel, RunModel, RunToolCallModel, Thread
 from ..chat_attachment_service import IncomingMessageAttachment
+from ..continuation_service import ContinuationCoordinator
 from ..runtime_event_dispatcher import RuntimeEventDispatcher
 from ..tool_engine.contracts import ToolOffer
 from . import prompt_assembly
@@ -47,6 +48,7 @@ class RunPipeline:
             status_transitions=self._status_transitions,
             execute_loop_fn=self.execute_loop,
         )
+        self.continuations = ContinuationCoordinator(db_factory=db_factory, pipeline=self)
 
     def _thread_lock(self, thread_id: UUID):
         return self._runtime.thread_lock(thread_id)

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { ThreadRuntimeEvent } from './sseClient';
 import type { ImageRun } from './assetService';
 import type { McpSelection } from '../types/mcp';
 import type {
@@ -42,6 +43,8 @@ export interface ResumeRunRequest {
 }
 
 export interface ThreadRunResponse {
+  runSeq?: number | null;
+  runUpdatedAt?: string | null;
   threadId: string;
   runId: string;
   status: ThreadStatus;
@@ -65,6 +68,8 @@ export interface ToolCallBatchDecisionRequest {
 }
 
 export interface ThreadMessagesResponse {
+  snapshotEventId?: number;
+  streamEvents?: ThreadRuntimeEvent[];
   thread: ThreadInfo;
   latestRun: {
     id: string;
@@ -116,6 +121,8 @@ export interface ProjectThreadRuntimeItem {
 
 function toThreadInfo(raw: Record<string, unknown>): ThreadInfo {
   const out: ThreadInfo = {
+    latestRunSeq: raw.latest_run_seq == null ? null : Number(raw.latest_run_seq),
+    latestRunUpdatedAt: raw.latest_run_updated_at == null ? null : String(raw.latest_run_updated_at),
     id: String(raw.id),
     projectId: String(raw.project_id),
     threadType: String(raw.thread_type) as ThreadInfo['threadType'],
@@ -161,7 +168,8 @@ function toMessage(raw: Record<string, unknown>): ThreadMessage {
       ? raw.attachments.map((item) => toMessageAttachment(item))
       : [],
     createdAt: String(raw.created_at ?? new Date().toISOString()),
-    isStreaming: false,
+    isStreaming: Boolean(raw.is_streaming),
+    streamingData: raw.is_streaming ? { contentParts: [] } : undefined,
   };
 }
 
@@ -196,6 +204,8 @@ function toDecisionResponse(raw: Record<string, unknown>): ToolCallDecisionRespo
 
 function toThreadRunResponse(raw: Record<string, unknown>): ThreadRunResponse {
   return {
+    runSeq: raw.run_seq == null ? null : Number(raw.run_seq),
+    runUpdatedAt: raw.run_updated_at == null ? null : String(raw.run_updated_at),
     threadId: String(raw.thread_id),
     runId: String(raw.run_id),
     status: String(raw.status) as ThreadStatus,
@@ -275,7 +285,7 @@ export const threadService = {
   async resumeRun(threadId: string, req: ResumeRunRequest = {}): Promise<ThreadRunResponse> {
     const raw = await apiClient.post<Record<string, unknown>>(
       `/api/v1/threads/${threadId}/resume`,
-      req,
+      { ...req, source: 'user' },
     );
     return toThreadRunResponse(raw);
   },
@@ -291,6 +301,8 @@ export const threadService = {
     }
     return {
       thread,
+      snapshotEventId: typeof raw.snapshot_event_id === 'number' ? raw.snapshot_event_id : undefined,
+      streamEvents: Array.isArray(raw.stream_events) ? raw.stream_events as ThreadRuntimeEvent[] : [],
       latestRun: latestRunRaw
         ? {
             id: String(latestRunRaw.id),

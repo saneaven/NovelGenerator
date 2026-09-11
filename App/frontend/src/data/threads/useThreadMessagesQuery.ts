@@ -1,13 +1,10 @@
 /**
- * TanStack Query layer for the persisted thread snapshot (finalized messages +
- * tool calls). The live overlay lives in `threadStreamStore`; the two are merged
- * by `useThreadView`.
+ * TanStack Query cache for persisted messages, tool calls and live deltas.
  *
  * - The query caches a `ThreadSnapshot` under `threadKeys.messages(threadId)`.
- * - Fetching seeds thread metadata when absent and latest-run context from the
- *   snapshot, plus image runs as a side effect.
- * - SSE-finalized events and optimistic edits write through the imperative cache
- *   mutators below (never token deltas — those go to the overlay store).
+ * - A consistent server snapshot restores metadata and the active stream prefix.
+ * - Events arriving during the fetch are buffered and replayed after its cursor.
+ * - SSE and optimistic edits write through the imperative cache mutators below.
  */
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
@@ -18,6 +15,7 @@ import { seedImageRunsInCache } from '../imageRuns';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import type { ThreadMessage, ThreadToolCall } from '../../types/thread';
 import { toLatestRunContext, toThreadSnapshot, type ThreadSnapshot } from './threadSnapshot';
+import { beginThreadSnapshot, reconciliationGeneration, threadCursor, takeThreadSnapshotEvents } from '../../runtime/threadReconciliation';
 
 const EMPTY_SNAPSHOT: ThreadSnapshot = { messages: [], toolCalls: [] };
 
@@ -33,9 +31,8 @@ function sortMessages(messages: ThreadMessage[]): ThreadMessage[] {
 }
 
 /**
- * Seed thread metadata only for a cold thread. Existing thread runtime status
- * stays live-owned, but the snapshot is the source of truth for latest-run
- * context used by follow-up journey feedback.
+ * Restore runtime metadata at the snapshot cursor. Buffered newer events are
+ * applied immediately afterward, including latest-run journey context.
  */
 function applyThreadSnapshotSideEffects(threadId: string, response: Awaited<ReturnType<typeof threadService.listMessages>>): void {
   const store = useThreadStreamStore.getState();
@@ -45,20 +42,56 @@ function applyThreadSnapshotSideEffects(threadId: string, response: Awaited<Retu
   if (!existing) {
     store.upsertThread({
       ...response.thread,
+      latestRunId: response.latestRun?.id ?? null,
+      latestRunSeq: response.latestRun?.runSeq ?? null,
+      latestRunUpdatedAt: response.latestRun?.updatedAt ?? null,
       latestRunContext,
     });
+    store.setThreadStreamActive(threadId, response.messages.some((message) => message.isStreaming));
     return;
   }
-  store.patchThread(threadId, { latestRunContext });
+  store.patchThread(threadId, {
+    ...response.thread,
+    latestRunId: response.latestRun?.id ?? null,
+    latestRunStatus: response.latestRun?.status ?? null,
+    latestRunSeq: response.latestRun?.runSeq ?? null,
+    latestRunUpdatedAt: response.latestRun?.updatedAt ?? null,
+    latestRunContext,
+  });
+  store.setThreadStreamActive(threadId, response.messages.some((message) => message.isStreaming));
 }
 
 export function threadMessagesQueryOptions(threadId: string) {
   return {
     queryKey: threadKeys.messages(threadId),
     queryFn: async (): Promise<ThreadSnapshot> => {
-      const response = await threadService.listMessages(threadId);
-      applyThreadSnapshotSideEffects(threadId, response);
-      return toThreadSnapshot(response);
+      const generation = reconciliationGeneration();
+      beginThreadSnapshot(threadId);
+      const { getThreadEventConsumer } = await import('../../runtime/consumers/threadEventConsumer');
+      const consumer = getThreadEventConsumer();
+      try {
+        const response = await threadService.listMessages(threadId);
+        if (generation !== reconciliationGeneration()) {
+          throw new Error('Runtime stream reset during snapshot restoration');
+        }
+        applyThreadSnapshotSideEffects(threadId, response);
+        queryClient.setQueryData(threadKeys.messages(threadId), { ...toThreadSnapshot(response), generation });
+        consumer.restoreSnapshot(threadId, response.streamEvents ?? [], response.snapshotEventId);
+        return { ...readThreadSnapshotFromCache(threadId), version: threadCursor(threadId) };
+      } catch (error) {
+        if (generation === reconciliationGeneration()) {
+          for (const event of takeThreadSnapshotEvents(threadId)) consumer.consume(event);
+        }
+        throw error;
+      }
+    },
+    structuralSharing: (previous: unknown, next: unknown) => {
+      const prev = previous as ThreadSnapshot | undefined;
+      const value = next as ThreadSnapshot;
+      if ((prev?.generation ?? 0) !== (value.generation ?? 0)) {
+        return (prev?.generation ?? 0) > (value.generation ?? 0) ? previous : next;
+      }
+      return (prev?.version ?? 0) > (value.version ?? 0) ? previous : next;
     },
     // SSE-driven invalidation is the freshness source; never staleness-refetch.
     staleTime: Infinity,
@@ -106,7 +139,7 @@ export function removeThreadSnapshotFromCache(threadId: string): void {
 
 function writeSnapshot(threadId: string, recipe: (prev: ThreadSnapshot) => ThreadSnapshot): void {
   queryClient.setQueryData<ThreadSnapshot>(threadKeys.messages(threadId), (prev) =>
-    recipe(prev ?? EMPTY_SNAPSHOT),
+    ({ ...recipe(prev ?? EMPTY_SNAPSHOT), version: threadCursor(threadId), generation: reconciliationGeneration() }),
   );
 }
 

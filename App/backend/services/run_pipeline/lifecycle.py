@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime_version import run_event_version
+
 import logging
 from typing import Any, Callable
 from uuid import UUID
@@ -7,7 +9,8 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ...models.db_models import RunModel, RunMessageModel, RunToolCallModel, Thread
+from ...models.db_models import RunContinuationModel, RunModel, RunMessageModel, RunToolCallModel, Thread
+from ..continuation_policy import can_continue
 from ..chat_attachment_service import (
     ChatAttachmentValidationError,
     chat_attachment_service,
@@ -309,6 +312,11 @@ class RunPipelineLifecycle:
                 if run is None:
                     raise HTTPException(status_code=409, detail="No run exists to resume")
 
+                # A finalized response may still be emitting its tail events. Do
+                # not lose a resume to spawn_task's active-task deduplication.
+                if self._runtime.has_active_task(run.id):
+                    raise HTTPException(status_code=409, detail="Previous execution is still finishing")
+
                 has_unresolved_tool = (
                     db.query(RunToolCallModel.id)
                     .filter(
@@ -329,6 +337,30 @@ class RunPipelineLifecycle:
                         status_code=409,
                         detail=f"Run status '{run.status}' is not resumable",
                     )
+
+                if command.continuation_id is not None:
+                    job = db.query(RunContinuationModel).filter(
+                        RunContinuationModel.id == command.continuation_id,
+                        RunContinuationModel.owner == command.continuation_owner,
+                        RunContinuationModel.state == "pending",
+                    ).with_for_update().first()
+                    latest_assistant = db.query(RunMessageModel).filter(
+                        RunMessageModel.thread_id == thread.id,
+                        RunMessageModel.role == "assistant",
+                    ).order_by(RunMessageModel.seq_in_thread.desc()).first()
+                    calls = db.query(RunToolCallModel).filter(
+                        RunToolCallModel.assistant_message_id == (latest_assistant.id if latest_assistant else None),
+                    ).all()
+                    unresolved = db.query(RunToolCallModel.id).filter(
+                        RunToolCallModel.thread_id == thread.id,
+                        RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
+                    ).first() is not None
+                    if (job is None or job.run_id != run.id or latest_assistant is None
+                            or job.assistant_message_id != latest_assistant.id
+                            or not can_continue(status=run.status, tools=calls, unresolved=unresolved)):
+                        raise HTTPException(status_code=409, detail="Automatic continuation is no longer eligible")
+                    # Commit ownership of this response with the running state.
+                    job.state = "started"
 
                 if command.run_mode is not None:
                     run.run_mode = command.run_mode
@@ -396,6 +428,7 @@ class RunPipelineLifecycle:
             db = self._db_factory()
             run_id: UUID | None = None
             project_id: UUID | None = None
+            cancel_version: dict = {}
             try:
                 run = (
                     db.query(RunModel)
@@ -421,6 +454,7 @@ class RunPipelineLifecycle:
                         status="canceled",
                         error=None,
                     )
+                    cancel_version = run_event_version(run)
             finally:
                 db.close()
 
@@ -432,7 +466,7 @@ class RunPipelineLifecycle:
                     project_id=project_id,
                     thread_id=thread_id,
                     event_name="run:canceled",
-                    data={"run_id": str(run_id)},
+                    data={"run_id": str(run_id), **cancel_version},
                 )
 
                 db2 = self._db_factory()
@@ -467,6 +501,7 @@ class RunPipelineLifecycle:
             db = self._db_factory()
             run_id: UUID | None = None
             project_id: UUID | None = None
+            cancel_version: dict = {}
             try:
                 run = (
                     db.query(RunModel)
@@ -492,6 +527,7 @@ class RunPipelineLifecycle:
                         status="canceled",
                         error=None,
                     )
+                    cancel_version = run_event_version(run)
             finally:
                 db.close()
 
@@ -511,5 +547,5 @@ class RunPipelineLifecycle:
                     project_id=project_id,
                     thread_id=thread_id,
                     event_name="run:canceled",
-                    data={"run_id": str(run_id)},
+                    data={"run_id": str(run_id), **cancel_version},
                 )

@@ -91,6 +91,17 @@ class RunPipelineRuntime:
             self._thread_locks[thread_id] = lock
         return lock
 
+    def has_active_task(self, run_id: UUID) -> bool:
+        task = self._tasks.get(run_id)
+        return task is not None and not task.done()
+
+    async def wait_for_task(self, run_id: UUID) -> None:
+        task = self._tasks.get(run_id)
+        if task is not None:
+            # Waiting must not turn a tool pause into cancellation of the
+            # coordinator, nor cancel generation if this waiter shuts down.
+            await asyncio.wait({task})
+
     async def emit(
         self,
         *,
@@ -124,7 +135,8 @@ class RunPipelineRuntime:
             self._tasks[run_id] = task
 
             def _cleanup(done_task: asyncio.Task) -> None:
-                self._tasks.pop(run_id, None)
+                if self._tasks.get(run_id) is done_task:
+                    self._tasks.pop(run_id, None)
                 if done_task.cancelled():
                     return
                 exc = done_task.exception()

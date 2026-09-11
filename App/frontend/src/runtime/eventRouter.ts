@@ -10,7 +10,7 @@ import { AssetEventConsumer } from './consumers/assetEventConsumer';
 import { ImageRunEventConsumer } from './consumers/imageRunEventConsumer';
 import { ObjectEventConsumer } from './consumers/objectEventConsumer';
 import { NotificationEventConsumer } from './consumers/notificationEventConsumer';
-import { ThreadEventConsumer } from './consumers/threadEventConsumer';
+import { ThreadEventConsumer, getThreadEventConsumer, disposeThreadEventConsumer } from './consumers/threadEventConsumer';
 
 type EventHandler = (event: RuntimeSSEEvent) => Promise<void> | void;
 
@@ -25,7 +25,7 @@ export class EventRouter {
   constructor() {
     this.assetConsumer = new AssetEventConsumer();
     this.objectConsumer = new ObjectEventConsumer();
-    this.threadConsumer = new ThreadEventConsumer();
+    this.threadConsumer = getThreadEventConsumer();
     this.notificationConsumer = new NotificationEventConsumer();
     this.imageRunConsumer = new ImageRunEventConsumer();
     this.routeTable = {
@@ -64,7 +64,7 @@ export class EventRouter {
     this.objectConsumer.dispose();
     this.notificationConsumer.dispose();
     this.imageRunConsumer.dispose();
-    this.threadConsumer.dispose();
+    disposeThreadEventConsumer();
   }
 }
 

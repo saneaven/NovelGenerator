@@ -22,8 +22,8 @@ def derive_run_status(*, current_status: str | None, tool_call_statuses: Iterabl
         joined = ", ".join(repr(status) for status in unknown_statuses)
         raise ValueError(f"Unknown tool call status: {joined}")
 
-    if current_status == "paused":
-        return "paused"
+    if current_status in {"paused", "canceled", "error"}:
+        return current_status
     if not statuses:
         return "done"
     if any(status in _PENDING_TOOL_STATUSES for status in statuses):
