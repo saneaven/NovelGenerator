@@ -34,7 +34,12 @@ to inspect the result and choose how to proceed.
 Streaming and reconnection use the existing `run_event_bus`, SSE client and
 thread snapshot fetch behavior. Token deltas and reconnect cursors are not
 written to the database. There is no additional stream journal, snapshot replay
-layer or reconnect-wide refetch of cached threads.
+layer or reconnect-wide refetch of cached threads. The in-memory bus keeps
+bounded, lossy queues for content/thinking/tool-argument deltas and separate
+non-evicting delivery queues for state events. State replay history is retained
+for the channel TTL, so delta volume cannot evict message, tool-call or run
+transitions. The browser advances its reconnect cursor only after the event
+consumer completes.
 
 The coordinator's eligibility checks and resume transactions run in DB worker
 threads. Their synchronous SQL and lock waits do not block the API event loop.
