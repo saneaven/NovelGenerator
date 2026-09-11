@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...runtime_version import run_event_version
+
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -25,6 +27,7 @@ async def emit_message_start(
         event_name="message:start",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "role": "assistant",
@@ -54,6 +57,7 @@ async def emit_llm_request(
         event_name="llm:request",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "retry_count": retry_count,
@@ -79,6 +83,7 @@ async def emit_content_delta(
         event_name="content:delta",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "text": text,
@@ -103,6 +108,7 @@ async def emit_thinking_delta(
         event_name="thinking:delta",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "text": text,
@@ -129,6 +135,7 @@ async def emit_tool_call_start(
         event_name="tool_call:start",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "request_id": request_id,
             "stream_key": stream_key,
             "tool_call_id": tool_call_id,
@@ -159,6 +166,7 @@ async def emit_tool_call_delta(
         event_name="tool_call:delta",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "request_id": request_id,
             "stream_key": stream_key,
             "tool_call_id": tool_call_id,
@@ -184,6 +192,7 @@ async def emit_run_status(
         event_name="run:status",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "status": status,
             "error": error,
         },
@@ -208,6 +217,7 @@ async def emit_terminal_events(
         event_name="llm:response",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "provider": final_snapshot.provider,
@@ -222,6 +232,7 @@ async def emit_terminal_events(
         event_name="message:end",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "message_id": str(assistant_message.id),
             "request_id": request_id,
             "seq_in_thread": int(assistant_message.seq_in_thread),
@@ -253,6 +264,7 @@ async def emit_terminal_events(
         event_name="run:done",
         data={
             "run_id": str(run.id),
+            **run_event_version(run),
             "final_status": run.status,
         },
     )

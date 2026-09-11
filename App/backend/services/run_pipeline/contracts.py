@@ -33,3 +33,5 @@ class ResumeRunCommand:
     surface: str | None
     context_object_ids: list[UUID]
     journey_target_ids: list[UUID]
+    continuation_id: UUID | None = None
+    continuation_owner: UUID | None = None

@@ -116,6 +116,7 @@ class LLMExecutionOrchestrator:
             seq_in_thread=thread.next_message_seq,
             role="assistant",
             data={run.language: {"contentParts": []}},
+            is_streaming=True,
         )
         db.add(assistant_message)
         db.flush()

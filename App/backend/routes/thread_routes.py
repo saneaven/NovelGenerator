@@ -21,6 +21,7 @@ from ..models.db_models import (
     RunMessageAttachmentModel,
     RunMessageModel,
     RunModel,
+    RuntimeEventModel,
     RunToolCallModel,
     Thread,
     User,
@@ -47,10 +48,15 @@ from ..services.chat_attachment_service import (
 )
 from ..services.deletion_service import delete_chat_attachments_with_files
 from ..services.run_event_bus import run_event_bus
+from ..services.runtime_version import run_event_version
 from ..services.runtime_event_dispatcher import runtime_event_dispatcher
 from ..services.notification_service import collect_thread_delete_deltas, delete_threads
 from ..services.run_pipeline import run_pipeline
 from ..services.tool_engine import tool_engine
+from ..services.tool_decision_service import (
+    _finalize_applied_tool_calls,
+    _start_applied_tool_call_followups,
+)
 from ..services.reasoning.normalize import normalize_reasoning_detail
 from ..services.thread_parent_runtime_service import resolve_parent, thread_runtime_fields
 from ..services.thread_runtime_sync_service import (
@@ -108,6 +114,7 @@ def _serialize_message(
         "seq": int(row.seq),
         "seq_in_thread": int(row.seq_in_thread),
         "data": row.data if isinstance(row.data, dict) else {},
+        "is_streaming": bool(getattr(row, "is_streaming", False)),
         "attachments": [_serialize_attachment(item) for item in attachments],
         "created_at": row.created_at,
     }
@@ -233,6 +240,7 @@ def _serialize_thread_run_response(*, thread_id: UUID, run: RunModel) -> ThreadR
         run_id=run.id,
         status=run.status,
         thread_status=run.thread.status if run.thread else run.status,
+        **run_event_version(run),
     )
 
 
@@ -479,146 +487,6 @@ async def _apply_tool_decision(
     )
     return result_map.get(tool_call_id, {"tool_call": None})
 
-def _finalize_applied_tool_calls_sync(
-    *,
-    user_id: UUID,
-    thread_id: UUID,
-    tool_call_ids: list[UUID],
-) -> tuple[Thread, list[object], list[RuntimeSyncResult], dict[UUID, dict]]:
-    """Sync DB portion: lock rows, sync statuses, commit, return data for async emission."""
-    db = SessionLocal()
-    try:
-        thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-        rows = (
-            db.query(RunToolCallModel)
-            .with_for_update()
-            .filter(
-                RunToolCallModel.thread_id == thread.id,
-                RunToolCallModel.id.in_(tool_call_ids),
-            )
-            .order_by(RunToolCallModel.call_seq.asc())
-            .all()
-        )
-        sync_results: list[RuntimeSyncResult] = []
-        seen_run_ids: set[UUID] = set()
-        for row in rows:
-            if row.run_id in seen_run_ids:
-                continue
-            seen_run_ids.add(row.run_id)
-            sync_results.append(sync_run_thread_status(db, run_id=row.run_id))
-        db.commit()
-        db.refresh(thread)
-        for sync_result in sync_results:
-            refresh_runtime_sync_result(db, result=sync_result)
-        for row in rows:
-            db.refresh(row)
-        result_map = {row.id: {"tool_call": _serialize_tool_call(row)} for row in rows}
-        return thread, rows, sync_results, result_map
-    finally:
-        db.close()
-
-
-async def _finalize_applied_tool_calls(
-    *,
-    user_id: UUID,
-    thread_id: UUID,
-    tool_call_ids: list[UUID],
-) -> dict[UUID, dict]:
-    thread, rows, sync_results, result_map = await asyncio.to_thread(
-        _finalize_applied_tool_calls_sync,
-        user_id=user_id,
-        thread_id=thread_id,
-        tool_call_ids=tool_call_ids,
-    )
-    for row in rows:
-        await _emit_tool_call_status(thread=thread, tool_call=row)
-    for sync_result in sync_results:
-        await emit_runtime_sync_events(runtime_event_dispatcher, result=sync_result)
-    return result_map
-
-
-async def _start_applied_tool_call_followups(
-    *,
-    user_id: UUID,
-    thread_id: UUID,
-    applied_results: list[object],
-) -> None:
-    for applied in applied_results:
-        tool_call_id = getattr(applied, "tool_call_id", None)
-        image_run_id = getattr(applied, "image_run_id", None)
-        child_thread_id = getattr(applied, "child_thread_id", None)
-        child_input_text = getattr(applied, "child_input_text", None)
-
-        if isinstance(image_run_id, UUID):
-            try:
-                await image_run_service.start_run(image_run_id)
-            except Exception as exc:  # noqa: BLE001
-                try:
-                    await image_run_service.fail_run(
-                        image_run_id=image_run_id,
-                        failure_code="startup_failed",
-                        error_message=f"Image run start failed: {exc}",
-                    )
-                except Exception:
-                    pass
-
-        if not (isinstance(child_thread_id, UUID) and isinstance(child_input_text, str) and child_input_text.strip()):
-            continue
-
-        try:
-            await run_pipeline.start_run(
-                thread_id=child_thread_id,
-                user_id=user_id,
-                input_text=child_input_text,
-                input_payload=None,
-                run_mode=None,
-                surface=None,
-                context_object_ids=[],
-                journey_target_ids=[],
-            )
-        except Exception as exc:  # noqa: BLE001
-            if not isinstance(tool_call_id, UUID):
-                continue
-
-            def _mark_child_run_failed(
-                exc: Exception = exc,
-                tc_id: UUID = tool_call_id,
-            ) -> tuple[RuntimeSyncResult | None, Thread | None, object | None]:
-                db = SessionLocal()
-                try:
-                    thread = require_owned_thread(db, thread_id=thread_id, user_id=user_id)
-                    failed_row = (
-                        db.query(RunToolCallModel)
-                        .with_for_update()
-                        .filter(RunToolCallModel.id == tc_id, RunToolCallModel.thread_id == thread.id)
-                        .first()
-                    )
-                    if failed_row is not None and failed_row.status in {"processing", "working"}:
-                        failed_row.status = "failed"
-                        failed_row.reason = f"Child run start failed: {exc}"
-                        base_result = failed_row.result if isinstance(failed_row.result, dict) else {}
-                        failed_row.result = {
-                            **base_result,
-                            "success": False,
-                            "message": "Child run start failed",
-                            "error": str(exc),
-                        }
-                        failed_row.updated_at = datetime.utcnow()
-                        sr = sync_run_thread_status(db, run_id=failed_row.run_id)
-                        db.commit()
-                        refresh_runtime_sync_result(db, result=sr)
-                        db.refresh(failed_row)
-                        return sr, sr.thread, failed_row
-                    return None, None, None
-                finally:
-                    db.close()
-
-            sr, sr_thread, failed_tc = await asyncio.to_thread(_mark_child_run_failed)
-            if sr is not None and sr_thread is not None and failed_tc is not None:
-                await _emit_tool_call_status(thread=sr_thread, tool_call=failed_tc)
-                await emit_runtime_sync_events(runtime_event_dispatcher, result=sr)
-
-
 @router.post("/threads/{thread_id}/start", response_model=ThreadRunResponse)
 async def start_thread_run(
     thread_id: UUID,
@@ -653,7 +521,13 @@ async def resume_thread_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    del db
+    if payload.source != "user":
+        thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
+        run = db.query(RunModel).filter(RunModel.thread_id == thread.id).order_by(RunModel.run_seq.desc()).first()
+        if run is None:
+            raise HTTPException(status_code=409, detail="No run exists to resume")
+        run_pipeline.continuations.wake()
+        return _serialize_thread_run_response(thread_id=thread_id, run=run)
     run = await run_pipeline.resume_run(
         thread_id=thread_id,
         user_id=current_user.id,
@@ -806,11 +680,21 @@ def list_project_threads_runtime(
     return ProjectThreadRuntimeResponse(threads=runtime_rows)
 
 
+def get_snapshot_db():
+    # The cursor, messages and tool states must come from the same DB snapshot.
+    db = SessionLocal()
+    try:
+        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        yield db
+    finally:
+        db.close()
+
+
 @router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
 def list_thread_messages(
     thread_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_snapshot_db),
 ):
     thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
 
@@ -861,13 +745,38 @@ def list_thread_messages(
     )
     memory_boundary_message_id = boundary_row[0] if boundary_row else None
 
+    snapshot_event_id = db.query(func.max(RuntimeEventModel.id)).filter(
+        RuntimeEventModel.user_id == current_user.id,
+    ).scalar() or 0
+    streaming_ids = [str(m.id) for m in messages if getattr(m, "is_streaming", False)
+                     and latest_run is not None and m.run_id == latest_run.id and latest_run.status == "running"]
+    stream_events = []
+    if streaming_ids:
+        starts = db.query(RuntimeEventModel).filter(
+            RuntimeEventModel.thread_id == thread.id,
+            RuntimeEventModel.event["event"].astext == "message:start",
+            RuntimeEventModel.event["data"]["message_id"].astext.in_(streaming_ids),
+        ).all()
+        request_ids = [row.event["data"]["request_id"] for row in starts if row.event["data"].get("request_id")]
+        if request_ids:
+            stream_events = [row.event for row in db.query(RuntimeEventModel).filter(
+                RuntimeEventModel.thread_id == thread.id,
+                RuntimeEventModel.event["data"]["request_id"].astext.in_(request_ids),
+            ).order_by(RuntimeEventModel.id).all()]
+
     return ThreadMessagesResponse(
+        snapshot_event_id=snapshot_event_id,
+        stream_events=stream_events,
         thread={
             "id": thread.id,
             "project_id": thread.project_id,
             "thread_type": thread.thread_type,
             **thread_runtime_fields(db, thread),
             "status": thread.status,
+            "latest_run_id": latest_run.id if latest_run else None,
+            "latest_run_status": latest_run.status if latest_run else None,
+            "latest_run_seq": latest_run.run_seq if latest_run else None,
+            "latest_run_updated_at": latest_run.updated_at if latest_run else None,
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
             "memory_boundary_message_id": memory_boundary_message_id,
@@ -888,7 +797,7 @@ def list_thread_messages(
         }
         if latest_run
         else None,
-        messages=[_serialize_message(m, attachments_by_message_id) for m in messages],
+        messages=[{**_serialize_message(m, attachments_by_message_id), "is_streaming": str(m.id) in streaming_ids} for m in messages],
         tool_calls=[_serialize_tool_call(t) for t in tool_calls],
         image_runs=[image_run_service.serialize(db, row) for row in image_runs],
     )

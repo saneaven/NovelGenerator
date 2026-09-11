@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime_version import run_event_version
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Awaitable, Callable
@@ -725,6 +727,8 @@ class ToolEngineService:
         thread_id: UUID,
         user_id: UUID,
         tool_call_ids: list[UUID],
+        automatic: bool = False,
+        assistant_message_id: UUID | None = None,
     ) -> list[AppliedToolCallResult]:
         if not tool_call_ids:
             return []
@@ -732,7 +736,7 @@ class ToolEngineService:
         ordered_ids = list(dict.fromkeys(tool_call_ids))
         db = db_factory()
         try:
-            thread = db.query(Thread).filter(Thread.id == thread_id, Thread.user_id == user_id).first()
+            thread = db.query(Thread).filter(Thread.id == thread_id, Thread.user_id == user_id).with_for_update().first()
             if thread is None:
                 raise ValueError("Thread not found")
 
@@ -753,7 +757,26 @@ class ToolEngineService:
             )
             row_by_id = {row.id: row for row in locked_rows}
 
+            if automatic:
+                from ..continuation_policy import STOPPED_RUN_STATUSES, auto_approval_ids
+
+                latest_run = db.query(RunModel).filter(RunModel.thread_id == thread.id).order_by(RunModel.run_seq.desc()).first()
+                latest_assistant = db.query(RunMessageModel).filter(
+                    RunMessageModel.thread_id == thread.id, RunMessageModel.role == "assistant",
+                ).order_by(RunMessageModel.seq_in_thread.desc()).first()
+                if (latest_run is None or latest_run.status in STOPPED_RUN_STATUSES | {"running"}
+                        or latest_assistant is None or latest_assistant.id != assistant_message_id
+                        or latest_assistant.run_id != latest_run.id):
+                    return []
+                response_tools = db.query(RunToolCallModel).filter(
+                    RunToolCallModel.assistant_message_id == assistant_message_id,
+                ).all()
+                config = settings.tool_call_auto_approve or {}
+                if set(auto_approval_ids(response_tools, config)) != set(ordered_ids):
+                    return []
+
             now = datetime.utcnow()
+            claimed_ids: set[UUID] = set()
             for tool_call_id in ordered_ids:
                 row = row_by_id.get(tool_call_id)
                 if row is None:
@@ -764,6 +787,7 @@ class ToolEngineService:
                 row.reason = None
                 row.accepted_at = row.accepted_at or now
                 row.updated_at = now
+                claimed_ids.add(row.id)
             db.commit()
 
             run_ids = {
@@ -834,7 +858,10 @@ class ToolEngineService:
                 run_row_by_id = {row.id: row for row in run_rows}
 
                 for row in run_rows:
-                    if row.status not in {"processing", "pending", "validating", "streaming"}:
+                    # Only this invocation's claims may execute. A concurrent
+                    # browser/server approval can observe processing, but must
+                    # never execute an already claimed tool a second time.
+                    if row.id not in claimed_ids:
                         results_by_id[row.id] = AppliedToolCallResult(
                             tool_call_id=row.id,
                             status=row.status,
@@ -1121,6 +1148,7 @@ class ToolEngineService:
             event_name="run:status",
             data={
                 "run_id": str(parent_run.id),
+                **run_event_version(parent_run),
                 "status": parent_run.status,
                 "error": parent_run.error,
             },

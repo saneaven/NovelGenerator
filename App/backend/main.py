@@ -121,6 +121,18 @@ app = FastAPI(
     description="Multi-provider LLM API with Database-backed Story Management for Novel Buds"
 )
 
+
+@app.on_event("startup")
+async def start_continuations() -> None:
+    from .services.run_pipeline import run_pipeline
+    run_pipeline.continuations.start()
+
+
+@app.on_event("shutdown")
+async def stop_continuations() -> None:
+    from .services.run_pipeline import run_pipeline
+    await run_pipeline.continuations.stop()
+
 # Register SQLAlchemy session hooks for object:changed SSE batching.
 register_object_change_event_hooks()
 register_asset_change_event_hooks()

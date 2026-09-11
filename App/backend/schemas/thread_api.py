@@ -24,6 +24,8 @@ class StartRunRequest(BaseModel):
 class ResumeRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Unmarked requests from cached pre-cutover clients are auto-continue hints.
+    source: Literal["user", "auto"] = "auto"
     run_mode: Literal["planMode", "agentMode"] | None = None
     surface: str | None = None
     context_object_ids: list[UUID] = Field(default_factory=list)
@@ -31,6 +33,8 @@ class ResumeRunRequest(BaseModel):
 
 
 class ThreadRunResponse(BaseModel):
+    run_seq: int | None = None
+    run_updated_at: str | None = None
     thread_id: UUID
     run_id: UUID
     status: str
@@ -96,6 +100,7 @@ class MessageResponse(BaseModel):
     seq: int
     seq_in_thread: int
     data: dict[str, Any]
+    is_streaming: bool = False
     attachments: list[MessageAttachmentResponse] = Field(default_factory=list)
     created_at: datetime
 
@@ -133,6 +138,10 @@ class ToolCallResponse(BaseModel):
 
 
 class ThreadInfoResponse(BaseModel):
+    latest_run_seq: int | None = None
+    latest_run_updated_at: datetime | None = None
+    latest_run_id: UUID | None = None
+    latest_run_status: str | None = None
     id: UUID
     project_id: UUID
     thread_type: Literal["agent", "subAgent", "journey"]
@@ -146,6 +155,8 @@ class ThreadInfoResponse(BaseModel):
 
 
 class ThreadMessagesResponse(BaseModel):
+    snapshot_event_id: int = 0
+    stream_events: list[dict[str, Any]] = Field(default_factory=list)
     thread: ThreadInfoResponse
     latest_run: dict[str, Any] | None
     messages: list[MessageResponse]

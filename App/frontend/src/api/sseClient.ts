@@ -165,6 +165,7 @@ export type ThreadBulkDeleteEvent = {
 export type ThreadDeletionSSEEvent = ThreadDeleteEvent | ThreadBulkDeleteEvent;
 
 export type RuntimeSSEEvent =
+  | { event: 'stream:reset'; data: Record<string, unknown> }
   | AssetChangedEvent
   | ObjectChangedEvent
   | ThreadRuntimeEvent
@@ -175,6 +176,7 @@ export type ProjectSSEEvent = RuntimeSSEEvent;
 
 interface ConnectOptions {
   onReconnect?: () => Promise<void> | void;
+  onReset?: () => Promise<void> | void;
   onActivity?: () => void;
 }
 
@@ -250,7 +252,7 @@ function parseSseFrame(frame: string): ParsedSseFrame | null {
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
     return {
-      event: { event: eventName, data: parsed } as RuntimeSSEEvent,
+      event: { event: eventName, data: { ...parsed, event_id: eventId } } as RuntimeSSEEvent,
       eventId,
     };
   } catch (error) {
@@ -405,7 +407,7 @@ function readChunkWithVisibleTimeout(
 async function openAndReadStream(
   url: string,
   signal: AbortSignal,
-  onEvent: (event: RuntimeSSEEvent, eventId: number | null) => void,
+  onEvent: (event: RuntimeSSEEvent, eventId: number | null) => Promise<void> | void,
   options?: ConnectOptions,
 ): Promise<void> {
   const token = apiClient.getAuthToken();
@@ -447,7 +449,7 @@ async function openAndReadStream(
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
         const event = parseSseFrame(frame);
-        if (event) onEvent(event.event, event.eventId);
+        if (event) await onEvent(event.event, event.eventId);
       }
     }
   } finally {
@@ -460,7 +462,7 @@ async function openAndReadStream(
 }
 
 export async function connectUserStream(
-  onEvent: (event: RuntimeSSEEvent) => void,
+  onEvent: (event: RuntimeSSEEvent) => Promise<void> | void,
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {
@@ -469,17 +471,23 @@ export async function connectUserStream(
 
   while (!signal.aborted) {
     try {
+      await options?.onReconnect?.();
       let receivedActivity = false;
       const streamUrl = buildStreamUrl(lastEventId);
       await openAndReadStream(
         streamUrl,
         signal,
-        (event, eventId) => {
+        async (event, eventId) => {
+          if (event.event === 'stream:reset') {
+            await (options?.onReset ?? options?.onReconnect)?.();
+          } else {
+            await onEvent(event);
+          }
+          // A cursor acknowledges applied events, not merely parsed frames.
           if (eventId !== null) {
             lastEventId = eventId;
             writeStreamCursor(eventId);
           }
-          onEvent(event);
         },
         {
           onActivity: () => {
@@ -496,7 +504,6 @@ export async function connectUserStream(
       }
       const delay = reconnectDelayMs(attempt);
       await sleepWithSignal(delay, signal);
-      await options?.onReconnect?.();
     } catch (error) {
       if (signal.aborted || isAbortError(error)) return;
       attempt += 1;
@@ -507,7 +514,6 @@ export async function connectUserStream(
         error,
       });
       await sleepWithSignal(delay, signal);
-      await options?.onReconnect?.();
     }
   }
 }

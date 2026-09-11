@@ -26,6 +26,8 @@ export interface ThreadInfo {
   lastError?: string | null;
   updatedAt?: string | null;
   latestRunId?: string | null;
+  latestRunSeq?: number | null;
+  latestRunUpdatedAt?: string | null;
   latestRunStatus?: ThreadStatus | null;
   latestMessageAt?: string | null;
   unresolvedToolCallCount?: number;

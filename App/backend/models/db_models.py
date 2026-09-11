@@ -1052,6 +1052,7 @@ class RunMessageModel(Base):
     role = Column(String(16), nullable=False)
     # Multilingual content: { "English": { "contentParts": [...], "reasoningDetail": {...} }, ... }
     data = Column(JSONB, nullable=False)
+    is_streaming = Column(Boolean, nullable=False, default=False, server_default=sa_text("false"))
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Parent tool call that owns this message (role='tool_call').
@@ -1086,6 +1087,43 @@ class RunMessageModel(Base):
         UniqueConstraint('run_id', 'seq', name='uq_run_messages_run_seq'),
         Index('ix_run_messages_run_created', 'run_id', 'created_at'),
         Index('ix_run_messages_thread_seq', 'thread_id', 'seq_in_thread'),
+    )
+
+
+class RuntimeEventModel(Base):
+    """Replayable user stream, also used to restore unfinished token streams."""
+    __tablename__ = "runtime_events"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=True)
+    event = Column(JSONB, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_runtime_events_user_id", "user_id", "id"),
+        Index("ix_runtime_events_thread_id", "thread_id", "id"),
+        Index("ix_runtime_events_created", "created_at"),
+    )
+
+
+class RunContinuationModel(Base):
+    """Durable work for one finalized assistant response; never owned by a tab."""
+    __tablename__ = "run_continuations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    assistant_message_id = Column(UUID(as_uuid=True), ForeignKey("run_messages.id", ondelete="CASCADE"), nullable=False)
+    state = Column(String(16), nullable=False, default="pending")
+    owner = Column(UUID(as_uuid=True), nullable=True)
+    lease_until = Column(DateTime, nullable=True)
+    next_check_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("run_id", "assistant_message_id", name="uq_run_continuation_response"),
+        CheckConstraint("state IN ('pending','applying','started','done')", name="ck_run_continuation_state"),
+        Index("ix_run_continuations_due", "state", "next_check_at"),
     )
 
 

@@ -1,7 +1,5 @@
-import { threadService, type ToolCallDecisionResponse } from '../../api/threadService';
 import type { ThreadRuntimeEvent } from '../../api/sseClient';
 import { useJourneyStore } from '../../store/journeyStore';
-import { requireSettingsFromCache } from '../../data/settings';
 import { useThreadStreamStore } from '../../store/threadStreamStore';
 import {
   refetchThreadSnapshot,
@@ -18,7 +16,6 @@ import {
   ensureStreamingMessageInCache,
   clearThreadStreamingCache,
   getMergedThreadView,
-  getMergedThreadMessages,
 } from '../../data/threads';
 import { isLiveThreadStatus, isNonLiveThreadStatus } from '../threadStreamLifecycle';
 import {
@@ -33,31 +30,7 @@ import {
 } from '../../types/thread';
 import { getByDotPath, setByDotPath } from '../../utils/dotPath';
 import { toMessageAttachment, revokeMessageAttachmentObjectUrls } from '../../utils/threadAttachments';
-
-type AutoApproveConfig = Record<string, boolean>;
-
-export function hasTerminalImagePromptCall(
-  toolCalls: ReadonlyArray<Pick<ThreadToolCall, 'toolName'>>,
-): boolean {
-  return toolCalls.some((toolCall) => toolCall.toolName === 'submit_image_prompt');
-}
-
-function getToolCategory(toolCall: ThreadToolCall): string | null {
-  const meta = toolCall.extraContent?.__tool_meta;
-  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
-    const category = (meta as Record<string, unknown>).category;
-    if (typeof category === 'string' && category) return category;
-  }
-
-  const toolName = toolCall.toolName;
-  if (toolName.startsWith('read_') || toolName.startsWith('search_') || toolName === 'get_project_tree') return 'read';
-  if (toolName.startsWith('delete_')) return 'delete';
-  if (toolName.startsWith('translate_') || toolName.startsWith('patch_translation_')) return 'translate';
-  if (toolName.startsWith('call_')) return 'sub_agent';
-  if (toolName.startsWith('generate_')) return 'generate';
-  if (toolName.startsWith('mcp__')) return 'mcp';
-  return 'write';
-}
+import { acceptThreadEvent, takeThreadSnapshotEvents, setThreadSnapshotCursor, runtimeTimestamp } from '../threadReconciliation';
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
@@ -156,10 +129,6 @@ function buildSessionKey(threadId: string, requestId: string): string {
 export class ThreadEventConsumer {
   private readonly streamingToolCallsBySession = new Map<string, Map<string, string>>();
   private readonly streamingArgBuffers = new Map<string, string>();
-  private readonly autoContinueLockByThread = new Set<string>();
-  private readonly inFlightResumeByThread = new Set<string>();
-  private readonly autoAcceptLockByThread = new Set<string>();
-  private readonly autoContinuedAssistantByThread = new Map<string, string>();
   private readonly deltaBuffer = new Map<string, Map<string, {
     threadId: string;
     runId: string;
@@ -181,10 +150,6 @@ export class ThreadEventConsumer {
     this.deltaBuffer.clear();
     this.streamingToolCallsBySession.clear();
     this.streamingArgBuffers.clear();
-    this.autoContinueLockByThread.clear();
-    this.inFlightResumeByThread.clear();
-    this.autoAcceptLockByThread.clear();
-    this.autoContinuedAssistantByThread.clear();
   }
 
   private ensureThread(threadId: string, partial?: Partial<ThreadInfo>): void {
@@ -304,6 +269,8 @@ export class ThreadEventConsumer {
     const projectId = payload.project_id ? String(payload.project_id) : existing?.projectId;
     const partial: Partial<ThreadInfo> = {
       status,
+      ...(payload.run_seq != null ? { latestRunSeq: Number(payload.run_seq) } : {}),
+      ...(payload.run_updated_at ? { latestRunUpdatedAt: String(payload.run_updated_at) } : {}),
       lastError: error,
       updatedAt: String(payload.ts ?? nowIso()),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
@@ -701,144 +668,18 @@ export class ThreadEventConsumer {
     this.refreshUnresolvedCount(threadId);
   }
 
-  private applyToolDecisionResponse(response: ToolCallDecisionResponse): void {
-    upsertSnapshotToolCall(response.toolCall);
-    this.refreshUnresolvedCount(response.toolCall.threadId);
+  restoreSnapshot(threadId: string, events: ThreadRuntimeEvent[], cursor?: number): void {
+    this.clearThreadStreamingState(threadId);
+    useThreadStreamStore.getState().clearPreexistingLiveThread(threadId);
+    setThreadSnapshotCursor(threadId, cursor);
+    // This block is synchronous: live events cannot overtake the buffered tail.
+    for (const event of events) this.consume(event, true);
+    this.flushDeltaBuffer();
+    for (const event of takeThreadSnapshotEvents(threadId, cursor)) this.consume(event);
+    this.flushDeltaBuffer();
   }
 
-  private getAutoApproveConfig(): AutoApproveConfig | null {
-    try {
-      return requireSettingsFromCache().toolCallAutoApprove;
-    } catch {
-      return null;
-    }
-  }
-
-  private isToolAutoApprovable(toolCall: ThreadToolCall, config: AutoApproveConfig): boolean {
-    const category = getToolCategory(toolCall);
-    return category !== null && Boolean(config[category]);
-  }
-
-  private async tryAutoAcceptForAssistant(threadId: string, assistantMessageId: string): Promise<void> {
-    if (this.autoAcceptLockByThread.has(threadId)) return;
-    const config = this.getAutoApproveConfig();
-    if (!config) return;
-
-    const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(assistantMessageId);
-    const pending = toolCalls.filter((tc) => tc.status === 'pending');
-    if (pending.length === 0) return;
-
-    const allAllowed = pending.every((tc) => this.isToolAutoApprovable(tc, config));
-    if (!allAllowed) return;
-
-    this.autoAcceptLockByThread.add(threadId);
-    try {
-      const response = await threadService.decideToolCallsBatch(threadId, {
-        decisions: pending.map((tc) => ({ tool_call_id: tc.id, decision: 'accept' })),
-      });
-      response.results.forEach((item) => this.applyToolDecisionResponse(item));
-    } finally {
-      this.autoAcceptLockByThread.delete(threadId);
-    }
-  }
-
-  private async checkAutoContinue(threadId: string): Promise<void> {
-    if (this.autoContinueLockByThread.has(threadId)) {
-      console.debug('[AutoContinue] Skipped: lock held', { threadId });
-      return;
-    }
-    this.autoContinueLockByThread.add(threadId);
-    try {
-      const store = useThreadStreamStore.getState();
-      const thread = store.threadsById[threadId];
-      const latestRunId = thread?.latestRunId ?? null;
-      const messages = getMergedThreadMessages(threadId);
-      const latestAssistant = [...messages]
-        .sort((a, b) => b.seqInThread - a.seqInThread)
-        .find((m) => m.role === 'assistant');
-      if (!latestAssistant) {
-        console.debug('[AutoContinue] Skipped: no assistant message', { threadId });
-        return;
-      }
-
-      // Ignore stale assistants from older runs.
-      if (latestRunId && latestAssistant.runId && latestAssistant.runId !== latestRunId) {
-        console.debug('[AutoContinue] Skipped: stale assistant from older run', { threadId, latestRunId, assistantRunId: latestAssistant.runId });
-        return;
-      }
-
-      // Prevent repeated auto-continue on the same assistant message.
-      if (this.autoContinuedAssistantByThread.get(threadId) === latestAssistant.id) {
-        console.debug('[AutoContinue] Skipped: already continued for this assistant', { threadId, assistantId: latestAssistant.id });
-        return;
-      }
-
-      const toolCalls = getMergedThreadView(threadId).getToolCallsForAssistantMessage(latestAssistant.id);
-      if (toolCalls.length === 0) {
-        console.debug('[AutoContinue] Skipped: no tool calls for assistant', { threadId, assistantId: latestAssistant.id });
-        return;
-      }
-
-      if (hasTerminalImagePromptCall(toolCalls)) {
-        console.debug('[AutoContinue] Skipped: submit_image_prompt is terminal', { threadId, assistantId: latestAssistant.id });
-        return;
-      }
-
-      if (!toolCalls.every((tc) => tc.status === 'applied' || tc.status === 'failed')) {
-        console.debug('[AutoContinue] Skipped: unresolved tool calls', { threadId, statuses: toolCalls.map((tc) => tc.status) });
-        return;
-      }
-
-      const unresolvedCount = Number(thread?.unresolvedToolCallCount ?? 0);
-      if (unresolvedCount > 0) {
-        console.debug('[AutoContinue] Skipped: thread has unresolved tool calls', { threadId, unresolvedCount });
-        return;
-      }
-
-      // Tool-call resolution above is the authoritative auto-continue signal.
-      // The thread status can lag behind SSE/hydration, so only block active or explicit pause states.
-      if (thread?.status === 'running' || thread?.status === 'paused') {
-        console.debug('[AutoContinue] Skipped: thread is not auto-continuable', { threadId, status: thread?.status });
-        return;
-      }
-
-      if (this.inFlightResumeByThread.has(threadId)) {
-        console.debug('[AutoContinue] Skipped: resume already in-flight', { threadId });
-        return;
-      }
-      this.inFlightResumeByThread.add(threadId);
-      try {
-        console.debug('[AutoContinue] Resuming parent thread', { threadId, assistantId: latestAssistant.id, toolCallCount: toolCalls.length });
-        const response = await threadService.resumeRun(threadId);
-        this.autoContinuedAssistantByThread.set(threadId, latestAssistant.id);
-        // Re-read fresh state: SSE may have advanced this resumed run while the
-        // resume HTTP call was in flight. Don't let the run-creation snapshot
-        // (running/processing) regress a status SSE already settled for the same run.
-        const current = useThreadStreamStore.getState().threadsById[threadId];
-        const sameRun = Boolean(current && response.runId && current.latestRunId === response.runId);
-        const wouldRegressToLive = current != null
-          && sameRun
-          && isNonLiveThreadStatus(current.status)
-          && !isNonLiveThreadStatus(response.threadStatus);
-        store.setThreadRuntime(threadId, wouldRegressToLive
-          ? { latestRunId: response.runId, updatedAt: nowIso() }
-          : {
-              status: response.threadStatus,
-              latestRunId: response.runId,
-              latestRunStatus: response.status,
-              updatedAt: nowIso(),
-            });
-      } catch (err) {
-        console.error('[AutoContinue] Resume failed, will retry on next event', { threadId, error: err });
-      } finally {
-        this.inFlightResumeByThread.delete(threadId);
-      }
-    } finally {
-      this.autoContinueLockByThread.delete(threadId);
-    }
-  }
-
-  async consume(event: ThreadRuntimeEvent): Promise<void> {
+  consume(event: ThreadRuntimeEvent, restoring = false): void {
     if (this.disposed) return;
     const payload = (event.data ?? {}) as Record<string, unknown>;
 
@@ -849,10 +690,6 @@ export class ThreadEventConsumer {
       removeThreadSnapshotFromCache(threadId);
       useJourneyStore.getState().clearByThreadId(threadId);
       this.clearThreadStreamingState(threadId);
-      this.autoContinueLockByThread.delete(threadId);
-      this.inFlightResumeByThread.delete(threadId);
-      this.autoAcceptLockByThread.delete(threadId);
-      this.autoContinuedAssistantByThread.delete(threadId);
       return;
     }
 
@@ -863,10 +700,6 @@ export class ThreadEventConsumer {
       for (const threadId of ids) {
         removeThreadSnapshotFromCache(threadId);
         this.clearThreadStreamingState(threadId);
-        this.autoContinueLockByThread.delete(threadId);
-        this.inFlightResumeByThread.delete(threadId);
-        this.autoAcceptLockByThread.delete(threadId);
-        this.autoContinuedAssistantByThread.delete(threadId);
       }
       useJourneyStore.getState().clearByThreadIds(ids);
       return;
@@ -874,8 +707,17 @@ export class ThreadEventConsumer {
 
     const threadId = payload.thread_id ? String(payload.thread_id) : '';
     if (!threadId) return;
+    if (!restoring && !acceptThreadEvent(threadId, event)) return;
+
+    const current = useThreadStreamStore.getState().threadsById[threadId];
+    if (payload.run_seq != null && current?.latestRunSeq != null
+      && Number(payload.run_seq) < current.latestRunSeq) return;
+    if (event.event.startsWith('run:') && current && current.latestRunId === payload.run_id
+      && current.latestRunUpdatedAt && payload.run_updated_at
+      && runtimeTimestamp(String(payload.run_updated_at)) < runtimeTimestamp(current.latestRunUpdatedAt)) return;
 
     const threadPartial: Partial<ThreadInfo> = {
+      ...(payload.run_seq != null ? { latestRunSeq: Number(payload.run_seq) } : {}),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
       ...(payload.project_id ? { projectId: String(payload.project_id) } : {}),
     };
@@ -944,7 +786,6 @@ export class ThreadEventConsumer {
         void refetchThreadSnapshot(threadId);
       }
       this.refreshUnresolvedCount(threadId);
-      void this.checkAutoContinue(threadId);
       return;
     }
 
@@ -1116,7 +957,6 @@ export class ThreadEventConsumer {
       }
 
       this.refreshUnresolvedCount(threadId);
-      await this.checkAutoContinue(threadId);
       return;
     }
 
@@ -1236,12 +1076,7 @@ export class ThreadEventConsumer {
         updatedAt: payload.ts ? String(payload.ts) : now,
       });
 
-      // Fire-and-forget: don't block the event consumer with network calls.
-      // tryAutoAccept must complete before checkAutoContinue can evaluate.
-      this.tryAutoAcceptForAssistant(threadId, messageId).then(() => {
-        this.refreshUnresolvedCount(threadId);
-        this.checkAutoContinue(threadId);
-      });
+      this.refreshUnresolvedCount(threadId);
       return;
     }
 
@@ -1281,7 +1116,6 @@ export class ThreadEventConsumer {
         void refetchThreadSnapshot(threadId);
       }
       this.refreshUnresolvedCount(threadId);
-      void this.checkAutoContinue(threadId);
       return;
     }
 
@@ -1307,4 +1141,15 @@ export class ThreadEventConsumer {
       }
     }
   }
+}
+
+let sharedConsumer: ThreadEventConsumer | null = null;
+
+export function getThreadEventConsumer(): ThreadEventConsumer {
+  return sharedConsumer ??= new ThreadEventConsumer();
+}
+
+export function disposeThreadEventConsumer(): void {
+  sharedConsumer?.dispose();
+  sharedConsumer = null;
 }
