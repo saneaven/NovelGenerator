@@ -6,7 +6,6 @@ import { notificationsQueryOptions } from '../data/notifications';
 import { seedImageRunsInCache } from '../data/imageRuns';
 import { invalidateProjectAssetQueries } from '../data/assets';
 import { EventRouter } from './eventRouter';
-import { resetThreadReconciliation } from './threadReconciliation';
 import {
   hydrateProjectRuntimeSummary,
   reconcilePreexistingLiveThreads,
@@ -29,6 +28,7 @@ class UserRuntimeConnection {
   private recoveryAttemptStartedAt: number | null = null;
   private recoveryCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private rehydrationInFlight: Promise<void> | null = null;
+  private rehydrationTriggeredByForce = false;
 
   async start(): Promise<void> {
     this.refCount += 1;
@@ -55,7 +55,6 @@ class UserRuntimeConnection {
     this.eventChain = Promise.resolve();
     this.router?.dispose();
     this.router = null;
-    resetThreadReconciliation();
   }
 
   isActive(): boolean {
@@ -68,7 +67,8 @@ class UserRuntimeConnection {
     const startedAt = Date.now();
     this.recoveryAttemptStartedAt = startedAt;
     this.scheduleRecoveryCheck(startedAt);
-    void this.rehydrateRuntimeState(`force:${reason}`).catch(() => undefined);
+    this.rehydrationTriggeredByForce = true;
+    void this.rehydrateRuntimeState(`force:${reason}`);
 
     if (!this.streamTask) {
       this.connect(`force:${reason}`);
@@ -134,7 +134,6 @@ class UserRuntimeConnection {
       await queryClient.fetchQuery({ ...notificationsQueryOptions, staleTime: 0 });
 
       if (!currentProjectId) {
-        await reconcilePreexistingLiveThreads(null, []);
         return;
       }
 
@@ -151,7 +150,6 @@ class UserRuntimeConnection {
         source,
         error,
       });
-      throw error;
     }
   }
 
@@ -166,22 +164,20 @@ class UserRuntimeConnection {
       (event: RuntimeSSEEvent) => {
         const router = this.router;
         if (!router) return;
-        this.eventChain = this.eventChain.catch(() => undefined).then(
+        this.eventChain = this.eventChain.then(
           () => router.handleEvent(event),
         ).catch((err) => {
           console.error('[RuntimeStream] Event handler error', { event: event.event, error: err });
-          throw err;
         });
-        return this.eventChain;
       },
       controller.signal,
       {
-        onReset: async () => {
-          resetThreadReconciliation();
-          await this.rehydrateRuntimeState('stream-reset');
-        },
         onReconnect: async () => {
           if (this.disposed || this.connectionGeneration !== generation) return;
+          if (this.rehydrationTriggeredByForce) {
+            this.rehydrationTriggeredByForce = false;
+            return;
+          }
           await this.rehydrateRuntimeState(`stream-reconnect:${reason}`);
         },
         onActivity: () => {

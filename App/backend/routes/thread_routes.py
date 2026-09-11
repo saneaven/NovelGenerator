@@ -21,7 +21,6 @@ from ..models.db_models import (
     RunMessageAttachmentModel,
     RunMessageModel,
     RunModel,
-    RuntimeEventModel,
     RunToolCallModel,
     Thread,
     User,
@@ -114,7 +113,6 @@ def _serialize_message(
         "seq": int(row.seq),
         "seq_in_thread": int(row.seq_in_thread),
         "data": row.data if isinstance(row.data, dict) else {},
-        "is_streaming": bool(getattr(row, "is_streaming", False)),
         "attachments": [_serialize_attachment(item) for item in attachments],
         "created_at": row.created_at,
     }
@@ -680,21 +678,11 @@ def list_project_threads_runtime(
     return ProjectThreadRuntimeResponse(threads=runtime_rows)
 
 
-def get_snapshot_db():
-    # The cursor, messages and tool states must come from the same DB snapshot.
-    db = SessionLocal()
-    try:
-        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
-        yield db
-    finally:
-        db.close()
-
-
 @router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
 def list_thread_messages(
     thread_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_snapshot_db),
+    db: Session = Depends(get_db),
 ):
     thread = require_owned_thread(db, thread_id=thread_id, user_id=current_user.id)
 
@@ -745,38 +733,13 @@ def list_thread_messages(
     )
     memory_boundary_message_id = boundary_row[0] if boundary_row else None
 
-    snapshot_event_id = db.query(func.max(RuntimeEventModel.id)).filter(
-        RuntimeEventModel.user_id == current_user.id,
-    ).scalar() or 0
-    streaming_ids = [str(m.id) for m in messages if getattr(m, "is_streaming", False)
-                     and latest_run is not None and m.run_id == latest_run.id and latest_run.status == "running"]
-    stream_events = []
-    if streaming_ids:
-        starts = db.query(RuntimeEventModel).filter(
-            RuntimeEventModel.thread_id == thread.id,
-            RuntimeEventModel.event["event"].astext == "message:start",
-            RuntimeEventModel.event["data"]["message_id"].astext.in_(streaming_ids),
-        ).all()
-        request_ids = [row.event["data"]["request_id"] for row in starts if row.event["data"].get("request_id")]
-        if request_ids:
-            stream_events = [row.event for row in db.query(RuntimeEventModel).filter(
-                RuntimeEventModel.thread_id == thread.id,
-                RuntimeEventModel.event["data"]["request_id"].astext.in_(request_ids),
-            ).order_by(RuntimeEventModel.id).all()]
-
     return ThreadMessagesResponse(
-        snapshot_event_id=snapshot_event_id,
-        stream_events=stream_events,
         thread={
             "id": thread.id,
             "project_id": thread.project_id,
             "thread_type": thread.thread_type,
             **thread_runtime_fields(db, thread),
             "status": thread.status,
-            "latest_run_id": latest_run.id if latest_run else None,
-            "latest_run_status": latest_run.status if latest_run else None,
-            "latest_run_seq": latest_run.run_seq if latest_run else None,
-            "latest_run_updated_at": latest_run.updated_at if latest_run else None,
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
             "memory_boundary_message_id": memory_boundary_message_id,
@@ -797,7 +760,7 @@ def list_thread_messages(
         }
         if latest_run
         else None,
-        messages=[{**_serialize_message(m, attachments_by_message_id), "is_streaming": str(m.id) in streaming_ids} for m in messages],
+        messages=[_serialize_message(m, attachments_by_message_id) for m in messages],
         tool_calls=[_serialize_tool_call(t) for t in tool_calls],
         image_runs=[image_run_service.serialize(db, row) for row in image_runs],
     )

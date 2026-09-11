@@ -448,6 +448,9 @@ class FakeActiveRunDb:
     def flush(self) -> None:
         return None
 
+    def refresh(self, _row: object) -> None:
+        return None
+
     def close(self) -> None:
         self.closed += 1
 

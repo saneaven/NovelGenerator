@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..runtime_version import run_event_version
 
+import asyncio
 import logging
 from typing import Any, Callable
 from uuid import UUID
@@ -301,91 +302,91 @@ class RunPipelineLifecycle:
 
     async def resume_run(self, command: ResumeRunCommand) -> RunModel:
         async with self._runtime.thread_lock(command.thread_id):
-            db = self._db_factory()
-            try:
-                thread = self._load_owned_thread_for_update(
-                    db,
-                    thread_id=command.thread_id,
-                    user_id=command.user_id,
-                )
-                run = self._latest_run_for_thread(db, thread_id=thread.id)
-                if run is None:
-                    raise HTTPException(status_code=409, detail="No run exists to resume")
-
-                # A finalized response may still be emitting its tail events. Do
-                # not lose a resume to spawn_task's active-task deduplication.
-                if self._runtime.has_active_task(run.id):
-                    raise HTTPException(status_code=409, detail="Previous execution is still finishing")
-
-                has_unresolved_tool = (
-                    db.query(RunToolCallModel.id)
-                    .filter(
-                        RunToolCallModel.run_id == run.id,
-                        RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
-                    )
-                    .first()
-                    is not None
-                )
-                if has_unresolved_tool:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Unresolved tool call exists in latest run",
-                    )
-
-                if run.status in RUN_RESUME_BLOCKED_STATUSES:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"Run status '{run.status}' is not resumable",
-                    )
-
-                if command.continuation_id is not None:
-                    job = db.query(RunContinuationModel).filter(
-                        RunContinuationModel.id == command.continuation_id,
-                        RunContinuationModel.owner == command.continuation_owner,
-                        RunContinuationModel.state == "pending",
-                    ).with_for_update().first()
-                    latest_assistant = db.query(RunMessageModel).filter(
-                        RunMessageModel.thread_id == thread.id,
-                        RunMessageModel.role == "assistant",
-                    ).order_by(RunMessageModel.seq_in_thread.desc()).first()
-                    calls = db.query(RunToolCallModel).filter(
-                        RunToolCallModel.assistant_message_id == (latest_assistant.id if latest_assistant else None),
-                    ).all()
-                    unresolved = db.query(RunToolCallModel.id).filter(
-                        RunToolCallModel.thread_id == thread.id,
-                        RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
-                    ).first() is not None
-                    if (job is None or job.run_id != run.id or latest_assistant is None
-                            or job.assistant_message_id != latest_assistant.id
-                            or not can_continue(status=run.status, tools=calls, unresolved=unresolved)):
-                        raise HTTPException(status_code=409, detail="Automatic continuation is no longer eligible")
-                    # Commit ownership of this response with the running state.
-                    job.state = "started"
-
-                if command.run_mode is not None:
-                    run.run_mode = command.run_mode
-                if command.surface is not None:
-                    run.surface = command.surface
-                if command.context_object_ids:
-                    run.context_object_ids = [str(x) for x in command.context_object_ids]
-                if command.journey_target_ids:
-                    run.journey_target_ids = [str(x) for x in command.journey_target_ids]
-
-                await self._status_transitions.apply_status_transition(
-                    db,
-                    run=run,
-                    thread=thread,
-                    status="running",
-                    error=None,
-                    emit_run_status=False,
-                )
-                db.refresh(run)
-                _ = run.thread
-            finally:
-                db.close()
-
+            run, result = await asyncio.to_thread(
+                self._prepare_resume, command, self._runtime.active_run_ids(),
+            )
+            await self._status_transitions.emit_status_transition(result, emit_run_status=False)
             await self._runtime.spawn_task(run.id, execute_loop_fn=self._execute_loop_fn)
         return run
+
+    def _prepare_resume(self, command: ResumeRunCommand, active_run_ids: frozenset[UUID]):
+        db = self._db_factory()
+        try:
+            thread = self._load_owned_thread_for_update(
+                db,
+                thread_id=command.thread_id,
+                user_id=command.user_id,
+            )
+            run = self._latest_run_for_thread(db, thread_id=thread.id)
+            if run is None:
+                raise HTTPException(status_code=409, detail="No run exists to resume")
+
+            # A finalized response may still be emitting its tail events. Do
+            # not lose a resume to spawn_task's active-task deduplication.
+            if run.id in active_run_ids:
+                raise HTTPException(status_code=409, detail="Previous execution is still finishing")
+
+            has_unresolved_tool = (
+                db.query(RunToolCallModel.id)
+                .filter(
+                    RunToolCallModel.run_id == run.id,
+                    RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
+                )
+                .first()
+                is not None
+            )
+            if has_unresolved_tool:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Unresolved tool call exists in latest run",
+                )
+
+            if run.status in RUN_RESUME_BLOCKED_STATUSES:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Run status '{run.status}' is not resumable",
+                )
+
+            if command.continuation_id is not None:
+                job = db.query(RunContinuationModel).filter(
+                    RunContinuationModel.id == command.continuation_id,
+                    RunContinuationModel.owner == command.continuation_owner,
+                    RunContinuationModel.state == "pending",
+                ).with_for_update().first()
+                latest_assistant = db.query(RunMessageModel).filter(
+                    RunMessageModel.thread_id == thread.id,
+                    RunMessageModel.role == "assistant",
+                ).order_by(RunMessageModel.seq_in_thread.desc()).first()
+                calls = db.query(RunToolCallModel).filter(
+                    RunToolCallModel.assistant_message_id == (latest_assistant.id if latest_assistant else None),
+                ).all()
+                unresolved = db.query(RunToolCallModel.id).filter(
+                    RunToolCallModel.thread_id == thread.id,
+                    RunToolCallModel.status.in_(_UNRESOLVED_RESUME_TOOL_STATUSES),
+                ).first() is not None
+                if (job is None or job.run_id != run.id or latest_assistant is None
+                        or job.assistant_message_id != latest_assistant.id
+                        or not can_continue(status=run.status, tools=calls, unresolved=unresolved)):
+                    raise HTTPException(status_code=409, detail="Automatic continuation is no longer eligible")
+                # Commit ownership of this response with the running state.
+                job.state = "started"
+
+            if command.run_mode is not None:
+                run.run_mode = command.run_mode
+            if command.surface is not None:
+                run.surface = command.surface
+            if command.context_object_ids:
+                run.context_object_ids = [str(x) for x in command.context_object_ids]
+            if command.journey_target_ids:
+                run.journey_target_ids = [str(x) for x in command.journey_target_ids]
+
+            result = self._status_transitions.persist_status_transition(
+                db, run=run, thread=thread, status="running", error=None,
+            )
+            _ = run.thread
+            return run, result
+        finally:
+            db.close()
 
     async def pause_run(self, *, thread_id: UUID, user_id: UUID) -> None:
         async with self._runtime.thread_lock(thread_id):

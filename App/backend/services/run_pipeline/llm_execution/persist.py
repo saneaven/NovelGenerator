@@ -366,7 +366,6 @@ async def persist_execution(
             run_id=run.id,
             assistant_message_id=assistant_message.id,
         ))
-    assistant_message.is_streaming = False
     db.commit()
     request.checkpoint.finalized = True
 

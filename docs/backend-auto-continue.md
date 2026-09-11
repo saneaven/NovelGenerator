@@ -31,32 +31,30 @@ may be unknown. Recovery reports an error through the existing UI; interrupted
 processing tools become failed with `outcome_unknown: true`, allowing the user
 to inspect the result and choose how to proceed.
 
-User SSE events are journaled in PostgreSQL, with per-user commit ordering.
-Snapshots contain a consistent event cursor and the active message's stream
-prefix. The client buffers events during hydration, replays only the newer tail,
-and rejects older run versions. A fresh or expired cursor triggers hydration
-from a cursor captured before the fetch. The cursor advances only after an
-event or reset has been applied successfully.
+Streaming and reconnection use the existing `run_event_bus`, SSE client and
+thread snapshot fetch behavior. Token deltas and reconnect cursors are not
+written to the database. There is no additional stream journal, snapshot replay
+layer or reconnect-wide refetch of cached threads.
 
-Completed event history is retained for one day; active message history is kept
-until completion. Cleanup runs on subscription activity, at most every five
-minutes. Monitor event-table size and database write latency: token events now
-require durable writes. This change uses the existing API process, without a
-new Redis or worker deployment.
+The coordinator's eligibility checks and resume transactions run in DB worker
+threads. Their synchronous SQL and lock waits do not block the API event loop.
+Sessions are created, used and closed in the worker; existing runtime events and
+model tasks stay on the API loop. A busy thread is skipped during polling.
 
 ## Rollout
 
 1. Finish active generations and stop the old backend before schema migration.
 2. Run `alembic upgrade head` from `App/backend`. The existing Docker backend
    entrypoint already does this. Revision `0027_backend_continuations` backfills
-   the latest waiting, processing and ready responses.
+   the latest waiting, processing and ready responses. Revision
+   `0028_remove_runtime_journal` drops the obsolete `runtime_events` table and
+   `run_messages.is_streaming` column; messages and continuation jobs remain.
 3. Deploy the matching backend and frontend together; reload any old cached
    frontend tabs so their explicit resume commands carry the new source field.
 
 Keep the current single API execution process for this rollout. Continuation
-claims and event history are shared through PostgreSQL, but the existing model,
-child-agent and image tasks still execute in process; this is not a full
-distributed task runtime or transparent recovery of in-flight provider calls.
+claims are shared through PostgreSQL. Existing model, child-agent and image
+tasks still execute in process and retain their current restart behavior.
 
 Rollback requires stopping the new backend, deploying the previous frontend and
 backend, and downgrading to `0026_image_prompt_formats`. Downgrade removes the
@@ -75,7 +73,7 @@ TEST_DATABASE_URL=postgresql+psycopg2://postgres:password@localhost/test_db \
 
 The database user needs permission to create and drop schemas. The suite covers
 browser-free continuation, two coordinators claiming one response, settings,
-pause and terminal-image behavior, abandoned work, event replay and migration
-backfill/downgrade. Local validation used PGlite through the PostgreSQL protocol
-with a single connection; native PostgreSQL multi-connection locking and live
+pause and terminal-image behavior, abandoned work, migration backfill/downgrade
+and the absence of coordinator/resume SQL on the API event loop. Local validation
+used PGlite through the PostgreSQL protocol with a single connection; native PostgreSQL multi-connection locking and live
 provider/browser end-to-end behavior remain staging checks.

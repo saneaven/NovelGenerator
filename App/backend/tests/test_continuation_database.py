@@ -21,7 +21,6 @@ from App.backend.models.db_models import (
     RunToolCallModel, RunContinuationModel,
 )
 from App.backend.services.continuation_service import ContinuationCoordinator
-from App.backend.services.durable_run_event_bus import DurableRunEventBus
 
 pytestmark = pytest.mark.skipif(not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is required")
 
@@ -42,7 +41,7 @@ def database(database_engine):
         connection.execute(text(f'CREATE SCHEMA "{schema}"'))
     scoped = engine.execution_options(schema_translate_map={None: schema})
     User.metadata.create_all(scoped)
-    factory = sessionmaker(bind=scoped, expire_on_commit=False)
+    factory = sessionmaker(bind=scoped)
     yield factory
     with engine.begin() as connection:
         connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
@@ -93,7 +92,7 @@ def coordinator(factory, calls):
             db.commit()
     stack.lifecycle._execute_loop_fn = execute
     pipeline = SimpleNamespace(_runtime=stack.runtime, _thread_lock=stack.runtime.thread_lock,
-                               _lifecycle=stack.lifecycle,
+                               _lifecycle=stack.lifecycle, _status_transitions=stack.status_transitions,
                                _apply_status_transition=stack.status_transitions.apply_status_transition)
     return ContinuationCoordinator(db_factory=factory, pipeline=pipeline)
 
@@ -212,21 +211,6 @@ def test_abandoned_tool_is_resolved_as_unknown_without_automatic_retry(database)
     assert calls == []
 
 
-def test_replays_more_than_128_events_after_bus_recreation(database):
-    ids = seed(database)
-    bus = DurableRunEventBus(database)
-    for index in range(140):
-        bus._persist(ids.user, {"event": "content:delta", "data": {"thread_id": str(ids.thread), "text": str(index)}})
-    restored = DurableRunEventBus(database)
-    _, rows = restored._read(ids.user, 0, "history")
-    assert len(rows) == 140
-    cursor = rows[99]["event_id"]
-    _, tail = restored._read(ids.user, cursor, "history")
-    assert [row["event"]["data"]["text"] for row in tail] == [str(i) for i in range(100, 140)]
-    _, other_user = restored._read(uuid4(), 0, "history")
-    assert other_user == []
-
-
 def test_waits_for_previous_task_tail_before_resuming_same_run(database):
     ids = seed(database)
     calls = []
@@ -246,17 +230,6 @@ def test_waits_for_previous_task_tail_before_resuming_same_run(database):
     assert calls == [ids.run]
 
 
-def test_initial_subscription_captures_cursor_before_snapshot_hydration(database):
-    ids = seed(database)
-    bus = DurableRunEventBus(database)
-    bus._persist(ids.user, {"event": "message:start", "data": {"thread_id": str(ids.thread), "message_id": ids.message}})
-    cursor, rows = bus._read(ids.user, None, "latest")
-    assert rows == [{"event_id": cursor, "event": {"event": "stream:reset", "data": {}}}]
-    bus._persist(ids.user, {"event": "content:delta", "data": {"thread_id": str(ids.thread), "text": "during hydration"}})
-    _, tail = bus._read(ids.user, cursor, "latest")
-    assert tail[0]["event"]["data"]["text"] == "during hydration"
-
-
 def test_migration_backfills_waiting_work_and_is_reversible(database):
     import importlib.util
     from pathlib import Path
@@ -267,16 +240,62 @@ def test_migration_backfills_waiting_work_and_is_reversible(database):
     spec = importlib.util.spec_from_file_location("migration_0027", Path(__file__).parents[1] / "alembic/versions/0027_backend_continuations.py")
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    cleanup_spec = importlib.util.spec_from_file_location(
+        "migration_0028", Path(__file__).parents[1] / "alembic/versions/0028_remove_runtime_event_journal.py",
+    )
+    cleanup = importlib.util.module_from_spec(cleanup_spec)
+    cleanup_spec.loader.exec_module(cleanup)
     with database() as db:
         connection = db.connection()
         schema = connection.get_execution_options()["schema_translate_map"][None]
         connection.execute(text(f'SET LOCAL search_path TO "{schema}"'))
         context = MigrationContext.configure(connection)
         with Operations.context(context):
+            cleanup.downgrade()
             migration.downgrade()
             migration.upgrade()
+            cleanup.upgrade()
         db.commit()
     with database() as db:
         job = db.query(RunContinuationModel).filter(RunContinuationModel.run_id == ids.run).one()
         assert job.assistant_message_id == ids.message
         assert job.state == "pending"
+        assert db.get(RunMessageModel, ids.message) is not None
+        assert db.get(RunToolCallModel, ids.call) is not None
+        from sqlalchemy import inspect
+        schema = db.get_bind().get_execution_options()["schema_translate_map"][None]
+        inspector = inspect(db.connection())
+        assert "runtime_events" not in inspector.get_table_names(schema=schema)
+        assert "is_streaming" not in {
+            column["name"] for column in inspector.get_columns("run_messages", schema=schema)
+        }
+
+
+@pytest.mark.parametrize("status,tool_status", [("waiting", "pending"), ("ready", "applied")])
+def test_continuation_sql_does_not_block_the_api_event_loop(database, status, tool_status):
+    import threading
+    from sqlalchemy import event
+
+    ids = seed(database, status=status, tool_status=tool_status)
+    calls = []
+    worker = coordinator(database, calls)
+    async def execute(run_id, **_kwargs):
+        calls.append(run_id)  # Isolate scheduler/resume SQL from provider execution.
+    worker.pipeline._lifecycle._execute_loop_fn = execute
+    api_thread = threading.get_ident()
+    blocking_statements = []
+    engine = database.kw["bind"]
+
+    def record(_conn, _cursor, statement, _params, _context, _many):
+        if threading.get_ident() == api_thread:
+            blocking_statements.append(statement.split()[0])
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        asyncio.run(worker.process(ids.job))
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert blocking_statements == [], f"SQL executed on the API loop: {blocking_statements}"
+    assert calls == ([ids.run] if status == "ready" else [])
+    with database() as db:
+        assert db.get(RunContinuationModel, ids.job).last_error is None

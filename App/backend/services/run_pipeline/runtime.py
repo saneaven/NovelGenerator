@@ -95,6 +95,9 @@ class RunPipelineRuntime:
         task = self._tasks.get(run_id)
         return task is not None and not task.done()
 
+    def active_run_ids(self) -> frozenset[UUID]:
+        return frozenset(run_id for run_id, task in self._tasks.items() if not task.done())
+
     async def wait_for_task(self, run_id: UUID) -> None:
         task = self._tasks.get(run_id)
         if task is not None:

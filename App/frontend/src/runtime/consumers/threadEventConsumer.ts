@@ -30,7 +30,6 @@ import {
 } from '../../types/thread';
 import { getByDotPath, setByDotPath } from '../../utils/dotPath';
 import { toMessageAttachment, revokeMessageAttachmentObjectUrls } from '../../utils/threadAttachments';
-import { acceptThreadEvent, takeThreadSnapshotEvents, setThreadSnapshotCursor, runtimeTimestamp } from '../threadReconciliation';
 
 function isPendingToolStatus(status: ToolCallStatus): boolean {
   return status === 'pending' || status === 'streaming' || status === 'validating' || status === 'processing' || status === 'working';
@@ -269,8 +268,6 @@ export class ThreadEventConsumer {
     const projectId = payload.project_id ? String(payload.project_id) : existing?.projectId;
     const partial: Partial<ThreadInfo> = {
       status,
-      ...(payload.run_seq != null ? { latestRunSeq: Number(payload.run_seq) } : {}),
-      ...(payload.run_updated_at ? { latestRunUpdatedAt: String(payload.run_updated_at) } : {}),
       lastError: error,
       updatedAt: String(payload.ts ?? nowIso()),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
@@ -668,18 +665,7 @@ export class ThreadEventConsumer {
     this.refreshUnresolvedCount(threadId);
   }
 
-  restoreSnapshot(threadId: string, events: ThreadRuntimeEvent[], cursor?: number): void {
-    this.clearThreadStreamingState(threadId);
-    useThreadStreamStore.getState().clearPreexistingLiveThread(threadId);
-    setThreadSnapshotCursor(threadId, cursor);
-    // This block is synchronous: live events cannot overtake the buffered tail.
-    for (const event of events) this.consume(event, true);
-    this.flushDeltaBuffer();
-    for (const event of takeThreadSnapshotEvents(threadId, cursor)) this.consume(event);
-    this.flushDeltaBuffer();
-  }
-
-  consume(event: ThreadRuntimeEvent, restoring = false): void {
+  async consume(event: ThreadRuntimeEvent): Promise<void> {
     if (this.disposed) return;
     const payload = (event.data ?? {}) as Record<string, unknown>;
 
@@ -707,17 +693,7 @@ export class ThreadEventConsumer {
 
     const threadId = payload.thread_id ? String(payload.thread_id) : '';
     if (!threadId) return;
-    if (!restoring && !acceptThreadEvent(threadId, event)) return;
-
-    const current = useThreadStreamStore.getState().threadsById[threadId];
-    if (payload.run_seq != null && current?.latestRunSeq != null
-      && Number(payload.run_seq) < current.latestRunSeq) return;
-    if (event.event.startsWith('run:') && current && current.latestRunId === payload.run_id
-      && current.latestRunUpdatedAt && payload.run_updated_at
-      && runtimeTimestamp(String(payload.run_updated_at)) < runtimeTimestamp(current.latestRunUpdatedAt)) return;
-
     const threadPartial: Partial<ThreadInfo> = {
-      ...(payload.run_seq != null ? { latestRunSeq: Number(payload.run_seq) } : {}),
       latestRunId: payload.run_id ? String(payload.run_id) : null,
       ...(payload.project_id ? { projectId: String(payload.project_id) } : {}),
     };
@@ -1141,15 +1117,4 @@ export class ThreadEventConsumer {
       }
     }
   }
-}
-
-let sharedConsumer: ThreadEventConsumer | null = null;
-
-export function getThreadEventConsumer(): ThreadEventConsumer {
-  return sharedConsumer ??= new ThreadEventConsumer();
-}
-
-export function disposeThreadEventConsumer(): void {
-  sharedConsumer?.dispose();
-  sharedConsumer = null;
 }
