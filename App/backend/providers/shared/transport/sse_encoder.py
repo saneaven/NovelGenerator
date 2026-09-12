@@ -63,3 +63,6 @@ async def iter_sse_with_heartbeat(
             next_item_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await next_item_task
+        close_iterator = getattr(iterator, "aclose", None)
+        if close_iterator is not None:
+            await close_iterator()

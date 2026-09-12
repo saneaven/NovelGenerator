@@ -50,3 +50,25 @@ def test_project_stream_preserves_standard_sse_event_format() -> None:
     assert "id: 12\n" in payload
     assert "event: run:status\n" in payload
     assert 'data: {"thread_id":"thread-1","project_id":"project-1","status":"running"}\n\n' in payload
+
+
+def test_project_stream_closes_the_subscribed_envelope_iterator() -> None:
+    async def _run() -> bool:
+        closed = asyncio.Event()
+
+        async def _envelopes():
+            try:
+                yield {
+                    "event_id": 1,
+                    "event": {"event": "run:status", "data": {"status": "running"}},
+                }
+                await asyncio.sleep(3600)
+            finally:
+                closed.set()
+
+        stream = iter_sse_with_heartbeat(_envelopes(), heartbeat_interval=1.0)
+        await anext(stream)
+        await stream.aclose()
+        return closed.is_set()
+
+    assert asyncio.run(_run()) is True

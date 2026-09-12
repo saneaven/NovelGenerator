@@ -14,6 +14,12 @@ import {
 const STREAM_RECOVERY_ACTIVITY_TIMEOUT_MS = 15_000;
 const LIFECYCLE_RECONNECT_DEBOUNCE_MS = 400;
 
+function deliveryAbortedError(): Error {
+  const error = new Error('Runtime event delivery was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
 class UserRuntimeConnection {
   private refCount = 0;
   private abortController: AbortController | null = null;
@@ -163,12 +169,23 @@ class UserRuntimeConnection {
     const task = connectUserStream(
       (event: RuntimeSSEEvent) => {
         const router = this.router;
-        if (!router) return;
-        this.eventChain = this.eventChain.then(
-          () => router.handleEvent(event),
-        ).catch((err) => {
+        if (!router) throw deliveryAbortedError();
+        const isCurrentConnection = () => (
+          !this.disposed
+          && !controller.signal.aborted
+          && this.connectionGeneration === generation
+          && this.router === router
+        );
+        const eventTask = this.eventChain.then(async () => {
+          if (!isCurrentConnection()) throw deliveryAbortedError();
+          await router.handleEvent(event);
+          if (!isCurrentConnection()) throw deliveryAbortedError();
+        });
+        this.eventChain = eventTask.catch((err) => {
+          if (err instanceof Error && err.name === 'AbortError') return;
           console.error('[RuntimeStream] Event handler error', { event: event.event, error: err });
         });
+        return eventTask;
       },
       controller.signal,
       {

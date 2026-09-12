@@ -405,7 +405,7 @@ function readChunkWithVisibleTimeout(
 async function openAndReadStream(
   url: string,
   signal: AbortSignal,
-  onEvent: (event: RuntimeSSEEvent, eventId: number | null) => void,
+  onEvent: (event: RuntimeSSEEvent, eventId: number | null) => Promise<void> | void,
   options?: ConnectOptions,
 ): Promise<void> {
   const token = apiClient.getAuthToken();
@@ -447,7 +447,7 @@ async function openAndReadStream(
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
         const event = parseSseFrame(frame);
-        if (event) onEvent(event.event, event.eventId);
+        if (event) await onEvent(event.event, event.eventId);
       }
     }
   } finally {
@@ -460,7 +460,7 @@ async function openAndReadStream(
 }
 
 export async function connectUserStream(
-  onEvent: (event: RuntimeSSEEvent) => void,
+  onEvent: (event: RuntimeSSEEvent) => Promise<void> | void,
   signal: AbortSignal,
   options?: ConnectOptions,
 ): Promise<void> {
@@ -474,12 +474,22 @@ export async function connectUserStream(
       await openAndReadStream(
         streamUrl,
         signal,
-        (event, eventId) => {
+        async (event, eventId) => {
+          try {
+            await onEvent(event);
+          } catch (error) {
+            // A first connection normally starts from "latest" and therefore
+            // has no cursor. Preserve a retry point for the event that failed
+            // instead of reconnecting from a new "latest" position and losing it.
+            if (lastEventId === null && eventId !== null) {
+              lastEventId = Math.max(0, eventId - 1);
+            }
+            throw error;
+          }
           if (eventId !== null) {
             lastEventId = eventId;
             writeStreamCursor(eventId);
           }
-          onEvent(event);
         },
         {
           onActivity: () => {

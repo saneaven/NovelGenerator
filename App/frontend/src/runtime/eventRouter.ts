@@ -29,24 +29,12 @@ export class EventRouter {
     this.notificationConsumer = new NotificationEventConsumer();
     this.imageRunConsumer = new ImageRunEventConsumer();
     this.routeTable = {
-      'asset:changed': (event) => {
-        this.assetConsumer.consume(event as AssetChangedEvent);
-      },
-      'object:changed': (event) => {
-        this.objectConsumer.consume(event as ObjectChangedEvent);
-      },
-      'image_run:update': (event) => {
-        this.imageRunConsumer.consume(event as ImageRunUpdateEvent);
-      },
-      'notification:upsert': (event) => {
-        this.notificationConsumer.consume(event as NotificationSSEEvent);
-      },
-      'notification:delete': (event) => {
-        this.notificationConsumer.consume(event as NotificationSSEEvent);
-      },
-      'notification:bulk_delete': (event) => {
-        this.notificationConsumer.consume(event as NotificationSSEEvent);
-      },
+      'asset:changed': (event) => this.assetConsumer.consume(event as AssetChangedEvent),
+      'object:changed': (event) => this.objectConsumer.consume(event as ObjectChangedEvent),
+      'image_run:update': (event) => this.imageRunConsumer.consume(event as ImageRunUpdateEvent),
+      'notification:upsert': (event) => this.notificationConsumer.consume(event as NotificationSSEEvent),
+      'notification:delete': (event) => this.notificationConsumer.consume(event as NotificationSSEEvent),
+      'notification:bulk_delete': (event) => this.notificationConsumer.consume(event as NotificationSSEEvent),
     };
   }
 
