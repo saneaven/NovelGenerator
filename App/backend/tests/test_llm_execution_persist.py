@@ -180,3 +180,36 @@ def test_run_ending_tool_state_requires_exactly_one_applied_submit_call() -> Non
         )
         assert status == "error"
         assert error
+
+
+@pytest.mark.parametrize("cache_handle", [None, "projects/cloud/locations/global/cachedContents/cache-1"])
+def test_vertex_persists_and_touches_only_actual_cache_use(monkeypatch, cache_handle) -> None:
+    saved: list[dict] = []
+    touched: list[str] = []
+    monkeypatch.setattr(persist_module, "upsert_thread_prompt_cache", lambda _db, **kwargs: saved.append(kwargs))
+    monkeypatch.setattr(persist_module, "_touch_selected_prompt_cache_row", lambda _db, row_id: touched.append(row_id))
+    request = SimpleNamespace(
+        db=object(), thread=SimpleNamespace(id="thread-1"),
+        run=SimpleNamespace(user_id="user-1", project_id="novel-1"),
+    )
+    prepared = SimpleNamespace(
+        task_config=SimpleNamespace(provider="vertex", model="gemini-2.5-flash"),
+        prepared_cache_plan=SimpleNamespace(
+            provider_strategy="gemini_explicit", selected_checkpoint_id="cp-1",
+            selected_prefix_digest="digest", selected_provider_message_count=1,
+            selected_cache_row_id="row-1", selected_cache_handle="unused-plan-handle",
+            ttl_label="1h", provider_scope="scope",
+        ),
+    )
+    snapshot = SimpleNamespace(cache_metrics={"cache_handle": cache_handle} if cache_handle else {})
+    persist_module._persist_prompt_cache_rows(request, prepared, snapshot)
+
+    if cache_handle is None:
+        assert saved == touched == []
+    else:
+        assert touched == ["row-1"]
+        assert len(saved) == 1
+        assert saved[0]["provider"] == "vertex"
+        assert saved[0]["strategy"] == "gemini_cached_content"
+        assert saved[0]["external_handle"] == cache_handle
+        assert saved[0]["meta"]["provider_scope"] == "scope"

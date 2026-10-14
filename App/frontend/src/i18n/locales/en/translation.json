@@ -377,6 +377,15 @@
         "placeholder": "AIz...",
         "hint": "Get your API key from"
       },
+      "vertex": {
+        "title": "Google Cloud (Agent Platform)",
+        "projectId": "Project ID",
+        "projectIdPlaceholder": "my-google-cloud-project",
+        "location": "Location",
+        "locationPlaceholder": "global",
+        "serviceAccountJson": "Service account JSON",
+        "serviceAccountJsonPlaceholder": "{\"type\":\"service_account\",\"project_id\":\"my-google-cloud-project\",\"client_email\":\"...\",\"private_key\":\"...\"}"
+      },
       "claude": {
         "title": "Claude (Anthropic)",
         "placeholder": "sk-ant-...",
@@ -719,6 +728,7 @@
       "providerDescriptions": {
         "openai": "Direct OpenAI API access (GPT-4o, o1, etc.)",
         "gemini": "Google Gemini with thought summaries",
+        "vertex": "Google Cloud Gemini with thought summaries",
         "claude": "Anthropic Claude with extended thinking",
         "openrouter": "Access to 100+ AI models via OpenRouter",
         "xai": "xAI Grok models for text generation",

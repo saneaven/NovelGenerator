@@ -275,3 +275,29 @@ def test_gemini_three_accepts_medium_thinking_level() -> None:
         "model",
         {"gemini_thinking_level": "medium"},
     ) == {"includeThoughts": True, "thinkingLevel": "medium"}
+
+
+@pytest.mark.parametrize("level", ["low", "medium", "high"])
+def test_gemini_argon_accepts_thinking_levels_without_budget(level: str) -> None:
+    normalized = normalize_task_config(
+        "gemini",
+        _task_config(
+            provider="gemini",
+            model="gemini-4-argon",
+            advanced={
+                "thinking_mode": "model",
+                "thinking_config": {"gemini_thinking_level": level, "gemini_budget_tokens": 2048},
+            },
+        ),
+    )
+
+    assert normalized["advanced"]["thinking_config"] == {"gemini_thinking_level": level}
+    assert GeminiProvider({})._build_thinking_config(
+        "gemini-4-argon", "model", normalized["advanced"]["thinking_config"]
+    ) == {"includeThoughts": True, "thinkingLevel": level}
+
+
+def test_gemini_argon_missing_thinking_level_uses_model_default() -> None:
+    assert GeminiProvider({})._build_thinking_config(
+        "models/gemini-4-argon", "model", {"gemini_budget_tokens": 2048}
+    ) == {"includeThoughts": True, "thinkingLevel": "medium"}

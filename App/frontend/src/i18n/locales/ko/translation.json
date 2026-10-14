@@ -377,6 +377,15 @@
         "placeholder": "AIz...",
         "hint": "API 키 받기"
       },
+      "vertex": {
+        "title": "Google Cloud (Agent Platform)",
+        "projectId": "프로젝트 ID",
+        "projectIdPlaceholder": "my-google-cloud-project",
+        "location": "리전",
+        "locationPlaceholder": "global",
+        "serviceAccountJson": "서비스 계정 JSON",
+        "serviceAccountJsonPlaceholder": "{\"type\":\"service_account\",\"project_id\":\"my-google-cloud-project\",\"client_email\":\"...\",\"private_key\":\"...\"}"
+      },
       "claude": {
         "title": "Claude (Anthropic)",
         "placeholder": "sk-ant-...",
@@ -719,6 +728,7 @@
       "providerDescriptions": {
         "openai": "직접 OpenAI API 접근 (GPT-4o, o1 등)",
         "gemini": "사고 요약이 있는 Google Gemini",
+        "vertex": "사고 요약을 지원하는 Google Cloud Gemini",
         "claude": "확장 사고가 있는 Anthropic Claude",
         "openrouter": "OpenRouter를 통해 100개 이상의 AI 모델에 접근",
         "xai": "텍스트 생성을 위한 xAI Grok 모델",

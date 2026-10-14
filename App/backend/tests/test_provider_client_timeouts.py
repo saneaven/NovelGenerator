@@ -32,6 +32,7 @@ import App.backend.providers.shared.async_openai_provider as async_openai_provid
 import App.backend.providers.claude.llm as claude_provider_module
 import App.backend.providers.custom.llm as custom_provider_module
 import App.backend.providers.openai.llm as openai_responses_provider_module
+import App.backend.providers.gemini.llm as gemini_provider_module
 from App.backend.providers.shared.async_openai_provider import AsyncOpenAIProvider
 from App.backend.providers.claude.llm import ClaudeProvider
 from App.backend.providers.shared.transport.client_timeouts import (
@@ -182,3 +183,23 @@ def test_custom_claude_provider_build_client_uses_centralized_timeout(monkeypatc
     assert captured["api_key"] == "key"
     assert captured["base_url"] == "https://gateway.invalid/claude"
     assert captured["default_headers"] == {"X-Test": "1"}
+
+
+def test_gemini_provider_uses_developer_api_and_centralized_timeout(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_genai_client(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(gemini_provider_module.genai, "Client", _fake_genai_client)
+    monkeypatch.delenv(LLM_STREAM_TIMEOUT_ENV_VAR, raising=False)
+    gemini_provider_module.GeminiProvider({"api_key": "key"})
+
+    assert captured["enterprise"] is False
+    assert captured["api_key"] == "key"
+    assert captured["http_options"].timeout == 3_600_000
+
+    monkeypatch.setenv(LLM_STREAM_TIMEOUT_ENV_VAR, "1200")
+    gemini_provider_module.GeminiProvider({"api_key": "key"})
+    assert captured["http_options"].timeout == 1_200_000

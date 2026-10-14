@@ -428,3 +428,72 @@ def test_count_gemini_conversation_tokens_passes_system_instruction(monkeypatch)
     assert captured["api_key"] == "secret"
     config = captured["config"]
     assert getattr(config, "system_instruction", None) == "system prompt"
+
+
+@pytest.mark.parametrize("entrypoint", ["text", "message", "conversation"])
+@pytest.mark.parametrize("provider", ["vertex", "custom"])
+def test_gemini_tokenizer_uses_correct_provider_credentials(monkeypatch, entrypoint, provider) -> None:
+    requested_credentials: list[str] = []
+    captured: dict[str, object] = {}
+    cloud_config = {
+        "project_id": "my-project",
+        "location": "global",
+        "service_account_json": {"type": "service_account"},
+    }
+    expected_credential_provider = "vertex" if provider == "vertex" else "gemini"
+
+    def _get_provider_config(_db, _user_id, credential_provider):
+        requested_credentials.append(credential_provider)
+        assert credential_provider == expected_credential_provider
+        if credential_provider == "vertex":
+            return cloud_config
+        return {"api_key": "gemini-key"}
+
+    async def _fake_count(payload, model, **kwargs):
+        captured["payload"] = payload
+        captured["model"] = model
+        captured["kwargs"] = kwargs
+        return 73
+
+    monkeypatch.setattr(token_count_service.credential_service, "get_provider_config", _get_provider_config)
+    monkeypatch.setattr(token_count_service, "count_tokens_gemini", _fake_count)
+    monkeypatch.setattr(token_count_service, "count_tokens_gemini_contents", _fake_count)
+    common = {
+        "user_id": uuid4(),
+        "provider": provider,
+        "model": "gemini-test",
+        **({"tokenizer_override": "gemini"} if provider == "custom" else {}),
+    }
+    message = {"role": "user", "content_parts": [{"type": "content", "text": "hello"}]}
+
+    if entrypoint == "text":
+        result = asyncio.run(token_count_service.count_text_tokens(object(), text="hello", **common))
+        assert result.token_count == 73
+        assert result.provider == provider
+        assert result.effective_tokenizer == "gemini"
+        assert result.method == "gemini_api"
+        assert result.is_estimate is False
+        assert result.fallback_used is False
+        assert captured["payload"] == "hello"
+    elif entrypoint == "message":
+        assert asyncio.run(token_count_service.count_message_tokens(object(), message=message, **common)) == 73
+        contents = captured["payload"]
+        assert contents[0].role == "user"
+        assert contents[0].parts[0].text == "hello"
+    else:
+        assert asyncio.run(
+            token_count_service.count_conversation_tokens(
+                object(), system_prompt="system prompt", conversation=[message], **common
+            )
+        ) == 73
+        assert getattr(captured["kwargs"]["config"], "system_instruction", None) == "system prompt"
+
+    assert requested_credentials == [expected_credential_provider]
+    assert captured["model"] == "gemini-test"
+    if provider == "vertex":
+        assert captured["kwargs"]["provider"] == "vertex"
+        assert captured["kwargs"]["provider_config"] == cloud_config
+        assert "api_key" not in captured["kwargs"]
+    else:
+        assert captured["kwargs"]["api_key"] == "gemini-key"
+        assert "provider_config" not in captured["kwargs"]

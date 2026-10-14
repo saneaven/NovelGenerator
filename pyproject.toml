@@ -22,7 +22,7 @@ dependencies = [
     "email-validator",
     "fastapi",
     "google-auth",
-    "google-genai",
+    "google-genai>=2.30.1",
     "greenlet",
     "h11",
     "httpcore",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 from uuid import UUID
 
@@ -318,6 +320,21 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         if isinstance(provider_settings.get("cache"), dict)
         else {}
     )
+    if not bool(getattr(task_config, "supports_image_input", True)):
+        provider_messages = _strip_tool_result_images(provider_messages)
+
+    provider_scope = None
+    if task_config.provider == "vertex":
+        provider_scope = hashlib.sha256(json.dumps({
+            "credentials": runtime.provider_config,
+            "tools": tool_offer.provider_tools if output_mode not in {"raw_output", "native_tool_call"} else None,
+            "requires_tool_call": any(bool(getattr(spec, "ends_run", False)) for spec in tool_offer.specs_by_name.values()),
+            "tool_history_limit": tool_history_limit,
+            "thinking_history_limit": thinking_history_limit,
+            "thinking_mode": thinking_mode,
+            "supports_image_input": bool(getattr(task_config, "supports_image_input", True)),
+        }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
     prepared_cache_plan = build_prepared_cache_plan(
         db=db,
         thread_id=thread.id,
@@ -326,12 +343,10 @@ async def prepare_execution(request: LLMExecutionRequest) -> PreparedLLMExecutio
         cache_settings=provider_cache_settings,
         cache_boundaries=cache_boundaries,
         provider_messages_with_internal_keys=provider_messages,
+        provider_scope=provider_scope,
     )
 
     provider_messages = _strip_internal_message_keys(provider_messages)
-
-    if not bool(getattr(task_config, "supports_image_input", True)):
-        provider_messages = _strip_tool_result_images(provider_messages)
 
     if advanced.get("_resolved_template"):
         effective_thinking_config = None

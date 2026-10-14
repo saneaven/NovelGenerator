@@ -119,9 +119,10 @@ def _persist_prompt_cache_rows(
         return
 
     metrics = _cache_metrics_dict(final_snapshot)
-    _touch_selected_prompt_cache_row(request.db, getattr(cache_plan, "selected_cache_row_id", None))
 
     provider = str(getattr(prepared.task_config, "provider", "") or "")
+    if provider not in {"gemini", "vertex"} or metrics.get("cache_handle"):
+        _touch_selected_prompt_cache_row(request.db, getattr(cache_plan, "selected_cache_row_id", None))
     selected_checkpoint_id = (
         str(metrics.get("selected_checkpoint_id") or getattr(cache_plan, "selected_checkpoint_id", "") or "").strip()
     )
@@ -131,8 +132,8 @@ def _persist_prompt_cache_rows(
     ttl_label = str(getattr(cache_plan, "ttl_label", "") or "").strip() or None
     selected_provider_message_count = getattr(cache_plan, "selected_provider_message_count", None)
 
-    if provider == "gemini" and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit":
-        cache_handle = str(metrics.get("cache_handle") or getattr(cache_plan, "selected_cache_handle", "") or "").strip()
+    if provider in {"gemini", "vertex"} and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit":
+        cache_handle = str(metrics.get("cache_handle") or "").strip()
         if cache_handle and selected_checkpoint_id and selected_prefix_digest:
             upsert_thread_prompt_cache(
                 request.db,
@@ -150,6 +151,7 @@ def _persist_prompt_cache_rows(
                     "provider_strategy": getattr(cache_plan, "provider_strategy", None),
                     "selected_provider_message_count": selected_provider_message_count,
                     "cache_metrics": metrics or None,
+                    **({"provider_scope": cache_plan.provider_scope} if getattr(cache_plan, "provider_scope", None) else {}),
                 },
             )
         return

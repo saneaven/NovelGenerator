@@ -53,6 +53,7 @@ class PreparedCachePlan:
     applied_checkpoint_ids: list[str] | None = None
     dropped_checkpoint_ids: list[str] | None = None
     ttl_label: str | None = None
+    provider_scope: str | None = None
 
     def as_metrics(self) -> dict[str, Any]:
         return {
@@ -153,6 +154,10 @@ def gemini_ttl_seconds(ttl_preset: str | None) -> str:
     return GEMINI_TTL_PRESET_TO_SECONDS.get(str(ttl_preset or "").strip(), GEMINI_TTL_PRESET_TO_SECONDS["1h"])
 
 
+def gemini_supports_explicit_cache(model: str) -> bool:
+    return not str(model or "").lower().rsplit("/", 1)[-1].startswith("gemini-4-argon")
+
+
 def ttl_to_expiry(ttl_label: str | None) -> datetime | None:
     label = str(ttl_label or "").strip()
     if not label:
@@ -213,6 +218,7 @@ def find_matching_prompt_cache_row(
     model: str,
     strategy: str,
     checkpoints: list[CacheCheckpoint],
+    provider_scope: str | None = None,
 ) -> tuple[ThreadPromptCache | None, CacheCheckpoint | None]:
     if not checkpoints:
         return None, None
@@ -223,7 +229,11 @@ def find_matching_prompt_cache_row(
         model=model,
         strategy=strategy,
     )
-    by_digest = {str(row.prefix_digest): row for row in rows}
+    by_digest = {
+        str(row.prefix_digest): row
+        for row in rows
+        if provider_scope is None or (getattr(row, "meta", None) or {}).get("provider_scope") == provider_scope
+    }
     ordered = sorted(
         checkpoints,
         key=lambda checkpoint: (
@@ -322,6 +332,7 @@ def build_prepared_cache_plan(
     cache_settings: dict[str, Any],
     cache_boundaries: Any,
     provider_messages_with_internal_keys: list[dict[str, Any]],
+    provider_scope: str | None = None,
 ) -> PreparedCachePlan:
     enabled = bool(cache_settings.get("enabled", False))
     checkpoints = remap_cache_boundaries_for_provider(cache_boundaries, provider_messages_with_internal_keys)
@@ -390,9 +401,9 @@ def build_prepared_cache_plan(
             ttl_label=str(cache_settings.get("ttl") or "5m"),
         )
 
-    if provider == "gemini":
+    if provider in {"gemini", "vertex"}:
         implicit_enabled = bool(cache_settings.get("implicit", True))
-        explicit_enabled = bool(cache_settings.get("explicit", True))
+        explicit_enabled = bool(cache_settings.get("explicit", True)) and gemini_supports_explicit_cache(model)
         if not explicit_enabled or not checkpoints:
             return PreparedCachePlan(
                 provider=provider,
@@ -412,6 +423,7 @@ def build_prepared_cache_plan(
             model=model,
             strategy="gemini_cached_content",
             checkpoints=checkpoints,
+            provider_scope=provider_scope,
         )
         selected = matched_checkpoint or _choose_longest_checkpoint(checkpoints)
         return PreparedCachePlan(
@@ -431,6 +443,7 @@ def build_prepared_cache_plan(
                 checkpoint.checkpoint_id for checkpoint in checkpoints if selected is not None and checkpoint.checkpoint_id != selected.checkpoint_id
             ],
             ttl_label=str(cache_settings.get("explicit_ttl_preset") or "1h"),
+            provider_scope=provider_scope,
         )
 
     if provider == "nanogpt":

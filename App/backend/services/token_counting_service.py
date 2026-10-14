@@ -11,6 +11,7 @@ from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types
 
+from ..providers.registry import create_llm_provider
 from ..providers.shared.base import BaseProvider
 from ..utils.outbound_http import validate_outbound_base_url
 
@@ -68,47 +69,58 @@ async def count_tokens_claude_messages(
 async def count_tokens_gemini(
     text: str,
     model: str,
-    api_key: str,
+    api_key: str | None = None,
     base_url: Optional[str] = None,
+    *,
+    provider: str = "gemini",
+    provider_config: dict[str, Any] | None = None,
 ) -> int:
     """Count tokens for Gemini models using the Google GenAI API."""
-    http_options = None
-    if base_url:
-        http_options = types.HttpOptions(baseUrl=validate_outbound_base_url(base_url))
-
-    client = genai.Client(api_key=api_key, http_options=http_options)
-    try:
-        result = client.models.count_tokens(
-            model=model,
-            contents=text,
-        )
-        return result.total_tokens
-    finally:
-        await BaseProvider._close_sdk_client(client)
+    return await count_tokens_gemini_contents(
+        text,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        provider=provider,
+        provider_config=provider_config,
+    )
 
 
 async def count_tokens_gemini_contents(
     contents: Any,
     model: str,
-    api_key: str,
+    api_key: str | None = None,
     base_url: Optional[str] = None,
     config: Any = None,
+    *,
+    provider: str = "gemini",
+    provider_config: dict[str, Any] | None = None,
 ) -> int:
     """Count tokens for Gemini models with native contents payload."""
-    http_options = None
-    if base_url:
-        http_options = types.HttpOptions(baseUrl=validate_outbound_base_url(base_url))
-
-    client = genai.Client(api_key=api_key, http_options=http_options)
+    runtime = None
+    if provider == "gemini":
+        http_options = None
+        if base_url:
+            http_options = types.HttpOptions(baseUrl=validate_outbound_base_url(base_url))
+        client = genai.Client(enterprise=False, api_key=api_key, http_options=http_options)
+    else:
+        runtime = create_llm_provider(provider, provider_config or {})
+        if not runtime.validate_config():
+            raise ValueError(f"Invalid configuration for provider '{provider}'")
+        client = runtime._ensure_client()
     try:
-        result = client.models.count_tokens(
+        result = await client.aio.models.count_tokens(
             model=model,
             contents=contents,
             **({"config": config} if config is not None else {}),
         )
         return int(result.total_tokens)
     finally:
-        await BaseProvider._close_sdk_client(client)
+        if runtime is not None:
+            await runtime.aclose()
+        else:
+            await BaseProvider._close_sdk_client(client.aio)
+            await BaseProvider._close_sdk_client(client)
 
 
 __all__ = [

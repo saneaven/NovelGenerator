@@ -266,3 +266,72 @@ def test_gemini_ttl_seconds_uses_presets() -> None:
     assert gemini_ttl_seconds("5m") == "300s"
     assert gemini_ttl_seconds("6h") == "21600s"
     assert gemini_ttl_seconds("unknown") == "3600s"
+
+
+def test_vertex_cache_plan_reuses_gemini_strategy_and_existing_digest(monkeypatch) -> None:
+    from App.backend.services import prompt_cache_service as cache_service
+
+    seen: dict = {}
+
+    def find_row(*_args, **kwargs):
+        seen.update(kwargs)
+        return None, None
+
+    monkeypatch.setattr(cache_service, "find_matching_prompt_cache_row", find_row)
+    plan = cache_service.build_prepared_cache_plan(
+        db=object(), thread_id="thread-1", provider="vertex", model="gemini-2.5-flash",
+        cache_settings={"enabled": True, "explicit": True, "explicit_ttl_preset": "1h"},
+        cache_boundaries=[{
+            "checkpoint_id": "cp-1", "block_id": "block-1", "block_order": 1,
+            "rendered_message_count": 1, "prefix_digest_raw": "existing-prefix-digest",
+        }],
+        provider_messages_with_internal_keys=[{"role": "system"}, {"role": "user", "_render_index": 0}],
+        provider_scope="cloud-scope",
+    )
+
+    assert plan.provider_strategy == "gemini_explicit"
+    assert plan.selected_prefix_digest == "existing-prefix-digest"
+    assert plan.selected_provider_message_count == 1
+    assert plan.provider_scope == seen["provider_scope"] == "cloud-scope"
+    assert "provider_scope" not in plan.as_metrics()
+
+
+def test_vertex_cache_lookup_requires_matching_connection_scope(monkeypatch) -> None:
+    from App.backend.services import prompt_cache_service as cache_service
+
+    checkpoint = cache_service.CacheCheckpoint(
+        checkpoint_id="cp-1", block_id="block-1", block_order=1, rendered_message_count=1,
+        provider_message_count=1, last_seq_in_thread=None, last_role="user", prefix_label="prefix",
+        prefix_digest_raw="digest",
+    )
+    for stored_scope in (None, "old-project", "current-project"):
+        row = SimpleNamespace(prefix_digest="digest", meta={"provider_scope": stored_scope})
+        monkeypatch.setattr(cache_service, "list_active_prompt_cache_rows", lambda *_args, **_kwargs: [row])
+        matched, matched_checkpoint = cache_service.find_matching_prompt_cache_row(
+            object(), thread_id="thread-1", provider="vertex", model="gemini-2.5-flash",
+            strategy="gemini_cached_content", checkpoints=[checkpoint], provider_scope="current-project",
+        )
+        assert matched is (row if stored_scope == "current-project" else None)
+        assert matched_checkpoint is (checkpoint if stored_scope == "current-project" else None)
+
+
+def test_argon_uses_implicit_cache_without_cached_content_lookup(monkeypatch) -> None:
+    from App.backend.services import prompt_cache_service as cache_service
+
+    def fail_lookup(*_args, **_kwargs):
+        raise AssertionError("Argon does not support explicit caches")
+
+    monkeypatch.setattr(cache_service, "find_matching_prompt_cache_row", fail_lookup)
+    for provider in ("gemini", "vertex"):
+        plan = cache_service.build_prepared_cache_plan(
+            db=object(), thread_id="thread-1", provider=provider, model="gemini-4-argon",
+            cache_settings={"enabled": True, "explicit": True},
+            cache_boundaries=[{
+                "checkpoint_id": "cp-1", "block_id": "block-1", "block_order": 1,
+                "rendered_message_count": 1, "prefix_digest_raw": "digest",
+            }],
+            provider_messages_with_internal_keys=[{"role": "system"}, {"role": "user", "_render_index": 0}],
+        )
+        assert plan.provider_strategy == "gemini_implicit"
+        assert plan.selected_cache_handle is None
+        assert plan.applied_checkpoint_ids == []

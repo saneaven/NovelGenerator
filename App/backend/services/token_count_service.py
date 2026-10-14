@@ -122,6 +122,25 @@ def _extract_api_key(provider_config: dict[str, Any]) -> str:
     return str(provider_config.get("api_key") or provider_config.get("apiKey") or "").strip()
 
 
+def _gemini_count_credentials(
+    db: Session,
+    user_id: UUID,
+    provider: str,
+    allow_custom_base_url: bool,
+) -> dict[str, Any]:
+    target_provider = "vertex" if provider == "vertex" else "gemini"
+    provider_config = credential_service.get_provider_config(db, user_id, target_provider)
+    if target_provider == "vertex":
+        return {"provider": target_provider, "provider_config": provider_config}
+
+    api_key = _extract_api_key(provider_config)
+    if not api_key:
+        raise CredentialServiceError("Credential for provider 'gemini' not found")
+    base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
+    base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
+    return {"api_key": api_key, "base_url": base_url}
+
+
 async def count_text_tokens(
     db: Session,
     *,
@@ -187,14 +206,8 @@ async def count_text_tokens(
 
     if tokenizer == "gemini":
         try:
-            target_provider = "gemini"
-            provider_config = credential_service.get_provider_config(db, user_id, target_provider)
-            api_key = _extract_api_key(provider_config)
-            if not api_key:
-                raise CredentialServiceError("Credential for provider 'gemini' not found")
-            base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
-            base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
-            count = await count_tokens_gemini(safe_text, safe_model, api_key, base_url)
+            credentials = _gemini_count_credentials(db, user_id, provider_name, allow_custom_base_url)
+            count = await count_tokens_gemini(safe_text, safe_model, **credentials)
             return TokenCountResult(
                 token_count=count,
                 provider=provider_name,
@@ -640,13 +653,9 @@ async def count_gemini_message_tokens(
     model: str,
     message: dict[str, Any],
     allow_custom_base_url: bool = True,
+    provider: str = "gemini",
 ) -> int:
-    provider_config = credential_service.get_provider_config(db, user_id, "gemini")
-    api_key = _extract_api_key(provider_config)
-    if not api_key:
-        raise CredentialServiceError("Credential for provider 'gemini' not found")
-    base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
-    base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
+    credentials = _gemini_count_credentials(db, user_id, provider, allow_custom_base_url)
 
     content = _build_gemini_content(message)
     if content is None:
@@ -655,8 +664,7 @@ async def count_gemini_message_tokens(
     return await count_tokens_gemini_contents(
         [content],
         model=model,
-        api_key=api_key,
-        base_url=base_url,
+        **credentials,
     )
 
 
@@ -668,13 +676,9 @@ async def count_gemini_conversation_tokens(
     system_prompt: str,
     conversation: list[dict[str, Any]],
     allow_custom_base_url: bool = True,
+    provider: str = "gemini",
 ) -> int:
-    provider_config = credential_service.get_provider_config(db, user_id, "gemini")
-    api_key = _extract_api_key(provider_config)
-    if not api_key:
-        raise CredentialServiceError("Credential for provider 'gemini' not found")
-    base_url_raw = provider_config.get("base_url") if allow_custom_base_url else None
-    base_url = str(base_url_raw).strip() if isinstance(base_url_raw, str) and base_url_raw.strip() else None
+    credentials = _gemini_count_credentials(db, user_id, provider, allow_custom_base_url)
 
     contents = [
         built
@@ -688,9 +692,8 @@ async def count_gemini_conversation_tokens(
     return await count_tokens_gemini_contents(
         contents,
         model=model,
-        api_key=api_key,
-        base_url=base_url,
         config=config,
+        **credentials,
     )
 
 
@@ -738,6 +741,7 @@ async def count_message_tokens(
                     model=safe_model,
                     message=message,
                     allow_custom_base_url=allow_custom_base_url,
+                    provider=provider_name,
                 )
             )
         except Exception as exc:
@@ -829,6 +833,7 @@ async def count_conversation_tokens(
                     system_prompt=system_prompt,
                     conversation=conversation,
                     allow_custom_base_url=allow_custom_base_url,
+                    provider=provider_name,
                 )
             )
         except Exception as exc:

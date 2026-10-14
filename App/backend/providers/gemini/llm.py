@@ -14,7 +14,8 @@ from ..shared.parsing.final_mappers import _to_raw_dict
 from ..shared.parsing.multimodal import build_gemini_binary_parts, get_canonical_content_parts
 from ..shared.parsing.native_tool_calls_parser import NativeToolCallsStreamParser
 from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
-from ...services.prompt_cache_service import gemini_ttl_seconds
+from ..shared.transport.client_timeouts import get_llm_stream_timeout
+from ...services.prompt_cache_service import gemini_supports_explicit_cache, gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
 
 GEMINI_THOUGHT_SIGNATURE_EXTRA_KEY = "gemini_thought_signature"
@@ -57,10 +58,11 @@ class GeminiProvider(BaseProvider):
         return bool(self.api_key)
 
     def _build_client(self) -> genai.Client:
-        http_options = None
+        timeout = get_llm_stream_timeout()
+        http_options = types.HttpOptions(timeout=int(timeout.read * 1000))
         if self.base_url:
-            http_options = types.HttpOptions(baseUrl=self.base_url)
-        return genai.Client(api_key=self.api_key, http_options=http_options)
+            http_options.base_url = self.base_url
+        return genai.Client(enterprise=False, api_key=self.api_key, http_options=http_options)
 
     def _ensure_client(self) -> genai.Client:
         if self._client is None:
@@ -70,11 +72,18 @@ class GeminiProvider(BaseProvider):
     async def aclose(self) -> None:
         client = self._client
         self._client = None
+        if client is not None:
+            await self._call_close_method(getattr(client, "aio", None), "aclose", "client.aio.aclose")
         await self._close_sdk_client(client)
 
     def read_reasoning_detail(self, final_snapshot: Any, advanced: dict[str, Any]) -> dict[str, Any] | None:
         parts = []
-        for detail in self._snapshot_reasoning_details(final_snapshot):
+        details = self._snapshot_reasoning_details(final_snapshot)
+        has_signed_output = any(
+            detail.get("thought") is False and detail.get("thought_signature")
+            for detail in details
+        )
+        for detail in details:
             if not isinstance(detail, dict):
                 continue
             if detail.get("thought") is True:
@@ -82,13 +91,16 @@ class GeminiProvider(BaseProvider):
                 continue
             if isinstance(detail.get("thought_signature"), str) and detail.get("thought_signature"):
                 parts.append(detail)
+                continue
+            if has_signed_output and detail.get("thought") is False and isinstance(detail.get("text"), str):
+                parts.append(detail)
 
         reasoning_text = self._reasoning_text_from_parts(getattr(final_snapshot, "content_parts", None))
         if not parts and not reasoning_text:
             return None
 
         data: dict[str, Any] = {"parts": parts}
-        meta: dict[str, Any] = {"provider": "gemini"}
+        meta: dict[str, Any] = {"provider": self.name}
         if reasoning_text:
             data["reasoning_text"] = reasoning_text
             meta["thinking_display"] = "reasoning_text"
@@ -225,6 +237,10 @@ class GeminiProvider(BaseProvider):
     def _is_gemini25(model: str) -> bool:
         return "gemini-2.5" in model.lower()
 
+    @staticmethod
+    def _is_gemini4_argon(model: str) -> bool:
+        return model.lower().rsplit("/", 1)[-1].startswith("gemini-4-argon")
+
     def _build_thinking_config(
         self, model: str, thinking_mode: Optional[str], thinking_config: Optional[Dict]
     ) -> Optional[Dict]:
@@ -241,8 +257,8 @@ class GeminiProvider(BaseProvider):
 
         config: Dict[str, object] = {"includeThoughts": True}
 
-        if self._is_gemini3(model):
-            level = "high"
+        if self._is_gemini3(model) or self._is_gemini4_argon(model):
+            level = "medium" if self._is_gemini4_argon(model) else "high"
             if thinking_config:
                 lvl = thinking_config.get("gemini_thinking_level")
                 if lvl in ("low", "medium", "high"):
@@ -272,6 +288,8 @@ class GeminiProvider(BaseProvider):
         contents: List[types.Content],
         system_instruction: Optional[types.Content],
         ttl_seconds: str,
+        tools: Any = None,
+        tool_config: Any = None,
     ) -> Optional[str]:
         aio_client = getattr(client, "aio", None)
         caches_api = getattr(aio_client, "caches", None) if aio_client is not None else getattr(client, "caches", None)
@@ -285,6 +303,10 @@ class GeminiProvider(BaseProvider):
         }
         if system_instruction is not None:
             config_payload["system_instruction"] = _to_raw_dict(system_instruction)
+        if tools is not None:
+            config_payload["tools"] = [_to_raw_dict(tool) for tool in tools]
+        if tool_config is not None:
+            config_payload["tool_config"] = tool_config
 
         create_result = create_fn(model=model, config=config_payload)
         cache = await create_result if inspect.isawaitable(create_result) else create_result
@@ -344,6 +366,7 @@ class GeminiProvider(BaseProvider):
             mapped_role = "user" if role == "user" else "model"
 
             reasoning_parts: List[types.Part] = []
+            signed_output_parts: List[types.Part] = []
             if role == "assistant" and isinstance(reasoning_detail, dict):
                 reasoning_data = reasoning_detail.get("data") if isinstance(reasoning_detail.get("data"), dict) else {}
                 raw_parts = reasoning_data.get("parts")
@@ -366,12 +389,20 @@ class GeminiProvider(BaseProvider):
                         if "text" not in kwargs and "thought_signature" not in kwargs:
                             continue
                         try:
-                            reasoning_parts.append(types.Part.model_validate(kwargs))
+                            converted_part = types.Part.model_validate(kwargs)
                         except Exception:
                             try:
-                                reasoning_parts.append(types.Part.model_validate(part))
+                                converted_part = types.Part.model_validate(part)
                             except Exception:
                                 continue
+                        if part.get("thought") is False:
+                            signed_output_parts.append(converted_part)
+                        else:
+                            reasoning_parts.append(converted_part)
+
+            preserve_signed_output = bool(signed_output_parts) and "".join(
+                part.text or "" for part in signed_output_parts
+            ) == text
 
             if role == "assistant" and tool_calls:
                 parts = []
@@ -379,9 +410,12 @@ class GeminiProvider(BaseProvider):
                     parts.extend(reasoning_parts)
                 for part in build_gemini_binary_parts(canonical_parts):
                     if part.get("type") == "text":
-                        parts.append(types.Part.from_text(text=str(part.get("text") or "")))
+                        if not preserve_signed_output:
+                            parts.append(types.Part.from_text(text=str(part.get("text") or "")))
                     elif part.get("type") == "binary":
                         parts.append(types.Part.from_bytes(data=part.get("data"), mime_type=str(part.get("mime_type") or "")))
+                if preserve_signed_output:
+                    parts.extend(signed_output_parts)
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -399,13 +433,16 @@ class GeminiProvider(BaseProvider):
                     parser_messages.append({"role": "assistant", "content": text})
             else:
                 converted_parts = build_gemini_binary_parts(canonical_parts)
-                if converted_parts or reasoning_parts:
+                if converted_parts or reasoning_parts or preserve_signed_output:
                     parts = list(reasoning_parts)
                     for part in converted_parts:
                         if part.get("type") == "text":
-                            parts.append(types.Part.from_text(text=str(part.get("text") or "")))
+                            if not preserve_signed_output:
+                                parts.append(types.Part.from_text(text=str(part.get("text") or "")))
                         elif part.get("type") == "binary":
                             parts.append(types.Part.from_bytes(data=part.get("data"), mime_type=str(part.get("mime_type") or "")))
+                    if preserve_signed_output:
+                        parts.extend(signed_output_parts)
                     contents.append(types.Content(role=mapped_role, parts=parts))
                     if mapped_role == "model" and text:
                         parser_messages.append({"role": "assistant", "content": text})
@@ -444,7 +481,7 @@ class GeminiProvider(BaseProvider):
     ) -> AsyncGenerator[ProviderEvent, None]:
         del provider_preference, custom_kind, verbosity
         if not self.validate_config():
-            yield self._error_event("Gemini API key is required")
+            yield self._error_event(f"{self.display_name} configuration is required")
             return
 
         client = self._ensure_client()
@@ -457,9 +494,9 @@ class GeminiProvider(BaseProvider):
             yield self._error_event("Gemini stream request has no messages")
             return
 
-        config_dict: Dict[str, object] = {
-            "temperature": temperature,
-        }
+        config_dict: Dict[str, object] = {}
+        if not self._is_gemini4_argon(model):
+            config_dict["temperature"] = temperature
         if max_tokens is not None:
             config_dict["maxOutputTokens"] = max_tokens
         if system_instruction:
@@ -477,6 +514,7 @@ class GeminiProvider(BaseProvider):
         explicit_cache_enabled = (
             bool(cache_config.get("enabled", False))
             and bool(cache_config.get("explicit", True))
+            and gemini_supports_explicit_cache(model)
             and str(getattr(cache_plan, "provider_strategy", "") or "") == "gemini_explicit"
         )
         selected_prefix_count = int(getattr(cache_plan, "selected_provider_message_count", 0) or 0)
@@ -490,26 +528,6 @@ class GeminiProvider(BaseProvider):
             if explicit_cache_enabled
             else ""
         )
-
-        if explicit_cache_enabled and selected_prefix_count > 0 and selected_prefix_count < len(contents):
-            if not selected_cache_handle:
-                ttl_seconds = gemini_ttl_seconds(str(getattr(cache_plan, "ttl_label", None) or cache_config.get("explicit_ttl_preset") or "1h"))
-                selected_cache_handle = (
-                    await self._create_cached_content(
-                        client=client,
-                        model=model,
-                        contents=contents[:selected_prefix_count],
-                        system_instruction=system_instruction,
-                        ttl_seconds=ttl_seconds,
-                    )
-                    or ""
-                )
-            if selected_cache_handle:
-                config_dict["cached_content"] = selected_cache_handle
-                contents = contents[selected_prefix_count:]
-                if system_instruction is not None:
-                    system_instruction = None
-                    config_dict.pop("systemInstruction", None)
 
         if tools:
             function_declarations: List[types.FunctionDeclaration] = []
@@ -534,6 +552,35 @@ class GeminiProvider(BaseProvider):
             config_dict["tool_config"] = {
                 "function_calling_config": {"mode": mode}
             }
+            config_dict["automatic_function_calling"] = {"disable": True}
+
+        cached_prefix_count = 0
+        if explicit_cache_enabled and selected_prefix_count > 0:
+            prefix_messages = [message for message in messages if message.get("role", "user") != "system"][:selected_prefix_count]
+            cached_prefix_count = len(self._convert_messages(prefix_messages)["contents"])
+        if 0 < cached_prefix_count < len(contents):
+            if not selected_cache_handle:
+                ttl_seconds = gemini_ttl_seconds(str(getattr(cache_plan, "ttl_label", None) or cache_config.get("explicit_ttl_preset") or "1h"))
+                selected_cache_handle = (
+                    await self._create_cached_content(
+                        client=client,
+                        model=model,
+                        contents=contents[:cached_prefix_count],
+                        system_instruction=system_instruction,
+                        ttl_seconds=ttl_seconds,
+                        **({"tools": config_dict.get("tools"), "tool_config": config_dict.get("tool_config")} if self.name == "vertex" else {}),
+                    )
+                    or ""
+                )
+            if selected_cache_handle:
+                config_dict["cached_content"] = selected_cache_handle
+                contents = contents[cached_prefix_count:]
+                config_dict.pop("systemInstruction", None)
+                if self.name == "vertex":
+                    config_dict.pop("tools", None)
+                    config_dict.pop("tool_config", None)
+        else:
+            selected_cache_handle = ""
 
         config = types.GenerateContentConfig.model_validate(config_dict)
 
@@ -558,6 +605,8 @@ class GeminiProvider(BaseProvider):
         captured_cache_metrics: Optional[Dict[str, Any]] = None
         last_finish_reason: Any = None
         tool_finish_emitted = False
+        output_parts: List[Dict[str, Any]] = []
+        has_output_signature = False
 
         try:
             history = contents[:-1]
@@ -684,6 +733,15 @@ class GeminiProvider(BaseProvider):
                             continue
 
                         text = getattr(part, "text", None)
+                        signature = self._part_thought_signature(part)
+                        if text or signature:
+                            output_part: Dict[str, Any] = {"thought": False}
+                            if text:
+                                output_part["text"] = text
+                            if signature:
+                                output_part["thought_signature"] = signature
+                                has_output_signature = True
+                            output_parts.append(output_part)
                         if not text:
                             continue
 
@@ -726,6 +784,9 @@ class GeminiProvider(BaseProvider):
 
             if final_thinking:
                 yield ProviderEvent(kind="delta", delta=DeltaPayload(thinking_delta=final_thinking))
+
+            if has_output_signature:
+                yield ProviderEvent(kind="delta", delta=DeltaPayload(reasoning_detail_delta=output_parts))
 
             if native_tc_parser:
                 tail_text, tail_tool_calls = native_tc_parser.finalize()

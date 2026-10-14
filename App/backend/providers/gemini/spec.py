@@ -103,12 +103,12 @@ SPEC = ProviderSpec(
                             options=("low", "medium", "high"),
                             when=(
                                 Condition(op="eq", path="advanced.thinking_mode", value="model"),
-                                Condition(op="regex", path="model", pattern=r"(?i)gemini-3"),
+                                Condition(op="regex", path="model", pattern=r"(?i)gemini-[34]"),
                             ),
                             ui=UIHint(
                                 widget="select",
-                                label_key="settings.taskConfig.thinking_config.thinkingLevelGemini3",
-                                help_key="settings.taskConfig.thinking_config.thinkingLevelGemini3Hint",
+                                label_key="settings.taskConfig.thinking_config.thinkingLevel",
+                                help_key="settings.taskConfig.thinking_config.thinkingLevelHint",
                                 order=20,
                             ),
                         ),

@@ -14,6 +14,7 @@ _BUILTINS = (
     "openai",
     "nanogpt",
     "gemini",
+    "vertex",
     "claude",
     "openrouter",
     "xai",

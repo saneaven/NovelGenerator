@@ -135,6 +135,7 @@ def _ensure_provider_stubs() -> None:
     if "App.backend.services.prompt_cache_service" not in sys.modules:
         fake_prompt_cache_service = types.ModuleType("App.backend.services.prompt_cache_service")
         fake_prompt_cache_service.gemini_ttl_seconds = lambda _ttl_preset: "3600s"
+        fake_prompt_cache_service.gemini_supports_explicit_cache = lambda _model: True
         sys.modules["App.backend.services.prompt_cache_service"] = fake_prompt_cache_service
 
 
