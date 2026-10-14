@@ -504,7 +504,15 @@ class GeminiProvider(BaseProvider):
 
         service_tier = self._service_tier_from_provider_settings(provider_settings)
         if service_tier:
-            config_dict["service_tier"] = service_tier
+            if self.name == "vertex":
+                config_dict["http_options"] = {
+                    "headers": {
+                        "X-Vertex-AI-LLM-Request-Type": "shared",
+                        "X-Vertex-AI-LLM-Shared-Request-Type": service_tier,
+                    },
+                }
+            else:
+                config_dict["service_tier"] = service_tier
 
         thinking_cfg = self._build_thinking_config(model, thinking_mode, thinking_config)
         if thinking_cfg:
@@ -584,9 +592,11 @@ class GeminiProvider(BaseProvider):
 
         config = types.GenerateContentConfig.model_validate(config_dict)
 
+        logged_config = _to_raw_dict(config)
+        logged_config.pop("http_options", None)
         raw_req = {
             "model": model,
-            "config": _to_raw_dict(config),
+            "config": logged_config,
             "history": [_to_raw_dict(c) for c in contents[:-1]] if len(contents) > 1 else [],
             "current_input": _to_raw_dict(contents[-1]) if contents else {},
         }

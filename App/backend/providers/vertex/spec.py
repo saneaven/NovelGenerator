@@ -8,8 +8,6 @@ from ..shared.contracts import FieldSpec, ObjectSpec, ProviderSpec, ProviderUI, 
 
 _gemini_llm = GEMINI_SPEC.llm
 assert _gemini_llm is not None
-_advanced = _gemini_llm.common_task_config.fields["advanced"]
-_provider_settings = _advanced.fields["provider_settings"]
 
 SPEC = ProviderSpec(
     id="vertex",
@@ -60,20 +58,6 @@ SPEC = ProviderSpec(
             fields={
                 **_gemini_llm.common_task_config.fields,
                 "provider": FieldSpec(kind="literal", const="vertex", expose=False),
-                "advanced": replace(
-                    _advanced,
-                    fields={
-                        **_advanced.fields,
-                        "provider_settings": replace(
-                            _provider_settings,
-                            fields={
-                                key: value
-                                for key, value in _provider_settings.fields.items()
-                                if key != "service_tier"
-                            },
-                        ),
-                    },
-                ),
             },
         ),
     ),

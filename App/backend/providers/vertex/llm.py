@@ -92,11 +92,6 @@ class VertexProvider(GeminiProvider):
         )
 
     @staticmethod
-    def _service_tier_from_provider_settings(provider_settings: dict[str, Any] | None) -> None:
-        del provider_settings
-        return None
-
-    @staticmethod
     def _text_model_id(name: Any) -> str | None:
         if not isinstance(name, str):
             return None

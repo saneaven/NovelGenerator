@@ -8,6 +8,9 @@ from typing import Any
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from google.auth.credentials import AnonymousCredentials
+from google.genai import types
+import httpx
 import pytest
 
 from App.backend.providers.gemini.llm import GeminiProvider
@@ -38,7 +41,7 @@ def service_account_config() -> dict[str, Any]:
     }
 
 
-def test_vertex_spec_reuses_gemini_llm_without_image_embedding_or_service_tier() -> None:
+def test_vertex_spec_reuses_gemini_llm_without_image_or_embedding() -> None:
     vertex = require_spec("vertex")
     gemini = require_spec("gemini")
     assert vertex.llm is not None
@@ -64,8 +67,21 @@ def test_vertex_spec_reuses_gemini_llm_without_image_embedding_or_service_tier()
     assert normalized["provider"] == "vertex"
     assert normalized["supports_image_input"] is True
     assert normalized["advanced"]["thinking_config"] == {"gemini_thinking_level": "medium"}
-    assert "service_tier" not in normalized["advanced"]["provider_settings"]
-    assert "service_tier" in gemini.llm.common_task_config.fields["advanced"].fields["provider_settings"].fields
+    assert normalized["advanced"]["provider_settings"]["service_tier"] == "flex"
+    tier = vertex.llm.common_task_config.fields["advanced"].fields["provider_settings"].fields["service_tier"]
+    gemini_tier = gemini.llm.common_task_config.fields["advanced"].fields["provider_settings"].fields["service_tier"]
+    assert tier.options == ("default", "flex", "priority")
+    assert tier.ui == gemini_tier.ui
+
+
+@pytest.mark.parametrize("tier", ["default", "flex", "priority"])
+def test_vertex_task_config_preserves_service_tiers(tier) -> None:
+    normalized = normalize_task_config("vertex", {
+        "provider": "vertex",
+        "model": "gemini-2.5-flash",
+        "advanced": {"provider_settings": {"service_tier": tier}},
+    })
+    assert normalized["advanced"]["provider_settings"]["service_tier"] == tier
 
 
 def test_vertex_credentials_and_prepared_config_remain_serializable(service_account_config) -> None:
@@ -197,7 +213,7 @@ def test_vertex_catalog_uses_async_publisher_models_and_filters_nontext(monkeypa
     }
 
 
-def test_vertex_stream_reuses_gemini_tools_thinking_image_input_and_omits_tier(monkeypatch, service_account_config) -> None:
+def test_vertex_stream_reuses_gemini_tools_thinking_image_input_without_tier_in_body(monkeypatch, service_account_config) -> None:
     monkeypatch.setattr(vertex_llm.genai, "Client", lambda **_kwargs: SimpleNamespace())
     binary_builder = GeminiProvider._convert_messages.__globals__["build_gemini_binary_parts"]
     monkeypatch.setattr(binary_builder.__globals__["chat_attachment_service"], "load_attachment_bytes", lambda _key: b"image-bytes")
@@ -228,10 +244,99 @@ def test_vertex_stream_reuses_gemini_tools_thinking_image_input_and_omits_tier(m
     request = event.raw_request
     assert request["model"] == "gemini-2.5-flash"
     assert request["config"]["service_tier"] is None
+    assert "http_options" not in request["config"]
     assert request["config"]["thinking_config"]["thinking_budget"] == 128
     assert request["config"]["tools"][0]["function_declarations"][0]["name"] == "save_scene"
     assert request["current_input"]["parts"][1]["inline_data"]["data"] == b"image-bytes"
     assert "service_account_json" not in str(request)
+
+
+def _run_vertex_mock_requests(monkeypatch, service_account_config, tiers):
+    requests: list[httpx.Request] = []
+
+    def mock_response(request):
+        requests.append(request)
+        response = {
+            "candidates": [{
+                "index": 0,
+                "content": {"role": "model", "parts": [{"text": "Generated scene"}]},
+                "finishReason": "STOP",
+            }],
+            "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 3, "totalTokenCount": 8},
+        }
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            text=f"data: {json.dumps(response)}\n\n",
+        )
+
+    async def run_requests():
+        credentials = AnonymousCredentials()
+        credentials.token = "test-token"
+        transport = httpx.MockTransport(mock_response)
+        client = vertex_llm.genai.Client(
+            enterprise=True,
+            project="target-project",
+            location="global",
+            credentials=credentials,
+            http_options=types.HttpOptions(
+                client_args={"transport": transport},
+                async_client_args={"transport": transport},
+            ),
+        )
+        monkeypatch.setattr(VertexProvider, "_build_client", lambda _self: client)
+        provider = VertexProvider(service_account_config)
+        all_events = []
+        try:
+            for tier in tiers:
+                events = [event async for event in provider.stream_chat(
+                    messages=[{"role": "user", "content_parts": [{"type": "content", "text": "Write a scene"}]}],
+                    model="gemini-2.5-flash",
+                    provider_settings={"service_tier": tier},
+                )]
+                assert not [event for event in events if event.kind == "error"]
+                assert any(event.delta and event.delta.content_delta == "Generated scene" for event in events)
+                all_events.append(events)
+        finally:
+            await provider.aclose()
+        return all_events
+
+    return requests, asyncio.run(run_requests())
+
+
+@pytest.mark.parametrize("tier", ["default", "flex", "priority"])
+def test_vertex_service_tier_headers_reach_sdk_transport_and_stay_out_of_body(monkeypatch, service_account_config, tier) -> None:
+    requests, all_events = _run_vertex_mock_requests(monkeypatch, service_account_config, [tier])
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.url.path.endswith(":streamGenerateContent")
+    if tier == "default":
+        assert "X-Vertex-AI-LLM-Request-Type" not in request.headers
+        assert "X-Vertex-AI-LLM-Shared-Request-Type" not in request.headers
+    else:
+        assert request.headers["X-Vertex-AI-LLM-Request-Type"] == "shared"
+        assert request.headers["X-Vertex-AI-LLM-Shared-Request-Type"] == tier
+    body = json.loads(request.content)
+    assert "serviceTier" not in body
+    assert "http_options" not in body
+    assert "httpOptions" not in body
+    raw_request = next(event.raw_request for event in all_events[0] if event.raw_request is not None)
+    assert "http_options" not in raw_request["config"]
+    assert "X-Vertex-AI-LLM-Request-Type" not in str(raw_request)
+    assert "X-Vertex-AI-LLM-Shared-Request-Type" not in str(raw_request)
+
+
+def test_vertex_service_tier_headers_do_not_leak_between_requests(monkeypatch, service_account_config) -> None:
+    tiers = ["flex", "default", "priority", "default"]
+    requests, _all_events = _run_vertex_mock_requests(monkeypatch, service_account_config, tiers)
+    assert len(requests) == len(tiers)
+    for request, tier in zip(requests, tiers, strict=True):
+        if tier == "default":
+            assert "X-Vertex-AI-LLM-Request-Type" not in request.headers
+            assert "X-Vertex-AI-LLM-Shared-Request-Type" not in request.headers
+        else:
+            assert request.headers["X-Vertex-AI-LLM-Request-Type"] == "shared"
+            assert request.headers["X-Vertex-AI-LLM-Shared-Request-Type"] == tier
 
 
 @pytest.mark.parametrize("existing_handle", [None, "projects/target-project/locations/global/cachedContents/cache-1"])
