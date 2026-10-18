@@ -5,6 +5,7 @@ from copy import deepcopy
 import json
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -15,6 +16,7 @@ import pytest
 
 from App.backend.providers.gemini.llm import GeminiProvider
 from App.backend.providers.registry import create_llm_provider, normalize_credentials, normalize_task_config, require_spec
+from App.backend.providers.shared.transport.stream_retry import NormalizedRetryConfig, stream_with_retry
 from App.backend.providers.vertex import llm as vertex_llm
 from App.backend.providers.vertex.llm import VertexProvider, prepare_config
 
@@ -337,6 +339,116 @@ def test_vertex_service_tier_headers_do_not_leak_between_requests(monkeypatch, s
         else:
             assert request.headers["X-Vertex-AI-LLM-Request-Type"] == "shared"
             assert request.headers["X-Vertex-AI-LLM-Shared-Request-Type"] == tier
+
+
+_VERTEX_RESOURCE_EXHAUSTED_MESSAGE = (
+    "Resource exhausted. Please try again later. Please refer to "
+    "https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details."
+)
+_VERTEX_RESOURCE_EXHAUSTED_ERROR = {
+    "error": {
+        "code": 429,
+        "status": "RESOURCE_EXHAUSTED",
+        "message": _VERTEX_RESOURCE_EXHAUSTED_MESSAGE,
+    },
+}
+
+
+def _vertex_sse_response(chunks) -> httpx.Response:
+    return httpx.Response(
+        200,
+        headers={"Content-Type": "text/event-stream"},
+        text="".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks),
+    )
+
+
+def _run_vertex_mock_stream_with_retry(monkeypatch, service_account_config, first_response):
+    requests: list[httpx.Request] = []
+    on_retry = AsyncMock()
+    success_response = _vertex_sse_response([{
+        "candidates": [{
+            "index": 0,
+            "content": {"role": "model", "parts": [{"text": "Generated scene"}]},
+            "finishReason": "STOP",
+        }],
+    }])
+    responses = iter([first_response, success_response])
+
+    def mock_response(request):
+        requests.append(request)
+        return next(responses)
+
+    async def run_request():
+        credentials = AnonymousCredentials()
+        credentials.token = "test-token"
+        transport = httpx.MockTransport(mock_response)
+        client = vertex_llm.genai.Client(
+            enterprise=True,
+            project="target-project",
+            location="global",
+            credentials=credentials,
+            http_options=types.HttpOptions(
+                client_args={"transport": transport},
+                async_client_args={"transport": transport},
+                # Exercise the app retry wrapper rather than the SDK's own retries.
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
+        monkeypatch.setattr(VertexProvider, "_build_client", lambda _self: client)
+        provider = VertexProvider(service_account_config)
+        try:
+            return [event async for event in stream_with_retry(
+                lambda: provider.stream_chat(
+                    messages=[{"role": "user", "content_parts": [{"type": "content", "text": "Write a scene"}]}],
+                    model="gemini-2.5-flash",
+                ),
+                NormalizedRetryConfig(max_retries=1, retryable_status_codes={429}, retry_delay_ms=0),
+                on_retry=on_retry,
+            )]
+        finally:
+            await provider.aclose()
+
+    return requests, asyncio.run(run_request()), on_retry
+
+
+@pytest.mark.parametrize("error_delivery", ["http", "sse"])
+def test_vertex_resource_exhausted_before_output_retries(monkeypatch, service_account_config, error_delivery) -> None:
+    first_response = (
+        httpx.Response(429, json=_VERTEX_RESOURCE_EXHAUSTED_ERROR)
+        if error_delivery == "http"
+        else _vertex_sse_response([_VERTEX_RESOURCE_EXHAUSTED_ERROR])
+    )
+    requests, events, on_retry = _run_vertex_mock_stream_with_retry(
+        monkeypatch, service_account_config, first_response,
+    )
+
+    assert len(requests) == 2
+    on_retry.assert_awaited_once_with(_VERTEX_RESOURCE_EXHAUSTED_MESSAGE, 429, 1)
+    assert not [event for event in events if event.kind == "error"]
+    assert [event.delta.content_delta for event in events if event.delta and event.delta.content_delta] == ["Generated scene"]
+    assert events[-1].meta.finish_reason == "stop"
+
+
+@pytest.mark.parametrize("thinking", [False, True], ids=["content", "thinking"])
+def test_vertex_resource_exhausted_after_output_does_not_retry(monkeypatch, service_account_config, thinking) -> None:
+    part = {"text": "Partial scene"}
+    if thinking:
+        part["thought"] = True
+    first_response = _vertex_sse_response([
+        {"candidates": [{"index": 0, "content": {"role": "model", "parts": [part]}}]},
+        _VERTEX_RESOURCE_EXHAUSTED_ERROR,
+    ])
+    requests, events, on_retry = _run_vertex_mock_stream_with_retry(
+        monkeypatch, service_account_config, first_response,
+    )
+
+    assert len(requests) == 1
+    on_retry.assert_not_awaited()
+    delta_field = "thinking_delta" if thinking else "content_delta"
+    assert any(event.delta and getattr(event.delta, delta_field) == "Partial scene" for event in events)
+    assert events[-1].kind == "error"
+    assert events[-1].error.status == 429
+    assert events[-1].error.message == _VERTEX_RESOURCE_EXHAUSTED_MESSAGE
 
 
 @pytest.mark.parametrize("existing_handle", [None, "projects/target-project/locations/global/cachedContents/cache-1"])

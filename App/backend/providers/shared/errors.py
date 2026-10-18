@@ -31,14 +31,17 @@ def describe_exception(exc: BaseException) -> str:
 
 def provider_error_fields(exc: BaseException) -> tuple[str, int | None, bool]:
     """Return ``(message, status, retryable)`` for a provider error event."""
-    status = (
-        getattr(exc, "status_code", None)
-        or getattr(exc, "status", None)
-        or getattr(exc, "code", None)
-    )
+    status = None
+    # Google GenAI uses a symbolic status (e.g. RESOURCE_EXHAUSTED) and a
+    # numeric code. Skip non-numeric attributes so they cannot hide that code.
+    for attribute in ("status_code", "status", "code"):
+        value = getattr(exc, attribute, None)
+        if isinstance(value, int):
+            status = value
+            break
     return (
         describe_exception(exc),
-        status if isinstance(status, int) else None,
+        status,
         is_retryable_transport_error(exc),
     )
 
