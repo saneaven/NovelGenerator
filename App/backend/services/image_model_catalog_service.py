@@ -7,6 +7,7 @@ from ..providers.shared.image.settings import default_image_gen_config as _defau
 from ..providers.shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from ..providers.registry import require_spec
 from ..providers.registry import (
+    describe_image_model,
     list_image_models as _list_image_models,
     resolve_image_geometry as _resolve_image_geometry,
     sanitize_image_settings,
@@ -63,6 +64,9 @@ class ImageModelCatalogService:
         model: str,
         provider_config: dict[str, Any],
     ) -> ImageModelDescriptor | None:
+        descriptor = describe_image_model(provider, model)
+        if descriptor is not None:
+            return descriptor
         descriptors = await _list_image_models(provider, provider_config)
         if model:
             for descriptor in descriptors:

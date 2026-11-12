@@ -470,6 +470,10 @@
     box-shadow: var(--shadow-md);
 }
 
+.tiptap-editor-content p:has(.image-node-wrapper) {
+    text-align: center;
+}
+
 /* ProseMirror specific */
 .ProseMirror {
     outline: none;
@@ -477,6 +481,19 @@
 
 
 /* Image selection */
+
+/* Desktop: cap content width; images cap at 75% of it */
+@media (min-width: 769px) {
+    .editor-content-inner {
+        width: 100%;
+        max-width: var(--size-editor-content-max-width);
+        margin: 0 auto;
+    }
+
+    .image-node-wrapper {
+        max-width: calc(var(--size-editor-content-max-width) * 0.75);
+    }
+}
 
 /* Responsive */
 @media (max-width: 768px) {

@@ -4,8 +4,6 @@ from ..shared.contracts import (
     Condition,
     EmbeddingSpec,
     FieldSpec,
-    ImageModelDescriptor,
-    ImageModelGeometrySpec,
     ImageSpec,
     LLMVariantSpec,
     LLMSpec,
@@ -15,22 +13,6 @@ from ..shared.contracts import (
     RuntimeSpec,
     UIHint,
 )
-
-OPENAI_DEFAULT_MODEL = "gpt-image-2"
-OPENAI_SUPPORTED_ASPECT_RATIOS = (
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
-)
-OPENAI_SUPPORTED_RESOLUTIONS = ("1K", "2K", "4K")
-
 
 SPEC = ProviderSpec(
     id="openai",
@@ -184,7 +166,8 @@ SPEC = ProviderSpec(
         runtime=RuntimeSpec(adapter="default"),
         prompt_format="natural",
         supports_image_input=True,
-        catalog_cache_policy="static",
+        models_adapter="dynamic",
+        catalog_cache_policy="none",
         settings_title_key="settings.imageGen.openaiSettings.title",
         settings_description_key="settings.imageGen.openaiSettings.description",
         provider_settings=ObjectSpec(fields={
@@ -250,50 +233,5 @@ SPEC = ProviderSpec(
                 ),
             ),
         }),
-        models=(
-            ImageModelDescriptor(
-                id=OPENAI_DEFAULT_MODEL,
-                name="GPT Image 2",
-                prompt_format="natural",
-                supports_image_input=True,
-                supports_mask_input=True,
-                supports_multi_image_input=True,
-                geometry=ImageModelGeometrySpec(
-                    supported_aspect_ratios=OPENAI_SUPPORTED_ASPECT_RATIOS,
-                    supported_resolutions=OPENAI_SUPPORTED_RESOLUTIONS,
-                    default_aspect_ratio="1:1",
-                    default_resolution="1K",
-                    resolution_mode="native_tier",
-                    supported_geometry_pairs={
-                        ratio: OPENAI_SUPPORTED_RESOLUTIONS
-                        for ratio in OPENAI_SUPPORTED_ASPECT_RATIOS
-                    },
-                ),
-                description="Flexible OpenAI image model for generation, multi-image edits, and masking. 4K output is experimental.",
-                tags=("latest", "4k-experimental"),
-                category="image",
-                architecture={
-                    "input_modalities": ["text", "image"],
-                    "output_modalities": ["image"],
-                },
-                capabilities={
-                    "text_to_image": True,
-                    "image_to_image": True,
-                    "masking": True,
-                    "multi_image_edit": True,
-                    "flexible_resolution": True,
-                    "experimental_4k": True,
-                },
-                supported_parameters={
-                    "aspect_ratios": list(OPENAI_SUPPORTED_ASPECT_RATIOS),
-                    "resolutions": list(OPENAI_SUPPORTED_RESOLUTIONS),
-                    "quality": ["auto", "low", "medium", "high"],
-                    "background": ["auto", "opaque"],
-                    "output_format": ["png", "jpeg", "webp"],
-                    "moderation": ["auto", "low"],
-                    "experimental_resolutions": ["4K"],
-                },
-            ),
-        ),
     ),
 )

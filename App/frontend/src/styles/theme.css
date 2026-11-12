@@ -332,6 +332,7 @@
 
     --size-sidebar-width: 320px;
     --size-sidebar-width-mobile: 280px;
+    --size-editor-content-max-width: 64rem;
 
     /* ===== Transitions ===== */
     --transition-fast: 150ms cubic-bezier(0.2, 0, 0.2, 1);

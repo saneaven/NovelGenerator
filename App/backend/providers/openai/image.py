@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import io
 from math import isqrt
+import re
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI, OpenAIError
 
+from ..shared.contracts import ImageModelDescriptor, ImageModelGeometrySpec
 from ..shared.image.contracts import (
     ImageGenerationOutput,
     PreparedImageRequest,
@@ -21,6 +24,83 @@ OPENAI_GPT_IMAGE_2_TARGET_PIXELS = {
     "2K": 2048 * 2048,
     "4K": 3840 * 2160,
 }
+OPENAI_IMAGE_MODELS_URL = "https://api.openai.com/v1/models"
+_FLEXIBLE_ASPECT_RATIOS = (
+    "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9",
+)
+_FLEXIBLE_RESOLUTIONS = ("1K", "2K", "4K")
+_STANDARD_RESOLUTIONS = ("1024x1024", "1536x1024", "1024x1536")
+_GPT_IMAGE_VERSION = re.compile(r"^gpt-image-(\d+)(?:[.-]|$)", re.IGNORECASE)
+
+
+def describe_model(model_id: str, owned_by: str | None = None) -> ImageModelDescriptor:
+    # /models provides identity, not capabilities. Geometry follows the image
+    # API family contract; it never determines which model IDs are listed.
+    version = _GPT_IMAGE_VERSION.match(model_id)
+    flexible = version is not None and int(version.group(1)) >= 2
+    geometry = (
+        ImageModelGeometrySpec(
+            supported_aspect_ratios=_FLEXIBLE_ASPECT_RATIOS,
+            supported_resolutions=_FLEXIBLE_RESOLUTIONS,
+            default_aspect_ratio="1:1",
+            default_resolution="1K",
+            resolution_mode="native_tier",
+            supported_geometry_pairs={ratio: _FLEXIBLE_RESOLUTIONS for ratio in _FLEXIBLE_ASPECT_RATIOS},
+        )
+        if flexible else ImageModelGeometrySpec(
+            supported_aspect_ratios=("1:1", "3:2", "2:3"),
+            supported_resolutions=_STANDARD_RESOLUTIONS,
+            default_aspect_ratio="1:1",
+            default_resolution="1024x1024",
+            resolution_mode="native_exact",
+        )
+    )
+    return ImageModelDescriptor(
+        id=model_id,
+        name=model_id,
+        canonical_slug=model_id,
+        owned_by=owned_by,
+        prompt_format="natural",
+        supports_image_input=True,
+        supports_mask_input=True,
+        supports_multi_image_input=True,
+        geometry=geometry,
+        category="image",
+        architecture={"input_modalities": ["text", "image"], "output_modalities": ["image"]},
+        capabilities={
+            "text_to_image": True,
+            "image_to_image": True,
+            "masking": True,
+            "multi_image_edit": True,
+            "flexible_resolution": flexible,
+        },
+    )
+
+
+async def list_models(
+    *,
+    provider_config: dict[str, Any],
+    runtime_spec: Any,
+    models_adapter: str,
+) -> list[ImageModelDescriptor]:
+    del runtime_spec, models_adapter
+    api_key = str(provider_config.get("api_key") or "").strip()
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            OPENAI_IMAGE_MODELS_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+    response.raise_for_status()
+    payload = response.json()
+    models: dict[str, ImageModelDescriptor] = {}
+    for item in payload["data"]:
+        model_id = item["id"]
+        if not model_id.lower().startswith(("gpt-image-", "chatgpt-image-")):
+            continue
+        owned_by = item.get("owned_by")
+        models[model_id] = describe_model(model_id, owned_by=owned_by)
+    return [models[model_id] for model_id in sorted(models)]
 
 
 class OpenAIImageAdapter:
@@ -178,7 +258,9 @@ async def resolve_geometry(
     requested_image_size: str,
     resolved_geometry: ResolvedGeometry,
 ) -> ResolvedGeometry:
-    del provider_config, runtime_spec, descriptor, requested_aspect_ratio, requested_image_size
+    del provider_config, runtime_spec, requested_aspect_ratio, requested_image_size
+    if descriptor.geometry.resolution_mode == "native_exact":
+        return resolved_geometry
     return ResolvedGeometry(
         requested_aspect_ratio=resolved_geometry.requested_aspect_ratio,
         requested_image_size=resolved_geometry.requested_image_size,

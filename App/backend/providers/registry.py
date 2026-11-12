@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .shared.conditions import get_path
-from .shared.contracts import DerivedFlag, LLMSpec, ProviderSpec, TokenizerFamily
+from .shared.contracts import DerivedFlag, ImageModelDescriptor, LLMSpec, ProviderSpec, TokenizerFamily
 from .shared.normalize import merge_specs, normalize_by_spec
 from .shared.registry import list_specs as _list_specs
 from .shared.registry import require_provider_module, require_spec as _require_spec
@@ -282,3 +282,9 @@ async def list_image_models(provider_id: str, provider_config: dict[str, Any] | 
             models_adapter=image.models_adapter,
         )
     return list(image.models)
+
+
+def describe_image_model(provider_id: str, model: str) -> ImageModelDescriptor | None:
+    module = require_provider_module(provider_id, "image")
+    describe = getattr(module, "describe_model", None)
+    return describe(model) if callable(describe) else None

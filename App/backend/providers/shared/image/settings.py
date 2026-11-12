@@ -43,9 +43,8 @@ def default_image_gen_config() -> dict[str, Any]:
     image_spec = default_provider.image
     if image_spec is None:
         raise ValueError(f"Provider '{default_provider.id}' does not support image")
-    if not image_spec.models:
-        raise ValueError(f"Provider '{default_provider.id}' does not define a default image model")
-    default_model = image_spec.models[0]
+    defaults = ImageGenConfig()
+    default_model = image_spec.models[0] if image_spec.models else None
     provider_settings = {
         provider.id: defaults_from_object_spec(provider.image.provider_settings)
         for provider in image_providers
@@ -53,9 +52,9 @@ def default_image_gen_config() -> dict[str, Any]:
     }
     return {
         "provider": default_provider.id,
-        "model": default_model.id,
-        "aspect_ratio": default_model.geometry.default_aspect_ratio,
-        "image_size": default_model.geometry.default_resolution,
+        "model": default_model.id if default_model else defaults.model,
+        "aspect_ratio": default_model.geometry.default_aspect_ratio if default_model else defaults.aspect_ratio,
+        "image_size": default_model.geometry.default_resolution if default_model else defaults.image_size,
         "naturalStyles": [],
         "positiveNegativeStyles": [],
         "novelAIStyles": [],
