@@ -7,6 +7,7 @@ from ....services.image_run_service import (
     IMAGE_OBJECT_TOOL,
     IMAGE_SCENE_TOOL,
     image_run_service,
+    normalize_scene_anchor,
     resolve_prompt_format,
     resolve_explicit_object_target,
     validate_scene_anchor,
@@ -171,16 +172,25 @@ def _image_specs(ctx: Any) -> list[ToolSpec]:
             ),
             ToolSpec(
                 name=IMAGE_SCENE_TOOL,
-                description="Generate a scene image and insert it before a specific manuscript text anchor.",
+                description="Generate a scene image and insert it between exact manuscript text anchors.",
                 parameters=_prompt_schema(
                     prompt_format,
                     extra_properties={
                         "ratio": {"type": "string", "description": "Desired aspect ratio such as 1:1 or 16:9."},
                         "image_size": {"type": "string", "description": "Optional image size tier such as 1K, 2K, or 4K."},
                         "manuscript_id": {"type": "string", "description": "Target manuscript UUID."},
-                        "insert_before": {"type": "string", "description": "Exact manuscript text anchor to insert the image before."},
+                        "anchor": {
+                            **obj_schema(
+                                {
+                                    "before": {"type": "string", "minLength": 1, "description": "Exact manuscript text immediately preceding the image insertion point."},
+                                    "after": {"type": "string", "minLength": 1, "description": "Exact manuscript text immediately following the image insertion point."},
+                                },
+                                ["before", "after"],
+                            ),
+                            "description": "Both before and after are required non-blank exact text copied from the saved manuscript. Together they must identify exactly one insertion point, with only whitespace between them.",
+                        },
                     },
-                    extra_required=["ratio", "manuscript_id", "insert_before"],
+                    extra_required=["ratio", "manuscript_id", "anchor"],
                 ),
                 auto_approve_category=None,
                 execution_policy="approval",
@@ -322,7 +332,7 @@ class ImageFeatureModule(ToolFeatureModule):
                     extra_fields=(
                         frozenset({"ratio", "image_size", "object_id"})
                         if _tool_name == IMAGE_OBJECT_TOOL
-                        else frozenset({"ratio", "image_size", "manuscript_id", "insert_before"})
+                        else frozenset({"ratio", "image_size", "manuscript_id", "anchor"})
                     ),
                 )
                 if prompt_invalid is not None:
@@ -349,10 +359,8 @@ class ImageFeatureModule(ToolFeatureModule):
                 raw_manuscript_id = args.get("manuscript_id")
                 if not isinstance(raw_manuscript_id, str) or not raw_manuscript_id.strip():
                     return invalid_result(validator_name, "manuscript_id must be a non-empty string")
-                anchor = args.get("insert_before")
-                if not isinstance(anchor, str) or not anchor.strip():
-                    return invalid_result(validator_name, "insert_before must be a non-empty string")
                 try:
+                    anchor = normalize_scene_anchor(args.get("anchor"))
                     await validate_scene_anchor(
                         validation_ctx.db,
                         project_id=validation_ctx.project_id,

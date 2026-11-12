@@ -27,6 +27,7 @@ fake_image_run_service.IMAGE_SCENE_TOOL = "generate_scene_image"
 fake_image_run_service.image_run_service = SimpleNamespace(create_tool_preview_run=None)
 fake_image_run_service.resolve_explicit_object_target = lambda *_args, **_kwargs: None
 fake_image_run_service.resolve_prompt_format = lambda _provider, _model: "natural"
+fake_image_run_service.normalize_scene_anchor = lambda anchor: anchor
 
 
 async def _validate_scene_anchor(*_args, **_kwargs):
@@ -94,7 +95,13 @@ def test_image_tool_schemas_require_explicit_target_ids() -> None:
     assert object_tool is not None
     assert scene_tool is not None
     assert object_tool.parameters["required"] == ["prompt", "ratio", "object_id"]
-    assert scene_tool.parameters["required"] == ["prompt", "ratio", "manuscript_id", "insert_before"]
+    assert scene_tool.parameters["required"] == ["prompt", "ratio", "manuscript_id", "anchor"]
+    assert "insert_before" not in scene_tool.parameters["properties"]
+    anchor_schema = scene_tool.parameters["properties"]["anchor"]
+    assert anchor_schema["type"] == "object"
+    assert set(anchor_schema["properties"]) == {"before", "after"}
+    assert anchor_schema["required"] == ["before", "after"]
+    assert anchor_schema["additionalProperties"] is False
 
 
 def _fake_db_returning(asset: object) -> SimpleNamespace:

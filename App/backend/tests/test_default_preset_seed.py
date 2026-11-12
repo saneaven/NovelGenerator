@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -36,8 +38,8 @@ def test_default_preset_seed_has_expected_counts() -> None:
     assert seed.preset_name == "Default"
     assert seed.preset_description is None
     assert len(seed.scenarios) == 17
-    assert len(seed.fragments) == 24
-    assert len(seed.variables) == 1
+    assert len(seed.fragments) == 25
+    assert len(seed.variables) == 2
     assert len(seed.sub_agents) == 7
 
 
@@ -116,6 +118,52 @@ def test_default_prompt_story_entity_tool_docs_include_folder_id() -> None:
     assert "`folderId` can be used together with create, replace, or patch to place or move a story entity." in project_data_ops
     assert '"folderId": "folder-main-cast"' in project_data_native
     assert '"folderId": null' in project_data_native
+
+
+def test_default_scene_image_variable_is_an_opt_in_boolean() -> None:
+    seed = load_default_preset_seed()
+    variable = next(item for item in seed.variables if item.name == "sceneImageGen")
+
+    assert variable.var_type == "boolean"
+    assert variable.value is False
+
+
+@pytest.mark.parametrize("enabled", [False, True, None])
+@pytest.mark.parametrize("mode", ["agentMode", "planMode"])
+def test_scene_image_instructions_render_only_for_enabled_agent_mode(enabled, mode: str) -> None:
+    document = _load_default_prompt_document()
+    # Isolate the new conditional include while keeping the complete mode template.
+    fragments = {
+        f"{folder}/{name}": ""
+        for folder, entries in document["fragments"].items()
+        for name in entries
+    }
+    instructions = document["fragments"]["agent"]["sceneImageGen"]["content"]
+    fragments["agent/sceneImageGen"] = instructions
+    variables = {"agentMode": "all"}
+    if enabled is not None:
+        variables["sceneImageGen"] = enabled
+
+    rendered = TemplateRenderer(fragment_map=fragments).render_text(
+        document["prompts"]["agent"][mode]["system_template"],
+        {
+            "config": {"thinking_mode": "off", "mainLanguage": "Korean", "outputMode": "native_tool_call"},
+            "variables": variables,
+            "agent": {"surface": "manuscript"},
+        },
+    )
+
+    if mode == "agentMode" and enabled is True:
+        assert instructions in rendered
+        assert "`generate_scene_image`" in rendered
+        assert "`read_manuscript`" in rendered
+        assert '{"before": "exact text preceding the image", "after": "exact text following the image"}' in rendered
+        assert "Provide both non-blank fields inside `anchor`" in rendered
+        assert "Only whitespace may separate them" in rendered
+        assert "`characters`" in rendered
+    else:
+        assert "## Scene Image Generation" not in rendered
+        assert "`generate_scene_image`" not in rendered
 
 
 def test_default_scene_image_prompt_includes_story_position_context() -> None:

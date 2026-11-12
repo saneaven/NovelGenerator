@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import re
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
@@ -84,15 +85,9 @@ def _parse_uuid(raw: Any, *, field_name: str) -> UUID:
 
 
 def _safe_lang_data(obj: dict[str, Any], language: str) -> dict[str, Any]:
-    data = obj.get("data")
-    if not isinstance(data, dict):
-        return {}
-    if isinstance(data.get(language), dict):
-        return data[language]
-    for value in data.values():
-        if isinstance(value, dict):
-            return value
-    return {}
+    # object_service already selects the requested language (or its fallback).
+    del language
+    return _json_dict(obj.get("data"))
 
 
 def _object_display_name(obj: dict[str, Any], language: str, *, fallback: str) -> str:
@@ -321,13 +316,24 @@ async def markdown_for_manuscript(
     )
 
 
-def anchor_excerpts(markdown: str, anchor: str) -> tuple[str, str]:
-    idx = markdown.find(anchor)
-    if idx < 0:
-        return "", ""
-    before = markdown[max(0, idx - 120):idx].strip()
-    after = markdown[idx + len(anchor): idx + len(anchor) + 120].strip()
-    return before, after
+def normalize_scene_anchor(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict) or set(raw) != {"before", "after"}:
+        raise ValueError("anchor must contain both before and after and no other fields")
+    for field in ("before", "after"):
+        if not isinstance(raw[field], str) or not raw[field].strip():
+            raise ValueError(f"anchor.{field} must be a non-blank string")
+    return {"before": raw["before"], "after": raw["after"]}
+
+
+def resolve_scene_anchor(markdown: str, anchor: dict[str, str]) -> int:
+    anchor = normalize_scene_anchor(anchor)
+    # Look ahead so overlapping matches also count as ambiguous locations.
+    pattern = re.compile(rf"(?={re.escape(anchor['before'])}\s*(?P<after>{re.escape(anchor['after'])}))")
+    matches = pattern.finditer(markdown)
+    match = next(matches, None)
+    if match is None or next(matches, None) is not None:
+        raise ValueError("anchor.before and anchor.after must match exactly once around the same insertion point in the current manuscript")
+    return match.start("after")
 
 
 async def validate_scene_anchor(
@@ -336,18 +342,17 @@ async def validate_scene_anchor(
     project_id: UUID,
     manuscript_id: UUID,
     language: str,
-    anchor: str,
+    anchor: dict[str, str],
 ) -> tuple[str, str]:
+    anchor = normalize_scene_anchor(anchor)
     markdown = await markdown_for_manuscript(
         db,
         project_id=project_id,
         manuscript_id=manuscript_id,
         language=language,
     )
-    count = markdown.count(anchor)
-    if count != 1:
-        raise ValueError("insert_before must match exactly once in the current manuscript")
-    return anchor_excerpts(markdown, anchor)
+    index = resolve_scene_anchor(markdown, anchor)
+    return markdown[max(0, index - 120):index].strip(), markdown[index:index + 120].strip()
 
 
 def _request_language(row: ImageRunModel) -> str:
@@ -567,9 +572,7 @@ class ImageRunService:
             apply_kind = "set_object_main_image"
         elif tool_call.tool_name == IMAGE_SCENE_TOOL:
             manuscript_id = _parse_uuid(tool_call.arguments.get("manuscript_id"), field_name="manuscript_id")
-            anchor = str(tool_call.arguments.get("insert_before") or "").strip()
-            if not anchor:
-                raise ValueError("insert_before must be a non-empty string")
+            anchor = normalize_scene_anchor(tool_call.arguments.get("anchor"))
             before_excerpt, after_excerpt = await validate_scene_anchor(
                 db,
                 project_id=project_id,
@@ -580,9 +583,9 @@ class ImageRunService:
             target = {
                 "type": "scene",
                 "manuscript_id": str(manuscript_id),
-                "insert_before": anchor,
+                "anchor": anchor,
             }
-            apply_kind = "insert_scene_before_anchor"
+            apply_kind = "insert_scene_at_anchor"
         else:
             raise ValueError("Unsupported image tool")
 
@@ -1117,19 +1120,18 @@ class ImageRunService:
             row.final_asset_id = asset.id
             return
 
-        if apply_kind != "insert_scene_before_anchor":
+        if apply_kind != "insert_scene_at_anchor":
             raise ValueError("Unsupported image apply kind")
 
         manuscript_id = _parse_uuid(target.get("manuscript_id"), field_name="manuscript_id")
-        anchor = str(target.get("insert_before") or "").strip()
+        anchor = normalize_scene_anchor(target.get("anchor"))
         markdown = await markdown_for_manuscript(
             db,
             project_id=row.project_id,
             manuscript_id=manuscript_id,
             language=language,
         )
-        if markdown.count(anchor) != 1:
-            raise ValueError("insert_before must still match exactly once before applying")
+        index = resolve_scene_anchor(markdown, anchor)
 
         image_src = storage_service.build_public_asset_path(str(asset.file_path))
         image_markdown = render_markdown_image(
@@ -1137,11 +1139,10 @@ class ImageRunService:
             asset_id=str(asset.id),
             title=build_markdown_image_title(asset),
         )
-        next_markdown = markdown.replace(
-            anchor,
-            f"{image_markdown}\n\n{anchor}",
-            1,
-        )
+        before, after = markdown[:index], markdown[index:]
+        before_separator = "" if not before or before.endswith("\n\n") else ("\n" if before.endswith("\n") else "\n\n")
+        after_separator = "" if not after or after.startswith("\n\n") else ("\n" if after.startswith("\n") else "\n\n")
+        next_markdown = f"{before}{before_separator}{image_markdown}{after_separator}{after}"
         object_service.update_object(
             db,
             project_id=row.project_id,

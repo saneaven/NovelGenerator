@@ -4,15 +4,8 @@ import { TextButton } from '../../../components/TextButton';
 import { assetService } from '../../../api/assetService';
 import { useImageRun, upsertImageRunInCache } from '../../../data/imageRuns';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
+import type { GenerateOperationVM } from '../vmTypes';
 import type { ImageCardProps } from './types';
-
-function summarizeExcerpt(text: string | undefined | null, position: 'before' | 'after'): string {
-  const trimmed = String(text ?? '').trim();
-  if (!trimmed) {
-    return position === 'before' ? '...[previous text]' : '[following text]...';
-  }
-  return position === 'before' ? `...${trimmed}` : `${trimmed}...`;
-}
 
 function ActionRow(props: {
   loadingAction: 'accept' | 'reject' | null;
@@ -53,14 +46,15 @@ function ActionRow(props: {
 function PreviewIsland(props: {
   imageUrl?: string | null;
   alt: string;
-  prompt: string;
+  promptSections: GenerateOperationVM['promptSections'];
   targetLabel?: string;
   requestedRatio: string;
+  requestedImageSize?: string;
   resolvedRatio?: string | null;
   provider?: string | null;
   model?: string | null;
 }) {
-  const { imageUrl, alt, prompt, targetLabel, requestedRatio, resolvedRatio, provider, model } = props;
+  const { imageUrl, alt, promptSections, targetLabel, requestedRatio, requestedImageSize, resolvedRatio, provider, model } = props;
   return (
     <div className="function-call-image-panel">
       {imageUrl ? (
@@ -79,14 +73,29 @@ function PreviewIsland(props: {
             <div className="function-call-image-meta__value">{targetLabel}</div>
           </>
         )}
-        <div className="function-call-image-meta__label">Prompt</div>
-        <div className="function-call-image-meta__value">{prompt || '(empty prompt)'}</div>
+        {promptSections.length > 0 ? promptSections.map((section) => (
+          <React.Fragment key={section.label}>
+            <div className="function-call-image-meta__label">{section.label}</div>
+            <div className="function-call-image-meta__value">{section.text || '(empty)'}</div>
+          </React.Fragment>
+        )) : (
+          <>
+            <div className="function-call-image-meta__label">Prompt</div>
+            <div className="function-call-image-meta__value">Waiting for prompt...</div>
+          </>
+        )}
         <div className="function-call-image-meta__label">Ratio</div>
         <div className="function-call-image-meta__value">
           {resolvedRatio && resolvedRatio !== requestedRatio
             ? `${requestedRatio} -> ${resolvedRatio}`
             : requestedRatio || '-'}
         </div>
+        {requestedImageSize && (
+          <>
+            <div className="function-call-image-meta__label">Image size</div>
+            <div className="function-call-image-meta__value">{requestedImageSize}</div>
+          </>
+        )}
         {(provider || model) && (
           <>
             <div className="function-call-image-meta__label">Preset</div>
@@ -132,6 +141,14 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
   }, [buttonsDisabled, operation.imageRunId, projectId]);
 
   const actionIsland = useMemo(() => {
+    if (operation.status === 'collecting' || operation.status === 'streaming' || operation.status === 'validating') {
+      return (
+        <div className="function-call-image-panel function-call-image-panel--note">
+          {operation.status === 'validating' ? 'Validating image request...' : 'Receiving image request...'}
+        </div>
+      );
+    }
+
     if (operation.status === 'pending') {
       return (
         <div className="function-call-image-panel function-call-image-panel--note">
@@ -179,7 +196,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       }
     }
 
-    if (operation.status === 'applied') {
+    if (operation.status === 'applied' || (operation.status === 'working' && imageRun?.status === 'applied')) {
       return (
         <div className="function-call-image-panel">
           <div className="function-call-image-status-note">
@@ -189,7 +206,7 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       );
     }
 
-    if (operation.isUserRejectedFailure) {
+    if (operation.isUserRejectedFailure || (operation.status === 'working' && imageRun?.status === 'rejected')) {
       return (
         <div className="function-call-image-panel">
           <div className="function-call-image-status-note">Generated image was rejected by the user.</div>
@@ -205,6 +222,14 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
       );
     }
 
+    if (operation.status === 'working' && imageRun?.status === 'canceled') {
+      return (
+        <div className="function-call-image-panel">
+          <div className="function-call-image-status-note">Image generation was canceled.</div>
+        </div>
+      );
+    }
+
     return (
       <div className="function-call-image-panel">
         <div className="function-call-image-status-note">
@@ -214,7 +239,10 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
     );
   }, [buttonsDisabled, imageRun, loadingAction, operation, runDecision]);
 
-  const defaultExpanded = operation.status === 'pending'
+  const defaultExpanded = operation.status === 'collecting'
+    || operation.status === 'streaming'
+    || operation.status === 'validating'
+    || operation.status === 'pending'
     || operation.status === 'working'
     || operation.status === 'processing'
     || operation.status === 'failed';
@@ -235,15 +263,17 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
         defaultExpanded={defaultExpanded}
         islands={[
           <div className="function-call-image-excerpt" key="before">
-            {summarizeExcerpt(imageRun?.before_excerpt, 'before')}
+            <div className="function-call-image-meta__label">Before image</div>
+            <div>{operation.anchor?.before || 'Waiting for preceding text...'}</div>
           </div>,
           <div className="function-call-image-middle-island" key="middle">
             <PreviewIsland
               imageUrl={imageRun?.preview_asset_url}
               alt={previewTitle}
-              prompt={operation.prompt}
+              promptSections={operation.promptSections}
               targetLabel={operation.targetLabel}
               requestedRatio={operation.requestedRatio}
+              requestedImageSize={operation.requestedImageSize}
               resolvedRatio={imageRun?.resolved_aspect_ratio}
               provider={imageRun?.provider}
               model={imageRun?.model}
@@ -251,7 +281,8 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
             {actionIsland}
           </div>,
           <div className="function-call-image-excerpt" key="after">
-            {summarizeExcerpt(imageRun?.after_excerpt, 'after')}
+            <div className="function-call-image-meta__label">After image</div>
+            <div>{operation.anchor?.after || 'Waiting for following text...'}</div>
           </div>,
         ]}
       />
@@ -262,9 +293,10 @@ export const ImageToolCard: React.FC<ImageCardProps> = ({
     <PreviewIsland
       imageUrl={imageRun?.preview_asset_url}
       alt={previewTitle}
-      prompt={operation.prompt}
+      promptSections={operation.promptSections}
       targetLabel={operation.targetLabel}
       requestedRatio={operation.requestedRatio}
+      requestedImageSize={operation.requestedImageSize}
       resolvedRatio={imageRun?.resolved_aspect_ratio}
       provider={imageRun?.provider}
       model={imageRun?.model}

@@ -30,6 +30,7 @@ fake_image_run_service.IMAGE_SCENE_TOOL = "generate_scene_image"
 fake_image_run_service.image_run_service = SimpleNamespace(create_tool_preview_run=None)
 fake_image_run_service.resolve_explicit_object_target = lambda *_args, **_kwargs: None
 fake_image_run_service.resolve_prompt_format = lambda provider, _model: provider
+fake_image_run_service.normalize_scene_anchor = lambda anchor: anchor
 
 
 async def _validate_scene_anchor(*_args, **_kwargs):
@@ -54,6 +55,7 @@ from App.backend.services.tool_engine.modules.image_module import (
     SUBMIT_IMAGE_PROMPT_TOOL,
     ImageFeatureModule,
 )
+from App.backend.services.tool_engine.modules import image_module
 from App.backend.services.tool_engine.registry import ToolRegistry
 from App.backend.services.tool_engine.result_utils import valid_result
 
@@ -200,13 +202,60 @@ def test_generate_image_specs_use_prompt_format_and_keep_approval_lifecycle() ->
         "negative",
         "ratio",
         "manuscript_id",
-        "insert_before",
+        "anchor",
     ]
     assert "prompt" not in object_spec.parameters["properties"]
     assert object_spec.execution_policy == "approval"
     assert scene_spec.execution_policy == "approval"
     assert object_spec.ends_run is False
     assert scene_spec.ends_run is False
+
+
+def test_scene_image_binding_passes_both_anchor_contexts_to_validation(monkeypatch) -> None:
+    ctx = _make_ctx(prompt_format="natural", journey_kind=None)
+    binding = next(
+        binding for binding in ImageFeatureModule().list_bindings(ctx)
+        if binding.spec.name == "generate_scene_image"
+    )
+    manuscript_id = uuid4()
+    anchor = {"before": "The gate opened.", "after": "They stepped inside."}
+    received = {}
+
+    async def validate_scene_anchor(db, **kwargs):
+        received.update(db=db, **kwargs)
+        return "before", "after"
+
+    monkeypatch.setattr(image_module, "validate_scene_anchor", validate_scene_anchor)
+    validation_ctx = SimpleNamespace(db=object(), project_id=ctx.project_id, language="Korean")
+
+    result = asyncio.run(binding.validate(
+        {"prompt": "A castle gate", "ratio": "16:9", "manuscript_id": str(manuscript_id), "anchor": anchor},
+        validation_ctx,
+    ))
+
+    assert result.valid is True
+    assert received == {
+        "db": validation_ctx.db,
+        "project_id": ctx.project_id,
+        "manuscript_id": manuscript_id,
+        "language": "Korean",
+        "anchor": anchor,
+    }
+
+
+def test_scene_image_binding_rejects_legacy_insert_before_argument() -> None:
+    ctx = _make_ctx(prompt_format="natural", journey_kind=None)
+    binding = next(
+        binding for binding in ImageFeatureModule().list_bindings(ctx)
+        if binding.spec.name == "generate_scene_image"
+    )
+
+    result = asyncio.run(binding.validate(
+        {"prompt": "A castle gate", "ratio": "16:9", "manuscript_id": str(uuid4()), "insert_before": "The gate opened."},
+        SimpleNamespace(),
+    ))
+
+    assert result.valid is False
 
 
 class _ExtraModule(ToolFeatureModule):

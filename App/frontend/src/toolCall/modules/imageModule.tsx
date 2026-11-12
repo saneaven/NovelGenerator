@@ -1,37 +1,13 @@
 import { buildOperationBase, coerceRecord, defineToolCallUiModule } from '../registry/contracts';
-import { requireSettingsFromCache } from '../../data/settings';
 import { readAnyObjectFromCache } from '../../data/objects/objectCache';
 import { ImageToolCard } from '../ui/cards/ImageToolCard';
 import type { GenerateOperationVM } from '../ui/vmTypes';
 
-function resolveLanguage(): string {
-  try {
-    return requireSettingsFromCache().mainLanguage || 'English';
-  } catch {
-    return 'English';
-  }
-}
-
-function dataForLanguage(object: { data?: Record<string, unknown> } | undefined, language: string): Record<string, unknown> {
-  const data = object?.data;
-  if (!data || typeof data !== 'object') return {};
-  const exact = data[language];
-  if (exact && typeof exact === 'object' && !Array.isArray(exact)) {
-    return exact as Record<string, unknown>;
-  }
-  for (const value of Object.values(data)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return value as Record<string, unknown>;
-    }
-  }
-  return {};
-}
-
-function resolveObjectLabel(objectId: string | undefined, language: string): string | undefined {
+function resolveObjectLabel(objectId: string | undefined): string | undefined {
   if (!objectId) return undefined;
   const object = readAnyObjectFromCache(objectId);
   if (!object) return undefined;
-  const data = dataForLanguage(object, language);
+  const data = coerceRecord(object.data);
   if (object.type === 'basic_info') {
     const title = data.title;
     return typeof title === 'string' && title.trim() ? title.trim() : 'Basic Info';
@@ -43,20 +19,41 @@ function resolveObjectLabel(objectId: string | undefined, language: string): str
   return object.id;
 }
 
-function resolveSceneLabel(manuscriptId: string | undefined, language: string): string | undefined {
+function resolveSceneLabel(manuscriptId: string | undefined): string | undefined {
   if (!manuscriptId) return undefined;
   const manuscript = readAnyObjectFromCache(manuscriptId);
   if (!manuscript) return undefined;
   const chapterId = typeof manuscript.metadata?.chapter_id === 'string' ? manuscript.metadata.chapter_id : null;
   if (chapterId) {
     const chapter = readAnyObjectFromCache(chapterId) ?? undefined;
-    const chapterData = dataForLanguage(chapter, language);
+    const chapterData = coerceRecord(chapter?.data);
     const chapterName = chapterData.name;
     if (typeof chapterName === 'string' && chapterName.trim()) {
       return `Manuscript: ${chapterName.trim()}`;
     }
   }
   return 'Manuscript';
+}
+
+function promptSections(args: Record<string, unknown>): GenerateOperationVM['promptSections'] {
+  if (typeof args.prompt === 'string') {
+    return [{ label: 'Prompt', text: args.prompt }];
+  }
+  const sections: GenerateOperationVM['promptSections'] = [];
+  if (typeof args.positive === 'string') sections.push({ label: 'Positive', text: args.positive });
+  if (typeof args.negative === 'string') sections.push({ label: 'Negative', text: args.negative });
+  if (Array.isArray(args.characters)) {
+    args.characters.forEach((rawCharacter, index) => {
+      const character = coerceRecord(rawCharacter);
+      if (typeof character.positive === 'string') {
+        sections.push({ label: `Character ${index + 1} Positive`, text: character.positive });
+      }
+      if (typeof character.negative === 'string') {
+        sections.push({ label: `Character ${index + 1} Negative`, text: character.negative });
+      }
+    });
+  }
+  return sections;
 }
 
 function failureCode(result: unknown): string | undefined {
@@ -73,13 +70,13 @@ const imageModule = defineToolCallUiModule({
   toolNames: ['generate_object_image', 'generate_scene_image'],
   mapOperation(params) {
     const args = coerceRecord(params.args);
-    const language = resolveLanguage();
     const imageKind = params.toolName === 'generate_scene_image' ? 'scene' : 'object';
     const objectId = typeof args.object_id === 'string' ? args.object_id : undefined;
     const manuscriptId = typeof args.manuscript_id === 'string' ? args.manuscript_id : undefined;
     const targetLabel = imageKind === 'scene'
-      ? resolveSceneLabel(manuscriptId, language)
-      : resolveObjectLabel(objectId, language);
+      ? resolveSceneLabel(manuscriptId) ?? manuscriptId
+      : resolveObjectLabel(objectId) ?? objectId;
+    const anchor = coerceRecord(args.anchor);
     const title = imageKind === 'scene'
       ? (targetLabel ? `Scene Image: ${targetLabel}` : 'Scene Image')
       : (targetLabel ? `Object Image: ${targetLabel}` : 'Object Image');
@@ -96,8 +93,13 @@ const imageModule = defineToolCallUiModule({
       category: 'generate',
       includeInBulkDecision: false,
       imageKind,
-      prompt: typeof args.prompt === 'string' ? args.prompt : '',
+      promptSections: promptSections(args),
+      anchor: imageKind === 'scene' ? {
+        before: typeof anchor.before === 'string' ? anchor.before : '',
+        after: typeof anchor.after === 'string' ? anchor.after : '',
+      } : undefined,
       requestedRatio: typeof args.ratio === 'string' ? args.ratio : '',
+      requestedImageSize: typeof args.image_size === 'string' ? args.image_size : undefined,
       isUserRejectedFailure: base.status === 'failed' && resolvedFailureCode === 'user_rejected_generated_image',
     } as GenerateOperationVM;
   },

@@ -82,8 +82,10 @@ export interface CallOperationVM extends OperationBaseVM {
 export interface GenerateOperationVM extends OperationBaseVM {
   category: 'generate';
   imageKind: 'object' | 'scene';
-  prompt: string;
+  promptSections: { label: string; text: string }[];
+  anchor?: { before: string; after: string };
   requestedRatio: string;
+  requestedImageSize?: string;
   isUserRejectedFailure: boolean;
 }
 

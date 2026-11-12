@@ -109,6 +109,204 @@ def load_image_run_service(monkeypatch):
     return importlib.import_module("App.backend.services.image_run_service")
 
 
+@pytest.mark.parametrize("content_language", ["Korean", "English"])
+def test_markdown_for_manuscript_reads_projected_content_tree(monkeypatch, content_language: str) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    db = FakeDB()
+    project_id = uuid4()
+    manuscript_id = uuid4()
+    content_tree = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "The gate opened."}],
+            }
+        ],
+    }
+    projected_manuscript = {
+        "id": str(manuscript_id),
+        "type": "manuscript",
+        "data": {"content": content_tree, "wordCount": 3},
+        "language_state": {
+            "requested_language": "Korean",
+            "content_language": content_language,
+            "is_fallback": content_language != "Korean",
+        },
+    }
+
+    def get_object(received_db, **kwargs):
+        assert received_db is db
+        assert kwargs == {
+            "object_type": "manuscript",
+            "object_id": manuscript_id,
+            "project_id": project_id,
+            "language": "Korean",
+            "rich_text_format": "tree",
+        }
+        return projected_manuscript
+
+    def tree_to_markdown(tree, *, image_titles_by_asset_id):
+        assert tree is content_tree
+        assert image_titles_by_asset_id == {"asset-1": "Gate illustration"}
+        return "The gate opened."
+
+    def build_asset_title_map(received_db, **kwargs):
+        assert received_db is db
+        assert kwargs == {"project_id": project_id, "trees": [content_tree]}
+        return {"asset-1": "Gate illustration"}
+
+    monkeypatch.setattr(image_run_service_module.object_service, "get_object", get_object)
+    monkeypatch.setattr(image_run_service_module, "tree_to_markdown", tree_to_markdown)
+    monkeypatch.setattr(image_run_service_module, "build_asset_title_map", build_asset_title_map)
+
+    markdown = asyncio.run(
+        image_run_service_module.markdown_for_manuscript(
+            db,
+            project_id=project_id,
+            manuscript_id=manuscript_id,
+            language="Korean",
+        )
+    )
+
+    assert markdown == "The gate opened."
+
+
+@pytest.mark.parametrize("data", [None, {}, {"content": "Missing tree"}])
+def test_markdown_for_manuscript_rejects_missing_projected_content_tree(monkeypatch, data) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    monkeypatch.setattr(
+        image_run_service_module.object_service,
+        "get_object",
+        lambda *_args, **_kwargs: {"data": data},
+    )
+
+    with pytest.raises(ValueError, match="^MANUSCRIPT_EMPTY$"):
+        asyncio.run(
+            image_run_service_module.markdown_for_manuscript(
+                FakeDB(),
+                project_id=uuid4(),
+                manuscript_id=uuid4(),
+                language="Korean",
+            )
+        )
+
+
+def test_validate_scene_anchor_accepts_projected_manuscript_content(monkeypatch) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    content_tree = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Before. The gate opened. After."}],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        image_run_service_module.object_service,
+        "get_object",
+        lambda *_args, **_kwargs: {"data": {"content": content_tree, "wordCount": 6}},
+    )
+    monkeypatch.setattr(image_run_service_module, "build_asset_title_map", lambda *_args, **_kwargs: {})
+
+    def tree_to_markdown(tree, **_kwargs):
+        assert tree is content_tree
+        return "Before. The gate opened. After."
+
+    monkeypatch.setattr(image_run_service_module, "tree_to_markdown", tree_to_markdown)
+
+    excerpts = asyncio.run(
+        image_run_service_module.validate_scene_anchor(
+            FakeDB(),
+            project_id=uuid4(),
+            manuscript_id=uuid4(),
+            language="Korean",
+            anchor={"before": "Before.", "after": "The gate opened."},
+        )
+    )
+
+    assert excerpts == ("Before.", "The gate opened. After.")
+
+
+@pytest.mark.parametrize(
+    "anchor",
+    [
+        None,
+        "The gate opened.",
+        [],
+        {},
+        {"before": "The gate opened."},
+        {"after": "They stepped inside."},
+        {"before": "", "after": "They stepped inside."},
+        {"before": " \n ", "after": "They stepped inside."},
+        {"before": "The gate opened.", "after": ""},
+        {"before": "The gate opened.", "after": 1},
+        {"before": "The gate opened.", "after": "They stepped inside.", "extra": "nope"},
+    ],
+)
+def test_normalize_scene_anchor_requires_both_nonblank_contexts(monkeypatch, anchor) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+
+    with pytest.raises(ValueError):
+        image_run_service_module.normalize_scene_anchor(anchor)
+
+
+def test_normalize_scene_anchor_preserves_exact_text_whitespace(monkeypatch) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    anchor = {"before": "  The gate opened.\n", "after": "\nThey stepped inside.  "}
+
+    assert image_run_service_module.normalize_scene_anchor(anchor) == anchor
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        "The gate closed. They stepped inside.",
+        "The gate opened. They stayed outside.",
+        "They stepped inside. The gate opened.",
+        "The gate opened. A guard stopped them. They stepped inside.",
+        "The gate opened. They stepped inside. The gate opened. They stepped inside.",
+    ],
+)
+def test_resolve_scene_anchor_rejects_missing_nonadjacent_or_ambiguous_pair(monkeypatch, markdown: str) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+
+    with pytest.raises(ValueError):
+        image_run_service_module.resolve_scene_anchor(
+            markdown, {"before": "The gate opened.", "after": "They stepped inside."},
+        )
+
+
+@pytest.mark.parametrize("gap", ["", " ", "\n\n", "\t \n"])
+def test_resolve_scene_anchor_accepts_whitespace_gap_and_returns_after_start(monkeypatch, gap: str) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    markdown = f"Intro. The gate opened.{gap}They stepped inside. End."
+
+    index = image_run_service_module.resolve_scene_anchor(
+        markdown, {"before": "The gate opened.", "after": "They stepped inside."},
+    )
+
+    assert index == markdown.index("They stepped inside.")
+
+
+def test_resolve_scene_anchor_allows_repeated_individual_contexts_when_pair_is_unique(monkeypatch) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    markdown = "Before. Other. After.\nBefore.\n\nAfter.\nBefore. Other. After."
+
+    index = image_run_service_module.resolve_scene_anchor(markdown, {"before": "Before.", "after": "After."})
+
+    assert index == markdown.index("\n\nAfter.") + 2
+
+
+@pytest.mark.parametrize("name_field", ["name", "title"])
+def test_object_display_name_reads_projected_payload(monkeypatch, name_field: str) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    obj = {"data": {name_field: "  The North Gate  ", "content": {"type": "doc", "content": []}}}
+
+    assert image_run_service_module._object_display_name(obj, "Korean", fallback="Scene") == "The North Gate"
+
+
 def test_create_direct_run_snapshot_preserves_style_id(monkeypatch) -> None:
     image_run_service_module = load_image_run_service(monkeypatch)
     service = image_run_service_module.ImageRunService(lambda: None)
@@ -405,7 +603,7 @@ def test_create_tool_preview_run_preserves_novelai_characters_for_both_image_too
         tool_name = image_run_service_module.IMAGE_OBJECT_TOOL
     else:
         arguments["manuscript_id"] = str(manuscript_id)
-        arguments["insert_before"] = "The gate opened."
+        arguments["anchor"] = {"before": "The gate opened.", "after": "They stepped inside."}
         tool_name = image_run_service_module.IMAGE_SCENE_TOOL
     tool_call = SimpleNamespace(
         id=uuid4(),
@@ -470,6 +668,92 @@ def test_create_tool_preview_run_preserves_novelai_characters_for_both_image_too
         {"positive": "blue-coated hero", "negative": "bad anatomy"},
     ]
     assert row.request_snapshot["target"]["type"] == target_kind
+    if target_kind == "scene":
+        assert row.request_snapshot["target"]["anchor"] == arguments["anchor"]
+        assert "insert_before" not in row.request_snapshot["target"]
+        assert row.request_snapshot["apply_kind"] == "insert_scene_at_anchor"
+
+
+@pytest.mark.parametrize("change", [None, "before", "after", "gap"])
+def test_apply_scene_image_revalidates_and_inserts_between_both_contexts(monkeypatch, change: str | None) -> None:
+    image_run_service_module = load_image_run_service(monkeypatch)
+    service = image_run_service_module.ImageRunService(lambda: None)
+    manuscript_id = uuid4()
+    anchor = {"before": "The gate opened.", "after": "They stepped inside."}
+    markdown = f"Intro.\n\n{anchor['before']}\n\n{anchor['after']}\n\nEnd."
+    image_markdown = "![Gate](generated/test.png)"
+    asset = SimpleNamespace(
+        id=uuid4(),
+        file_path="generated/test.png",
+        name="Gate",
+        preview_image_run_id=uuid4(),
+        manuscript_id=None,
+        updated_at=None,
+    )
+    target = {"type": "scene", "manuscript_id": str(manuscript_id), "anchor": anchor}
+    row = SimpleNamespace(
+        project_id=uuid4(),
+        user_id=uuid4(),
+        preview_asset_id=asset.id,
+        final_asset_id=None,
+        request_snapshot={"target": target, "apply_kind": "insert_scene_at_anchor"},
+    )
+
+    class Query:
+        def filter(self, *_args):
+            return self
+
+        def first(self):
+            return asset
+
+    db = SimpleNamespace(query=lambda *_args: Query())
+    updates = []
+
+    async def manuscript_markdown(*_args, **_kwargs):
+        if change in {"before", "after"}:
+            return markdown.replace(anchor[change], "The story changed.")
+        if change == "gap":
+            return markdown.replace(anchor["after"], f"A guard stopped them.\n\n{anchor['after']}")
+        return markdown
+
+    monkeypatch.setattr(image_run_service_module, "markdown_for_manuscript", manuscript_markdown)
+    monkeypatch.setattr(image_run_service_module, "render_markdown_image", lambda *_args, **_kwargs: image_markdown)
+    monkeypatch.setattr(
+        image_run_service_module.object_service,
+        "update_object",
+        lambda received_db, **kwargs: updates.append((received_db, kwargs)),
+        raising=False,
+    )
+    monkeypatch.setattr(image_run_service_module, "queue_project_assets_change", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(image_run_service_module, "queue_scene_assets_change", lambda *_args, **_kwargs: None)
+
+    if change is not None:
+        with pytest.raises(ValueError):
+            asyncio.run(service._apply_asset_for_run(db=db, row=row, user_id=row.user_id, language="Korean"))
+        assert updates == []
+        assert asset.manuscript_id is None
+        assert asset.preview_image_run_id is not None
+        assert row.final_asset_id is None
+        return
+
+    asyncio.run(service._apply_asset_for_run(db=db, row=row, user_id=row.user_id, language="Korean"))
+
+    expected_content = f"Intro.\n\n{anchor['before']}\n\n{image_markdown}\n\n{anchor['after']}\n\nEnd."
+    assert len(updates) == 1
+    assert updates[0] == (db, {
+        "project_id": row.project_id,
+        "object_type": "manuscript",
+        "object_id": manuscript_id,
+        "data": {"content": expected_content},
+        "language": "Korean",
+        "rich_text_format": "markdown",
+        "user_request": "tool:generate_scene_image",
+        "created_by": row.user_id,
+        "create_new_version": True,
+    })
+    assert asset.manuscript_id == manuscript_id
+    assert asset.preview_image_run_id is None
+    assert row.final_asset_id == asset.id
 
 
 def test_create_asset_for_run_persists_generation_style_id(monkeypatch) -> None:
