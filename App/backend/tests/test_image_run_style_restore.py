@@ -619,6 +619,7 @@ def test_create_tool_preview_run_preserves_novelai_characters_for_both_image_too
         updated_at=None,
     )
     settings_row = SimpleNamespace(
+        tool_call_auto_approve={},
         image_gen_config={
             "provider": "novelai",
             "model": "nai-diffusion-4-5-full",

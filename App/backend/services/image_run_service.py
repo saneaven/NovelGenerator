@@ -596,7 +596,7 @@ class ImageRunService:
             thread_id=tool_call.thread_id,
             client_request_id=None,
             origin="tool_preview",
-            review_mode="manual",
+            review_mode="auto" if settings_row.tool_call_auto_approve.get("generate") else "manual",
             status="queued",
             stage=None,
             request_snapshot={
