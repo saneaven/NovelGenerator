@@ -47,6 +47,20 @@ GEMINI_PRO_IMAGE_ASPECT_RATIOS = (
 GEMINI_FLASH_IMAGE_SIZES = ("512px", "1K", "2K", "4K")
 GEMINI_PRO_IMAGE_SIZES = ("1K", "2K", "4K")
 
+GEMINI_SAFETY_CATEGORIES = {
+    "harassment": "HARM_CATEGORY_HARASSMENT",
+    "hate_speech": "HARM_CATEGORY_HATE_SPEECH",
+    "sexually_explicit": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "dangerous_content": "HARM_CATEGORY_DANGEROUS_CONTENT",
+}
+GEMINI_SAFETY_THRESHOLDS = (
+    "OFF",
+    "BLOCK_NONE",
+    "BLOCK_ONLY_HIGH",
+    "BLOCK_MEDIUM_AND_ABOVE",
+    "BLOCK_LOW_AND_ABOVE",
+)
+
 
 SPEC = ProviderSpec(
     id="gemini",
@@ -130,6 +144,19 @@ SPEC = ProviderSpec(
                     },
                 ),
                 "provider_settings": ObjectSpec(fields={
+                    "safety": ObjectSpec(fields={
+                        category: FieldSpec(
+                            kind="enum",
+                            options=GEMINI_SAFETY_THRESHOLDS,
+                            ui=UIHint(
+                                widget="select",
+                                label_key=f"settings.taskConfig.safety.categories.{category}",
+                                option_label_prefix="settings.taskConfig.safety.thresholds",
+                                order=order,
+                            ),
+                        )
+                        for order, category in enumerate(GEMINI_SAFETY_CATEGORIES, start=1)
+                    }),
                     "service_tier": FieldSpec(
                         kind="enum",
                         options=("default", "flex", "priority"),

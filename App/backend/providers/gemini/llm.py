@@ -17,6 +17,7 @@ from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_
 from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ...services.prompt_cache_service import gemini_supports_explicit_cache, gemini_ttl_seconds
 from ...utils.outbound_http import validate_outbound_base_url
+from .spec import GEMINI_SAFETY_CATEGORIES, GEMINI_SAFETY_THRESHOLDS
 
 GEMINI_THOUGHT_SIGNATURE_EXTRA_KEY = "gemini_thought_signature"
 
@@ -131,6 +132,24 @@ class GeminiProvider(BaseProvider):
         if hasattr(reason, "name"):
             return str(reason.name)
         return str(reason)
+
+    @staticmethod
+    def _build_safety_settings(provider_settings: Optional[Dict[str, Any]]) -> List[types.SafetySetting]:
+        if not isinstance(provider_settings, dict) or provider_settings.get("safety") is None:
+            return []
+        safety = provider_settings["safety"]
+        if not isinstance(safety, dict):
+            raise ValueError("Safety settings must be an object")
+
+        settings = []
+        for key, category in GEMINI_SAFETY_CATEGORIES.items():
+            threshold = safety.get(key)
+            if threshold is None:
+                continue
+            if threshold not in GEMINI_SAFETY_THRESHOLDS:
+                raise ValueError(f"Invalid safety threshold for {key}")
+            settings.append(types.SafetySetting(category=category, threshold=threshold))
+        return settings
 
     @classmethod
     def _normalize_finish_reason(cls, reason: Any, tool_calls_completed: bool = False) -> Optional[str]:
@@ -495,6 +514,13 @@ class GeminiProvider(BaseProvider):
             return
 
         config_dict: Dict[str, object] = {}
+        try:
+            safety_settings = self._build_safety_settings(provider_settings)
+        except ValueError as exc:
+            yield self._error_event(str(exc), status=400)
+            return
+        if safety_settings:
+            config_dict["safety_settings"] = safety_settings
         if not self._is_gemini4_argon(model):
             config_dict["temperature"] = temperature
         if max_tokens is not None:

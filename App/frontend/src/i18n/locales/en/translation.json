@@ -848,6 +848,21 @@
         "input_budget_no_limit": "Final input budget: no local limit",
         "input_budget_warning": "Final input budget: {{tokens}} tokens. Output reservation is greater than or equal to the context window."
       },
+      "safety": {
+        "categories": {
+          "harassment": "Harassment",
+          "hate_speech": "Hate speech",
+          "sexually_explicit": "Explicit content",
+          "dangerous_content": "Dangerous content"
+        },
+        "thresholds": {
+          "OFF": "Filter off",
+          "BLOCK_NONE": "No blocking · Keep ratings",
+          "BLOCK_ONLY_HIGH": "Block high only",
+          "BLOCK_MEDIUM_AND_ABOVE": "Block medium and above",
+          "BLOCK_LOW_AND_ABOVE": "Block low and above"
+        }
+      },
       "serviceTier": {
         "label": "Service Tier",
         "hint": "Flex is cheaper (~50% off) but slower and may be unavailable at peak times; Priority is faster at a higher price. If the selected model does not support the chosen tier, the provider returns an error.",
