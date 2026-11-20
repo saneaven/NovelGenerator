@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from ..shared.base import BaseProvider
@@ -17,6 +18,7 @@ from ..shared.parsing.thinking_parser import ThinkingStreamParser, has_unclosed_
 from ..shared.parsing.tool_call_arguments import parse_tool_call_arguments
 from ..shared.transport.client_timeouts import get_llm_stream_timeout
 from ...services.chat_attachment_service import chat_attachment_service
+from ...services.storage_service import storage_service
 
 
 OLLAMA_CLOUD_API_BASE = "https://ollama.com/api"
@@ -106,9 +108,10 @@ def _image_data_from_parts(parts: list[dict[str, Any]]) -> list[str]:
         storage_key = str(part.get("storage_key") or "").strip()
         if not mime_type or not storage_key:
             continue
-        data = chat_attachment_service.load_attachment_bytes(storage_key)
-        data_url = chat_attachment_service.to_data_url(mime_type, data)
-        images.append(data_url.split(",", 1)[1] if "," in data_url else data_url)
+        data = storage_service.read_asset_file(storage_key)
+        if mime_type.lower() == "image/avif":
+            data = storage_service.to_png_bytes(data)
+        images.append(b64encode(data).decode("ascii"))
     return images
 
 
@@ -171,6 +174,7 @@ class OllamaCloudProvider(BaseProvider):
         for msg in messages:
             role = str(msg.get("role") or "user")
             if role == "tool_results":
+                tool_images: list[str] = []
                 for result in msg.get("tool_results", []) or []:
                     if not isinstance(result, dict):
                         continue
@@ -183,6 +187,14 @@ class OllamaCloudProvider(BaseProvider):
                     if isinstance(tool_call_id, str) and tool_call_id:
                         tool_msg["tool_call_id"] = tool_call_id
                     converted.append(tool_msg)
+                    tool_images.extend(_image_data_from_parts(result.get("image_parts") or []))
+                # Vision models may skip images on tool messages. Keep tool replies together first.
+                if tool_images:
+                    converted.append({
+                        "role": "user",
+                        "content": "Images returned by the preceding tools, in result order.",
+                        "images": tool_images,
+                    })
                 continue
 
             parts = get_canonical_content_parts(msg)

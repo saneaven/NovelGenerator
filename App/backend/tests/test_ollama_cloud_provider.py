@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
+from base64 import b64decode
+from io import BytesIO
 from typing import Any
 
 import pytest
+from PIL import Image
 from sqlalchemy.orm import declarative_base
 
 if "openai" not in sys.modules:
@@ -73,6 +76,7 @@ from App.backend.providers.ollama_cloud.llm import OllamaCloudProvider
 from App.backend.providers.registry import list_specs, normalize_credentials, normalize_task_config
 from App.backend.providers.shared.parsing.fallback_snapshot_assembler import FallbackSnapshotAssembler
 from App.backend.services.reasoning.normalize import normalize_reasoning_detail
+from App.backend.services.storage_service import storage_service
 
 
 def test_ollama_cloud_provider_is_registered_and_projects_specs() -> None:
@@ -468,6 +472,52 @@ def test_ollama_cloud_stream_chat_posts_to_native_api(monkeypatch: pytest.Monkey
             {"done": True, "done_reason": "stop", "prompt_eval_count": 5, "eval_count": 7},
         ]
     }
+
+
+def test_ollama_cloud_stream_chat_sends_read_image_assets_after_tool_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    avif = BytesIO()
+    Image.new("RGB", (4, 3), "red").save(avif, format="AVIF")
+    png = BytesIO()
+    Image.new("RGB", (2, 2), "blue").save(png, format="PNG")
+    assets = {"originals/first.avif": avif.getvalue(), "originals/second.png": png.getvalue()}
+    monkeypatch.setattr(storage_service, "read_asset_file", assets.__getitem__)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.stream_responses = [_FakeStreamResponse(['{"done":true,"done_reason":"stop"}'])]
+
+    tool_results = [
+        {
+            "tool_call_id": call_id,
+            "tool_name": "read_image",
+            "content": f"Metadata for {path}",
+            "image_parts": [
+                {"type": "image", "source": "asset", "storage_key": path, "mime_type": f"image/{mime_subtype}"}
+            ],
+        }
+        for call_id, path, mime_subtype in (
+            ("call_1", "originals/first.avif", "avif"),
+            ("call_2", "originals/second.png", "png"),
+        )
+    ]
+    provider = OllamaCloudProvider({"api_key": "ollama-key"})
+    asyncio.run(
+        _collect_events(
+            provider.stream_chat(
+                messages=[{"role": "tool_results", "tool_results": tool_results}],
+                model="gemma4:cloud",
+            )
+        )
+    )
+
+    messages = _FakeAsyncClient.requests[0]["json"]["messages"]
+    assert [msg["role"] for msg in messages] == ["tool", "tool", "user"]
+    assert [msg["tool_call_id"] for msg in messages[:2]] == ["call_1", "call_2"]
+    first, second = messages[-1]["images"]
+    with Image.open(BytesIO(b64decode(first))) as converted:
+        assert converted.format == "PNG"
+        assert converted.size == (4, 3)
+    assert b64decode(second) == png.getvalue()
 
 
 def test_ollama_cloud_stream_chat_parses_custom_thinking_tags(monkeypatch: pytest.MonkeyPatch) -> None:
